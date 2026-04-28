@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Log Azioni Admin' }) %>
+  <style>
+    /* ── filtri ───────────────────────────────────────── */
+    .filter-bar {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      align-items: center; margin-bottom: 24px;
+    }
+    .filter-bar select, .filter-bar input {
+      padding: 7px 12px; border: 1.5px solid var(--gray-200);
+      border-radius: 8px; font-size: .85rem;
+      background: #fafdfa; outline: none; min-width: 150px;
+    }
+    .filter-bar select:focus, .filter-bar input:focus {
+      border-color: var(--green-mid);
+      box-shadow: 0 0 0 2px rgba(45,106,79,.12);
+    }
+
+    /* ── badge azione ─────────────────────────────────── */
+    .badge-CREATE { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-UPDATE { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+    .badge-DELETE { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+    .azione-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 20px;
+      font-size: .72rem; font-weight: 700; letter-spacing: .4px;
+    }
+
+    /* ── entità badge ─────────────────────────────────── */
+    .entita-badge {
+      display: inline-block; padding: 2px 9px; border-radius: 6px;
+      font-size: .72rem; font-weight: 600;
+      background: var(--gray-100); color: var(--gray-700);
+      border: 1px solid var(--gray-200);
+    }
+
+    /* ── dettaglio collassabile ───────────────────────── */
+    .det-toggle {
+      background: none; border: 1px solid var(--gray-200);
+      border-radius: 5px; padding: 2px 8px; font-size: .72rem;
+      cursor: pointer; color: var(--gray-700);
+    }
+    .det-toggle:hover { background: var(--gray-100); }
+
+    .det-panel {
+      display: none; margin-top: 8px;
+      border: 1px solid var(--gray-200); border-radius: 8px;
+      overflow: hidden; font-size: .75rem; max-width: 520px;
+    }
+    .det-panel.open { display: block; }
+
+    .det-cols { display: grid; grid-template-columns: 1fr 1fr; }
+    .det-col {
+      padding: 8px 12px;
+    }
+    .det-col:first-child {
+      border-right: 1px solid var(--gray-200);
+      background: #fff1f2;
+    }
+    .det-col:last-child { background: #f0fdf4; }
+    .det-col-title {
+      font-weight: 800; font-size: .7rem; letter-spacing: .5px;
+      text-transform: uppercase; margin-bottom: 6px;
+      color: var(--gray-500);
+    }
+    .det-col:first-child .det-col-title { color: #b91c1c; }
+    .det-col:last-child  .det-col-title { color: #166534; }
+    .det-kv { display: flex; gap: 6px; margin-bottom: 3px; flex-wrap: wrap; }
+    .det-key {
+      color: var(--gray-500); font-weight: 600; min-width: 120px;
+      white-space: nowrap;
+    }
+    .det-val { color: #1e293b; word-break: break-all; }
+    .det-null { color: var(--gray-300); font-style: italic; }
+
+    /* ── paginazione ──────────────────────────────────── */
+    .pagination {
+      display: flex; gap: 6px; align-items: center;
+      justify-content: center; margin-top: 28px; flex-wrap: wrap;
+    }
+    .pagination a, .pagination span {
+      padding: 6px 13px; border-radius: 7px; font-size: .83rem;
+      text-decoration: none; font-weight: 600;
+      border: 1.5px solid var(--gray-200); color: var(--green-dark);
+      background: #fff;
+    }
+    .pagination a:hover { background: var(--gray-100); }
+    .pagination .current {
+      background: var(--green-mid); color: #fff;
+      border-color: var(--green-mid);
+    }
+    .pagination .disabled { color: var(--gray-300); pointer-events: none; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1200px;">
+
+    <div class="page-header">
+      <h1>📝 Log Azioni Admin</h1>
+      <a href="/admin/pannello" class="btn btn-sm"
+         style="border:1.5px solid var(--gray-200);background:#fff;">← Pannello</a>
+    </div>
+
+    <!-- ── Filtri ── -->
+    <form method="GET" action="/admin/log" class="filter-bar" id="filter-form">
+      <select name="azione" onchange="this.form.submit()">
+        <option value="">Tutte le azioni</option>
+        <option value="CREATE"  <%= filtroAzione === 'CREATE'  ? 'selected' : '' %>>CREATE</option>
+        <option value="UPDATE"  <%= filtroAzione === 'UPDATE'  ? 'selected' : '' %>>UPDATE</option>
+        <option value="DELETE"  <%= filtroAzione === 'DELETE'  ? 'selected' : '' %>>DELETE</option>
+      </select>
+      <select name="entita" onchange="this.form.submit()">
+        <option value="">Tutte le entità</option>
+        <option value="contratto" <%= filtroEntita === 'contratto' ? 'selected' : '' %>>contratto</option>
+        <option value="utente"    <%= filtroEntita === 'utente'    ? 'selected' : '' %>>utente</option>
+        <option value="giocatore" <%= filtroEntita === 'giocatore' ? 'selected' : '' %>>giocatore</option>
+      </select>
+      <select name="adminId" onchange="this.form.submit()">
+        <option value="">Tutti gli admin</option>
+        <% admins.forEach(a => { %>
+          <option value="<%= a.id %>" <%= filtroAdmin == a.id ? 'selected' : '' %>>
+            <%= a.nickname || a.email %>
+          </option>
+        <% }) %>
+      </select>
+      <% if (filtroAzione || filtroEntita || filtroAdmin) { %>
+        <a href="/admin/log" class="btn btn-sm"
+           style="background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-200);">
+          ✕ Rimuovi filtri
+        </a>
+      <% } %>
+      <span style="margin-left:auto; font-size:.8rem; color:var(--gray-400);">
+        <%= totale %> voci trovate
+      </span>
+    </form>
+
+    <!-- ── Tabella ── -->
+    <div style="overflow-x:auto; border-radius:10px; box-shadow:0 2px 10px rgba(26,58,42,.07);">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:160px;">Data / Ora</th>
+            <th style="width:90px;">Azione</th>
+            <th style="width:100px;">Entità</th>
+            <th style="width:60px;">ID</th>
+            <th>Admin</th>
+            <th>Dettaglio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (logs.length === 0) { %>
+          <tr>
+            <td colspan="6" style="text-align:center; color:#94a3b8; padding:36px;">
+              Nessuna voce trovata.
+            </td>
+          </tr>
+          <% } %>
+          <% logs.forEach(function(l, idx) { %>
+          <tr>
+            <td style="font-size:.78rem; color:var(--gray-700); white-space:nowrap;">
+              <%= l.createdAt.toLocaleString('it-IT', { dateStyle:'short', timeStyle:'short' }) %>
+            </td>
+            <td>
+              <span class="azione-badge badge-<%= l.azione %>"><%= l.azione %></span>
+            </td>
+            <td>
+              <span class="entita-badge"><%= l.entita %></span>
+            </td>
+            <td style="text-align:center; color:var(--gray-400); font-size:.8rem;">
+              <%= l.entitaId ?? '—' %>
+            </td>
+            <td style="font-size:.82rem;">
+              <%= l.admin ? (l.admin.nickname || l.admin.email) : '—' %>
+            </td>
+            <td>
+              <% if (l.dettaglio) {
+                   let det = null;
+                   try { det = JSON.parse(l.dettaglio); } catch(e) {}
+              %>
+                <button class="det-toggle" onclick="toggleDet(this)">▼ dettaglio</button>
+                <div class="det-panel">
+                  <div class="det-cols">
+                    <div class="det-col">
+                      <div class="det-col-title">
+                        <%= l.azione === 'DELETE' ? '🗑 Prima (eliminato)' : l.azione === 'CREATE' ? '— Prima' : '◀ Prima' %>
+                      </div>
+                      <% if (!det || det.prima === null || det.prima === undefined) { %>
+                        <span class="det-null">nessun dato</span>
+                      <% } else if (typeof det.prima === 'object') {
+                           Object.entries(det.prima).forEach(([k, v]) => { %>
+                        <div class="det-kv">
+                          <span class="det-key"><%= k %></span>
+                          <span class="det-val"><%= v === null ? '—' : v %></span>
+                        </div>
+                      <% }); } %>
+                    </div>
+                    <div class="det-col">
+                      <div class="det-col-title">
+                        <%= l.azione === 'DELETE' ? '— Dopo' : l.azione === 'CREATE' ? '✚ Dopo (creato)' : '▶ Dopo' %>
+                      </div>
+                      <% if (!det || det.dopo === null || det.dopo === undefined) { %>
+                        <span class="det-null">nessun dato</span>
+                      <% } else if (typeof det.dopo === 'object') {
+                           Object.entries(det.dopo).forEach(([k, v]) => { %>
+                        <div class="det-kv">
+                          <span class="det-key"><%= k %></span>
+                          <span class="det-val"><%= v === null ? '—' : v %></span>
+                        </div>
+                      <% }); } %>
+                    </div>
+                  </div>
+                </div>
+              <% } else { %>
+                <span style="color:var(--gray-300); font-size:.78rem;">—</span>
+              <% } %>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Paginazione ── -->
+    <% if (totalePagine > 1) { %>
+    <div class="pagination">
+      <% if (paginaCorrente > 1) { %>
+        <a href="?<%= queryString %>&pagina=<%= paginaCorrente - 1 %>">‹ Prec</a>
+      <% } else { %>
+        <span class="disabled">‹ Prec</span>
+      <% } %>
+
+      <% for (let p = Math.max(1, paginaCorrente - 2); p <= Math.min(totalePagine, paginaCorrente + 2); p++) { %>
+        <% if (p === paginaCorrente) { %>
+          <span class="current"><%= p %></span>
+        <% } else { %>
+          <a href="?<%= queryString %>&pagina=<%= p %>"><%= p %></a>
+        <% } %>
+      <% } %>
+
+      <% if (paginaCorrente < totalePagine) { %>
+        <a href="?<%= queryString %>&pagina=<%= paginaCorrente + 1 %>">Succ ›</a>
+      <% } else { %>
+        <span class="disabled">Succ ›</span>
+      <% } %>
+    </div>
+    <% } %>
+
+  </div>
+
+  <script>
+    function toggleDet(btn) {
+      const panel = btn.nextElementSibling;
+      panel.classList.toggle('open');
+      btn.textContent = panel.classList.contains('open') ? '▲ chiudi' : '▼ dettaglio';
+    }
+  </script>
+</body>
+</html>

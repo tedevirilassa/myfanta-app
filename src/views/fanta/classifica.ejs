@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Classifica' }) %>
+  <style>
+    .rank-1 td:first-child { color: var(--gold); font-weight: 900; font-size: 1.2rem; }
+    .rank-2 td:first-child { color: #adb5bd; font-weight: 700; }
+    .rank-3 td:first-child { color: #cd7f32; font-weight: 700; }
+    .pm-pos { color: #15803d; font-weight: 700; }
+    .pm-neg { color: #b91c1c; font-weight: 700; }
+    .pm-zero{ color: #94a3b8; }
+    .patrimonio-bar {
+      height: 6px; border-radius: 3px;
+      background: var(--green-light); display: block; margin-top: 4px;
+      transition: width .3s;
+    }
+    .val-rose { font-size: .75rem; color: var(--gray-400); display: block; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>🏆 Classifica</h1>
+      <a href="/fanta/riepilogo" class="btn btn-primary btn-sm">📊 Riepilogo completo</a>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error">
+        Impossibile caricare i dati dal foglio Google: <strong><%= error %></strong>
+      </div>
+    <% } %>
+
+    <% if (classifica.length > 0) {
+      const maxPat = classifica[0].patrimonio;
+    %>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th>Presidente</th>
+            <th>Patrimonio</th>
+            <th>Rosa</th>
+            <th>Crediti</th>
+            <th>Giocatori</th>
+            <th>Età media</th>
+            <th>Stipendi</th>
+            <th>Prestiti IN</th>
+            <th>Ultimo ±</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% classifica.forEach(function(p, idx) {
+            const pos = idx + 1;
+            const rowClass = pos === 1 ? 'rank-1' : pos === 2 ? 'rank-2' : pos === 3 ? 'rank-3' : '';
+            const barWidth = Math.round((p.patrimonio / maxPat) * 100);
+            const pmClass  = p.ultimoPM > 0 ? 'pm-pos' : p.ultimoPM < 0 ? 'pm-neg' : 'pm-zero';
+          %>
+          <tr class="<%= rowClass %>">
+            <td style="text-align:center; font-weight:700;"><%= pos %></td>
+            <td>
+              <a href="/fanta/presidente/<%= encodeURIComponent(p.nome) %>"
+                 style="font-weight:700; color:var(--green-dark); text-decoration:none;">
+                <%= p.nome %>
+              </a>
+            </td>
+            <td>
+              <strong><%= p.patrimonio.toFixed(2) %></strong>
+              <span class="val-rose">Rosa: <%= p.valoreRose.toFixed(2) %></span>
+              <span class="patrimonio-bar" style="width:<%= barWidth %>%"></span>
+            </td>
+            <td><%= p.valoreRose.toFixed(2) %></td>
+            <td><%= p.crediti.toFixed(2) %></td>
+            <td style="text-align:center;"><%= p.giocatori %></td>
+            <td style="text-align:center;"><%= p.etaMedia.toFixed(2) %></td>
+            <td><%= p.stipendi.toFixed(2) %></td>
+            <td><%= p.montePrestitiIn.toFixed(2) %></td>
+            <td class="<%= pmClass %>">
+              <%= p.ultimoPM > 0 ? '+' : '' %><%= p.ultimoPM.toFixed(2) %>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- stat cards -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-top:24px;">
+      <% 
+        const totPatrimonio = classifica.reduce((s,p)=>s+p.patrimonio,0);
+        const leader = classifica[0];
+        const bestPM = [...classifica].sort((a,b)=>b.ultimoPM-a.ultimoPM)[0];
+        const mostPlayers = [...classifica].sort((a,b)=>b.giocatori-a.giocatori)[0];
+      %>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Patrimonio totale lega</div>
+        <div style="font-size:1.5rem; font-weight:800; color:var(--green-dark);"><%= totPatrimonio.toFixed(2) %></div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Leader</div>
+        <div style="font-size:1.3rem; font-weight:800; color:var(--green-dark);">🥇 <%= leader.nome %></div>
+        <div style="font-size:.85rem; color:var(--gray-400);"><%= leader.patrimonio.toFixed(2) %></div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Miglior ± recente</div>
+        <div style="font-size:1.3rem; font-weight:800; color:var(--green-dark);">⚡ <%= bestPM.nome %></div>
+        <div style="font-size:.85rem; color:#15803d; font-weight:700;">+<%= bestPM.ultimoPM.toFixed(2) %></div>
+      </div>
+      <div class="card" style="padding:20px;">
+        <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Più giocatori</div>
+        <div style="font-size:1.3rem; font-weight:800; color:var(--green-dark);">👥 <%= mostPlayers.nome %></div>
+        <div style="font-size:.85rem; color:var(--gray-400);"><%= mostPlayers.giocatori %> tesserati</div>
+      </div>
+    </div>
+    <% } %>
+
+    <p style="margin-top:20px; font-size:.78rem; color:var(--gray-400); text-align:right;">
+      Dati aggiornati ogni 5 minuti · Fonte: Fantapollo 8
+    </p>
+  </div>
+</body>
+</html>

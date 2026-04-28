@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Pannello Admin' }) %>
+  <style>
+    /* ── sezioni ───────────────────────────────────────── */
+    .section-title {
+      font-size: .7rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--gray-400);
+      margin: 36px 0 12px;
+    }
+    .section-title:first-of-type { margin-top: 0; }
+
+    /* ── tool card ────────────────────────────────────── */
+    .tool-card {
+      background: var(--white);
+      border-radius: 10px;
+      padding: 20px 24px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.08);
+      border-top: 4px solid var(--green-mid);
+      display: flex;
+      align-items: flex-start;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .tool-info { flex: 1; min-width: 200px; }
+    .tool-info h3 { font-size: 1rem; font-weight: 700; color: var(--green-dark); margin-bottom: 4px; }
+    .tool-info p  { font-size: .82rem; color: var(--gray-700); line-height: 1.5; }
+    .tool-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    /* ── seed output ──────────────────────────────────── */
+    #seed-output-wrap { display: none; margin-top: 16px; width: 100%; }
+    #seed-output {
+      background: #0f1f16;
+      color: #a7d7b8;
+      font-family: "Courier New", Courier, monospace;
+      font-size: .8rem;
+      padding: 16px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 340px;
+      overflow-y: auto;
+      line-height: 1.6;
+    }
+    #seed-spinner { display: none; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 3px solid rgba(82,183,136,.3);
+      border-top-color: var(--green-light);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── users table ──────────────────────────────────── */
+    .inline-input {
+      padding: 6px 10px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 6px;
+      font-size: .84rem;
+      width: 100%;
+      min-width: 110px;
+      outline: none;
+      background: #fafdfa;
+    }
+    .inline-input:focus {
+      border-color: var(--green-mid);
+      box-shadow: 0 0 0 2px rgba(45,106,79,.15);
+    }
+    .inline-form { display: flex; gap: 6px; align-items: center; }
+    .users-table-wrap { overflow-x: auto; border-radius: 10px; box-shadow: 0 2px 10px rgba(26,58,42,.08); }
+    .users-table-wrap table { min-width: 780px; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1200px;">
+
+    <div class="page-header">
+      <h1>⚙️ Pannello Admin</h1>
+      <div style="display:flex;gap:8px;">
+        <a href="/admin/contratti/nuovo" class="btn btn-success btn-sm">📝 Nuovo contratto</a>
+        <a href="/admin/users/invite" class="btn btn-primary btn-sm">+ Invita utente</a>
+      </div>
+    </div>
+
+    <% if (message) { %>
+      <div class="alert alert-success">✔ <%= message %></div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert alert-error">❌ <%= error %></div>
+    <% } %>
+
+    <!-- ══ STRUMENTI ══════════════════════════════════════════════ -->
+    <div class="section-title">🛠 Strumenti</div>
+
+    <div class="tool-card">
+      <div class="tool-info">
+        <h3>⚽ Importa / Aggiorna Giocatori</h3>
+        <p>
+          Scarica il foglio Google e sincronizza la tabella <code>giocatori</code> nel database.<br>
+          I giocatori esistenti conservano l'ID — vengono aggiornati solo i campi modificati.<br>
+          I giocatori non più presenti vengono impostati su <strong>active = false</strong>.
+        </p>
+      </div>
+      <div class="tool-actions" style="flex-direction:column; align-items:flex-end; gap:10px;">
+        <button id="btn-seed" class="btn btn-primary">
+          ▶ Esegui seed giocatori
+        </button>
+        <span id="seed-spinner"><span class="spinner"></span> Elaborazione in corso…</span>
+      </div>
+      <div id="seed-output-wrap">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:.78rem; font-weight:700; color:var(--gray-700);">Output</span>
+          <button onclick="document.getElementById('seed-output-wrap').style.display='none'"
+                  style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--gray-400);">✕ Chiudi</button>
+        </div>
+        <pre id="seed-output"></pre>
+      </div>
+    </div>
+
+    <!-- ══ UTENTI ════════════════════════════════════════════════ -->
+    <div class="section-title">👥 Utenti</div>
+
+    <div class="users-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Ruolo</th>
+            <th>Nickname</th>
+            <th>Nome Squadra</th>
+            <th>Stato</th>
+            <th>Pwd</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% users.forEach(function(u) { %>
+          <tr>
+            <td style="font-size:.85rem; max-width:200px; word-break:break-all;"><%= u.email %></td>
+            <td>
+              <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>">
+                <%= u.role %>
+              </span>
+            </td>
+
+            <!-- inline edit form -->
+            <td colspan="2">
+              <form class="inline-form" action="/admin/users/<%= u.id %>/inline-profile" method="POST">
+                <input class="inline-input" type="text" name="nickname"
+                       value="<%= u.nickname || '' %>" placeholder="Nickname" maxlength="40">
+                <input class="inline-input" type="text" name="teamName"
+                       value="<%= u.teamName || '' %>" placeholder="Nome squadra" maxlength="60">
+                <button type="submit" class="btn btn-primary btn-sm" title="Salva">💾</button>
+              </form>
+            </td>
+
+            <td>
+              <span class="badge <%= u.isActive ? 'badge-active' : 'badge-inactive' %>">
+                <%= u.isActive ? 'Attivo' : 'Disab.' %>
+              </span>
+            </td>
+
+            <td style="font-size:.8rem; color:<%= u.mustChangePassword ? '#b45309' : '#64748b' %>;">
+              <%= u.mustChangePassword ? '⚠ Richiesto' : '✔' %>
+            </td>
+
+            <td>
+              <div class="actions">
+                <% if (u.id !== currentUser.id) { %>
+                  <form action="/admin/users/<%= u.id %>/reset-password" method="POST"
+                        onsubmit="return confirm('Reimpostare la password di <%= u.email %>?')">
+                    <button type="submit" class="btn btn-warning btn-sm">Reset pwd</button>
+                  </form>
+                  <form action="/admin/users/<%= u.id %>/toggle" method="POST"
+                        onsubmit="return confirm('<%= u.isActive ? 'Disabilitare' : 'Abilitare' %> <%= u.email %>?')">
+                    <button type="submit" class="btn btn-sm <%= u.isActive ? 'btn-danger' : 'btn-success' %>">
+                      <%= u.isActive ? 'Disabilita' : 'Abilita' %>
+                    </button>
+                  </form>
+                <% } else { %>
+                  <span style="font-size:.78rem; color:#94a3b8;">(tu)</span>
+                <% } %>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+          <% if (users.length === 0) { %>
+          <tr>
+            <td colspan="7" style="text-align:center; color:#94a3b8; padding:32px;">
+              Nessun utente trovato.
+            </td>
+          </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /container -->
+
+  <script>
+    (function () {
+      const btn     = document.getElementById("btn-seed");
+      const spinner = document.getElementById("seed-spinner");
+      const outWrap = document.getElementById("seed-output-wrap");
+      const outPre  = document.getElementById("seed-output");
+
+      btn.addEventListener("click", async function () {
+        btn.disabled = true;
+        spinner.style.display = "inline";
+        outWrap.style.display = "none";
+        outPre.textContent    = "";
+
+        try {
+          const res  = await fetch("/admin/tools/seed-giocatori", { method: "POST" });
+          const data = await res.json();
+          outPre.textContent    = data.output || "(nessun output)";
+          outPre.style.color    = data.ok ? "#a7d7b8" : "#f97066";
+          outWrap.style.display = "block";
+        } catch (err) {
+          outPre.textContent    = "Errore di rete: " + err.message;
+          outPre.style.color    = "#f97066";
+          outWrap.style.display = "block";
+        } finally {
+          btn.disabled         = false;
+          spinner.style.display = "none";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

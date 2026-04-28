@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Finanze' }) %>
+  <style>
+    .bar-wrap { display:flex; align-items:center; gap:8px; }
+    .bar-fill { height:8px; border-radius:4px; background:var(--green-mid); min-width:3px; }
+    .neg { color: #b91c1c; }
+    .pos { color: #15803d; }
+    .section-title {
+      font-size:.7rem; text-transform:uppercase; letter-spacing:1px;
+      color:var(--gray-400); font-weight:700; padding:8px 14px;
+      background:var(--gray-100); border-bottom:1px solid var(--gray-200);
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1300px;">
+    <div class="page-header">
+      <h1>💰 Finanze</h1>
+      <a href="/fanta/classifica" class="btn btn-primary btn-sm">🏆 Classifica</a>
+    </div>
+
+    <% if (error) { %>
+    <div class="alert alert-error">Impossibile caricare i dati: <strong><%= error %></strong></div>
+    <% } %>
+
+    <% if (finanze.length > 0) {
+         const maxAcquisti = Math.max(...finanze.map(f=>f.acquisti), 1);
+         const maxCessioni = Math.max(...finanze.map(f=>f.cessioni), 1);
+    %>
+
+    <!-- tabella principale -->
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:24px;">
+      <div class="section-title">Situazione finanziaria</div>
+      <div style="overflow-x:auto;">
+        <table style="font-size:.82rem;white-space:nowrap;">
+          <thead>
+            <tr>
+              <th>Presidente</th>
+              <th title="Crediti disponibili dopo stipendi">Cassa Netta</th>
+              <th>Stipendi</th>
+              <th>Crediti (prev.)</th>
+              <th>Acquisti</th>
+              <th>Cessioni</th>
+              <th>Saldo Merc.</th>
+              <th>Prestiti IN</th>
+              <th>Prestiti OUT</th>
+              <th>Botteghino</th>
+              <th>Tagli</th>
+              <th>Premi Fin.</th>
+              <th>Premi Gen.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% finanze.forEach(function(f) {
+                 const saldo = f.cessioni - f.acquisti;
+                 const saldoC = saldo >= 0 ? 'pos' : 'neg';
+            %>
+            <tr>
+              <td>
+                <a href="/fanta/presidente/<%= encodeURIComponent(f.nome) %>"
+                   style="font-weight:700;color:var(--green-dark);text-decoration:none;">
+                  <%= f.nome %>
+                </a>
+              </td>
+              <td><strong><%= f.cassaStipendi.toFixed(2) %></strong></td>
+              <td><%= f.stipendi.toFixed(2) %></td>
+              <td><%= f.creditiAnnoPrecendente.toFixed(2) %></td>
+              <td><%= f.acquisti.toFixed(1) %></td>
+              <td><%= f.cessioni.toFixed(1) %></td>
+              <td class="<%= saldoC %>"><%= saldo >= 0 ? '+' : '' %><%= saldo.toFixed(1) %></td>
+              <td><%= f.prestitiIn > 0 ? f.prestitiIn.toFixed(2) : '—' %></td>
+              <td><%= f.prestitiOut > 0 ? f.prestitiOut.toFixed(2) : '—' %></td>
+              <td><%= f.botteghino > 0 ? f.botteghino.toFixed(2) : '—' %></td>
+              <td><%= f.tagli > 0 ? f.tagli.toFixed(2) : '—' %></td>
+              <td><%= f.premiFineAnno.toFixed(2) %></td>
+              <td><%= f.premiGennaio.toFixed(2) %></td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- bar chart acquisti vs cessioni -->
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:24px;">
+      <div class="section-title">Acquisti vs Cessioni</div>
+      <div style="padding:20px;">
+        <% const sortedF = [...finanze].sort((a,b)=>b.acquisti-a.acquisti);
+           sortedF.forEach(function(f){ %>
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:4px;">
+            <strong><%= f.nome %></strong>
+            <span style="color:var(--gray-400);">
+              Acq: <strong><%= f.acquisti.toFixed(1) %></strong>M &nbsp;|&nbsp;
+              Ces: <strong><%= f.cessioni.toFixed(1) %></strong>M
+            </span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div class="bar-wrap">
+              <span style="font-size:.68rem;width:40px;color:var(--gray-400);">Acq</span>
+              <div class="bar-fill" style="width:<%= Math.round(f.acquisti/maxAcquisti*100) %>%;background:#ef4444;max-width:400px;"></div>
+              <span style="font-size:.72rem;color:#ef4444;"><%= f.acquisti.toFixed(1) %></span>
+            </div>
+            <div class="bar-wrap">
+              <span style="font-size:.68rem;width:40px;color:var(--gray-400);">Ces</span>
+              <div class="bar-fill" style="width:<%= Math.round(f.cessioni/maxCessioni*100) %>%;background:#22c55e;max-width:400px;"></div>
+              <span style="font-size:.72rem;color:#22c55e;"><%= f.cessioni.toFixed(1) %></span>
+            </div>
+          </div>
+        </div>
+        <% }); %>
+      </div>
+    </div>
+
+    <!-- classifica cassa netta -->
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:24px;">
+      <div class="section-title">Classifica cassa netta</div>
+      <table style="font-size:.82rem;">
+        <tbody>
+          <% [...finanze].sort((a,b)=>b.cassaStipendi-a.cassaStipendi).forEach(function(f,i){ %>
+          <tr>
+            <td style="width:36px;text-align:center;font-weight:900;color:var(--gray-400);">#<%= i+1 %></td>
+            <td>
+              <a href="/fanta/presidente/<%= encodeURIComponent(f.nome) %>"
+                 style="font-weight:700;color:var(--green-dark);text-decoration:none;"><%= f.nome %></a>
+            </td>
+            <td>
+              <div class="bar-wrap">
+                <div class="bar-fill"
+                     style="width:<%= Math.round(f.cassaStipendi/Math.max(...finanze.map(x=>x.cassaStipendi),1)*240) %>px;"></div>
+                <strong><%= f.cassaStipendi.toFixed(2) %>M</strong>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="font-size:.78rem;color:var(--gray-400);text-align:right;margin-top:8px;">
+      Aggiornamento automatico ogni 5 minuti · Fonte: Fantapollo 8
+    </p>
+    <% } %>
+  </div>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Giocatori' }) %>
+  <style>
+    .op-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: .68rem; font-weight: 700; text-transform: uppercase; white-space: nowrap;
+    }
+    .op-Acquisto  { background: #dcfce7; color: #166534; }
+    .op-Riscatto  { background: #e0e7ff; color: #3730a3; }
+    .op-default   { background: #f3f4f6; color: #6b7280; }
+    .pres-card {
+      background: var(--white);
+      border-radius: 10px;
+      border-top: 3px solid var(--green-mid);
+      box-shadow: 0 2px 8px rgba(26,58,42,.07);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .pres-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 18px;
+      background: linear-gradient(90deg, var(--green-dark) 0%, var(--green-mid) 100%);
+      color: #fff;
+    }
+    .pres-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: rgba(255,255,255,.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; font-weight: 900;
+    }
+    .pres-stats { margin-left: auto; display: flex; gap: 20px; font-size: .8rem; }
+    .pres-stat  { text-align: center; }
+    .pres-stat .sv { font-size: 1.1rem; font-weight: 900; }
+    .pres-stat .sl { font-size: .68rem; opacity: .8; text-transform: uppercase; }
+    .search-wrap { position: relative; }
+    .search-wrap input {
+      width: 100%; padding: 9px 14px 9px 38px;
+      border: 1px solid var(--gray-200); border-radius: 8px;
+      font-size: .88rem; outline: none;
+    }
+    .search-wrap input:focus { border-color: var(--green-mid); box-shadow: 0 0 0 2px rgba(45,106,79,.15); }
+    .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--gray-400); }
+    .filter-btn {
+      padding: 4px 14px; border-radius: 16px; font-size: .78rem; font-weight: 700;
+      cursor: pointer; border: 2px solid transparent; background: var(--gray-100); color: var(--gray-600);
+    }
+    .filter-btn.active { background: var(--green-mid); color: #fff; border-color: var(--green-dark); }
+    #count-label { font-size: .78rem; color: var(--gray-400); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width: 1200px;">
+    <div class="page-header">
+      <h1>⚽ Giocatori</h1>
+      <a href="/fanta/classifica" class="btn btn-primary btn-sm">🏆 Classifica</a>
+    </div>
+
+    <% if (error) { %>
+    <div class="alert alert-error">Impossibile caricare i dati: <strong><%= error %></strong></div>
+    <% } %>
+
+    <% if (giocatori.length > 0) {
+         const totStipendi = giocatori.reduce((s, g) => s + g.stipendio, 0);
+         const totValore   = giocatori.reduce((s, g) => s + g.importoAcquisto, 0);
+    %>
+
+    <!-- stats generali -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px;">
+      <div class="card" style="padding: 12px 16px; text-align: center;">
+        <div style="font-size: .68rem; text-transform: uppercase; color: var(--gray-400); font-weight: 700;">Giocatori totali</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: var(--green-dark);"><%= giocatori.length %></div>
+      </div>
+      <div class="card" style="padding: 12px 16px; text-align: center;">
+        <div style="font-size: .68rem; text-transform: uppercase; color: var(--gray-400); font-weight: 700;">Presidenti</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: var(--green-dark);"><%= presidenti.length %></div>
+      </div>
+      <div class="card" style="padding: 12px 16px; text-align: center;">
+        <div style="font-size: .68rem; text-transform: uppercase; color: var(--gray-400); font-weight: 700;">Tot. investito</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: var(--green-dark);"><%= totValore.toFixed(0) %>M</div>
+      </div>
+      <div class="card" style="padding: 12px 16px; text-align: center;">
+        <div style="font-size: .68rem; text-transform: uppercase; color: var(--gray-400); font-weight: 700;">Tot. stipendi</div>
+        <div style="font-size: 1.8rem; font-weight: 900; color: var(--green-dark);"><%= totStipendi.toFixed(2) %>M</div>
+      </div>
+    </div>
+
+    <!-- barra ricerca e filtri -->
+    <div style="display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-bottom: 14px; align-items: center;">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="g-search" placeholder="Cerca giocatore…" oninput="applyFilters()">
+      </div>
+      <span id="count-label"></span>
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;">
+      <span style="font-size: .8rem; color: var(--gray-400); font-weight: 700;">Presidente:</span>
+      <button class="filter-btn active" data-pres="" onclick="setPres(this, '')">Tutti</button>
+      <% presidenti.forEach(function(p) { %>
+      <button class="filter-btn" data-pres="<%= p %>" onclick="setPres(this, '<%= p %>')"><%= p %></button>
+      <% }); %>
+    </div>
+
+    <!-- roster per presidente -->
+    <% presidenti.forEach(function(pName) {
+         const pPlayers = byPresidente[pName] || [];
+         const pStip = pPlayers.reduce((s, g) => s + g.stipendio, 0);
+         const pVal  = pPlayers.reduce((s, g) => s + g.importoAcquisto, 0);
+    %>
+    <div class="pres-card" data-card-pres="<%= pName %>">
+      <div class="pres-header">
+        <div class="pres-avatar"><%= pName.charAt(0).toUpperCase() %></div>
+        <div>
+          <div style="font-weight: 900; font-size: 1rem;">
+            <a href="/fanta/presidente/<%= encodeURIComponent(pName) %>"
+               style="color: #fff; text-decoration: none;"><%= pName %></a>
+          </div>
+          <div style="font-size: .75rem; opacity: .8;"><%= pPlayers.length %> giocatori</div>
+        </div>
+        <div class="pres-stats">
+          <div class="pres-stat">
+            <div class="sv"><%= pVal.toFixed(0) %>M</div>
+            <div class="sl">Investito</div>
+          </div>
+          <div class="pres-stat">
+            <div class="sv"><%= pStip.toFixed(2) %>M</div>
+            <div class="sl">Stipendi</div>
+          </div>
+        </div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table style="font-size: .82rem; white-space: nowrap;">
+          <thead>
+            <tr>
+              <th>Giocatore</th>
+              <th>Operazione</th>
+              <th>Importo</th>
+              <th>Stipendio</th>
+              <th>Data acquisto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% pPlayers.forEach(function(g) {
+                 const opKey = g.operazione ? (g.operazione.charAt(0).toUpperCase() + g.operazione.slice(1)) : '';
+                 const opClass = ['Acquisto', 'Riscatto'].includes(opKey) ? 'op-' + opKey : 'op-default';
+            %>
+            <tr data-g-nome="<%= g.nome.toLowerCase() %>">
+              <td><strong><%= g.nome %></strong></td>
+              <td><span class="op-badge <%= opClass %>"><%= g.operazione || '—' %></span></td>
+              <td>
+                <% if (g.importoAcquisto > 0) { %>
+                  <%= g.importoAcquisto.toFixed(1) %>M
+                <% } else if (g.importoPrestito > 0) { %>
+                  (<%= g.importoPrestito.toFixed(1) %>M prestito)
+                <% } else { %>
+                  —
+                <% } %>
+              </td>
+              <td><%= g.stipendio > 0 ? g.stipendio.toFixed(3) + 'M' : '—' %></td>
+              <td><%= g.dataAcquisto || '—' %></td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% }); %>
+
+    <p style="font-size: .78rem; color: var(--gray-400); text-align: right; margin-top: 8px;">
+      Roster calcolato dalle operazioni del Diario · Aggiornamento ogni 5 min · Fonte: Fantapollo 8
+    </p>
+    <% } else if (!error) { %>
+    <div class="alert alert-info">Nessun giocatore trovato nel Diario.</div>
+    <% } %>
+  </div>
+
+  <script>
+    let _activePres = '';
+
+    function setPres(btn, val) {
+      document.querySelectorAll('[data-pres]').forEach(b => { if (b.tagName === 'BUTTON') b.classList.remove('active'); });
+      btn.classList.add('active');
+      _activePres = val;
+      applyFilters();
+    }
+
+    function applyFilters() {
+      const q = document.getElementById('g-search').value.toLowerCase();
+      let visible = 0;
+
+      document.querySelectorAll('[data-card-pres]').forEach(card => {
+        const presName = card.dataset.cardPres;
+        const presMatch = !_activePres || presName === _activePres;
+
+        if (!presMatch) {
+          card.style.display = 'none';
+          return;
+        }
+
+        if (!q) {
+          card.style.display = '';
+          card.querySelectorAll('tr[data-g-nome]').forEach(tr => { tr.style.display = ''; visible++; });
+          return;
+        }
+
+        let anyVisible = false;
+        card.querySelectorAll('tr[data-g-nome]').forEach(tr => {
+          const match = tr.dataset.gNome.includes(q);
+          tr.style.display = match ? '' : 'none';
+          if (match) { anyVisible = true; visible++; }
+        });
+        card.style.display = anyVisible ? '' : 'none';
+      });
+
+      const lbl = document.getElementById('count-label');
+      if (lbl && q) lbl.textContent = visible + ' giocatori';
+      else if (lbl) lbl.textContent = '';
+    }
+  </script>
+</body>
+</html>

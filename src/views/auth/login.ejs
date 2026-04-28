@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Accedi' }) %>
+</head>
+<body>
+  <div class="container-sm">
+    <div class="card">
+      <div class="login-logo">
+        <span class="ball">⚽</span>
+        <span class="app-name">MyFanta</span>
+        <p class="tagline">Il tuo fantacalcio</p>
+      </div>
+
+      <% if (error) { %>
+        <div class="alert alert-error"><%= error %></div>
+      <% } %>
+
+      <form action="/auth/login" method="POST" autocomplete="off">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="nome@esempio.it"
+            required
+            autofocus
+          />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="••••••••"
+            required
+          />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px;">
+          Accedi
+        </button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Invita utente' }) %>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container-sm">
+    <div style="margin-bottom:16px;">
+      <a href="/admin/users" style="font-size:.9rem; color:#6366f1; text-decoration:none;">
+        ← Torna agli utenti
+      </a>
+    </div>
+
+    <div class="card">
+      <h1 style="margin-bottom:8px;">Invita nuovo utente</h1>
+      <p style="color:#64748b; margin-bottom:24px; font-size:.9rem;">
+        L'utente riceverà la password predefinita <strong>primalogin2026</strong> e dovrà cambiarla al primo accesso.
+      </p>
+
+      <% if (error) { %>
+        <div class="alert alert-error"><%= error %></div>
+      <% } %>
+      <% if (message) { %>
+        <div class="alert alert-success"><%= message %></div>
+      <% } %>
+
+      <form action="/admin/users/invite" method="POST">
+        <div class="form-group">
+          <label for="email">Indirizzo email</label>
+          <input
+            type="email"
+            id="email"
+            name="email"
+            placeholder="utente@esempio.it"
+            required
+            autofocus
+          />
+        </div>
+        <div class="form-group">
+          <label for="role">Ruolo</label>
+          <select id="role" name="role" required>
+            <option value="" disabled selected>Seleziona un ruolo…</option>
+            <option value="USER">User</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:8px;">
+          Crea utente
+        </button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

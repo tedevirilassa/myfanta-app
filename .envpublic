@@ -1,0 +1,19 @@
+# ============================================================
+#  Variabili per l'ambiente REMOTO (Render)
+#  Compila con i valori che trovi nella dashboard di Render:
+#  Dashboard → Postgres service → Connection Details
+# ============================================================
+
+# Formato Render:
+# postgresql://<User>:<Password>@<Host>/<Database>?sslmode=require
+DATABASE_URL="postgresql://fantauser:HvipMcDrgIGfUM8PDtA8U518NCEHIuu9@dpg-d7ocr8qqqhas73c2msdg-a.frankfurt-postgres.render.com/fantamanager_mdop"
+
+NODE_ENV=production
+
+HOST=dpg-d7ocr8qqqhas73c2msdg-a
+PORT=5432
+
+JWT_SECRET="CAMBIA_CON_UN_SECRET_LUNGO_E_CASUALE_IN_PRODUZIONE"
+
+SHEETS_ID="1VQDWokZhWsj97ARkOQ-uAZVAUgNrlDC-xYdKnTxf9Zg"
+SHEETS_RIEPILOGO_GID="1881061782"

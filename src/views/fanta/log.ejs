@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Log' }) %>
+  <style>
+    .log-badge {
+      display: inline-block; padding: 2px 9px; border-radius: 10px;
+      font-size: .68rem; font-weight: 700; text-transform: uppercase; white-space: nowrap;
+    }
+    .lb-AcquistaLibero    { background:#dcfce7; color:#166534; }
+    .lb-RegistraCessione  { background:#fee2e2; color:#991b1b; }
+    .lb-RegistraTaglio    { background:#fce7f3; color:#831843; }
+    .lb-info              { background:#f3f4f6; color:#6b7280; }
+    .log-row { border-bottom:1px solid var(--gray-100); }
+    .log-kv  { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .kv-chip {
+      background:var(--gray-100); border-radius:6px;
+      padding:2px 8px; font-size:.72rem; color:var(--gray-600);
+    }
+    .kv-chip strong { color:var(--green-dark); font-weight:700; }
+    .search-wrap { position:relative; }
+    .search-wrap input {
+      width:100%; padding:8px 12px 8px 36px; border:1px solid var(--gray-200);
+      border-radius:8px; font-size:.88rem; outline:none;
+    }
+    .search-wrap input:focus { border-color:var(--green-mid); box-shadow:0 0 0 2px rgba(45,106,79,.15); }
+    .search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--gray-400); }
+    .filter-btn {
+      padding:4px 12px; border-radius:16px; font-size:.78rem; font-weight:700;
+      cursor:pointer; border:2px solid transparent; background:var(--gray-100); color:var(--gray-600);
+    }
+    .filter-btn.active { background:var(--green-mid); color:#fff; border-color:var(--green-dark); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>📝 Log di Sistema</h1>
+      <a href="/fanta/classifica" class="btn btn-primary btn-sm">🏆 Classifica</a>
+    </div>
+
+    <% if (error) { %>
+    <div class="alert alert-error">Impossibile caricare i dati: <strong><%= error %></strong></div>
+    <% } %>
+
+    <% if (logs.length > 0) {
+         const tipi = [...new Set(logs.map(l => l.tipo).filter(Boolean))];
+         const SKIP_KV = new Set(['rigaDiario','rigaGiocatore','cellaFinanze','PosizioneRosa']);
+         const KEY_LABELS = {
+           nome:'Giocatore', ruolo:'Ruolo', operazione:'Operazione', provenienza:'Da',
+           acquirente:'A', quotazione:'Valore', importoAcquisto:'Importo',
+           annicontratto:'Anni', dataAcquisto:'Data acq.', scadenza:'Scadenza',
+           stipendioDiario:'Stipendio', dataCessione:'Data cess.',
+           anniRimanenti:'Anni rim.', importoTaglio:'Importo taglio',
+         };
+    %>
+
+    <!-- stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+      <% const cntTipi = {}; logs.forEach(l=>{ cntTipi[l.tipo]=(cntTipi[l.tipo]||0)+1; }); %>
+      <div class="card" style="padding:12px 14px;text-align:center;">
+        <div style="font-size:.68rem;text-transform:uppercase;color:var(--gray-400);font-weight:700;">Totale</div>
+        <div style="font-size:1.6rem;font-weight:900;color:var(--green-dark);"><%= logs.length %></div>
+      </div>
+      <% Object.entries(cntTipi).filter(([k])=>k!=='info').forEach(function([tipo,cnt]){ %>
+      <div class="card" style="padding:12px 14px;text-align:center;">
+        <div style="font-size:.68rem;text-transform:uppercase;color:var(--gray-400);font-weight:700;"><%= tipo.replace('Registra','') %></div>
+        <div style="font-size:1.6rem;font-weight:900;color:var(--green-dark);"><%= cnt %></div>
+      </div>
+      <% }); %>
+    </div>
+
+    <!-- filtri -->
+    <div style="margin-bottom:12px;">
+      <div class="search-wrap" style="margin-bottom:10px;">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="log-search" placeholder="Cerca giocatore, presidente, tipo…" oninput="filterLog()">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <span style="font-size:.8rem;color:var(--gray-400);font-weight:700;">Tipo:</span>
+        <button class="filter-btn active" data-tipo="" onclick="setTipo(this,'')">Tutti</button>
+        <% tipi.forEach(function(tipo){ %>
+        <button class="filter-btn" data-tipo="<%= tipo %>" onclick="setTipo(this,'<%= tipo %>')">
+          <%= tipo === 'info' ? 'Sync / Note' : tipo.replace('Registra','') %>
+        </button>
+        <% }); %>
+      </div>
+    </div>
+
+    <!-- log entries -->
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+      <div style="padding:10px 14px;background:var(--gray-100);border-bottom:1px solid var(--gray-200);">
+        <span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);font-weight:700;">
+          Voci di log (<%= logs.length %>) — più recenti in cima
+        </span>
+      </div>
+      <div style="max-height:640px;overflow-y:auto;" id="log-list">
+        <% logs.forEach(function(entry) {
+             const badgeClass = 'lb-' + (entry.tipo || 'info');
+             const isEvent = entry.tipo !== 'info';
+             const kv = entry.kv || {};
+             const kvFiltered = Object.entries(kv).filter(([k])=>!SKIP_KV.has(k));
+        %>
+        <div class="log-row" style="padding:10px 14px;"
+             data-tipo="<%= entry.tipo %>"
+             data-raw="<%= (entry.kv.nome||'')+'|'+(entry.kv.acquirente||'')+'|'+(entry.kv.provenienza||'')+'|'+entry.raw %>">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:.75rem;color:var(--gray-400);white-space:nowrap;"><%= entry.data %></span>
+            <span class="log-badge <%= badgeClass %>"><%= entry.tipo || 'info' %></span>
+            <% if (isEvent && kv.nome) { %>
+              <strong style="color:var(--green-dark);"><%= kv.nome %></strong>
+            <% } else if (!isEvent) { %>
+              <span style="font-size:.82rem;color:var(--gray-600);">
+                <%= entry.raw.length > 120 ? entry.raw.substring(0,120)+'…' : entry.raw %>
+              </span>
+            <% } %>
+          </div>
+          <% if (isEvent && kvFiltered.length > 0) { %>
+          <div class="log-kv">
+            <% kvFiltered.forEach(function([k,v]){ %>
+            <div class="kv-chip">
+              <strong><%= KEY_LABELS[k] || k %>:</strong> <%= v.length > 50 ? v.substring(0,50)+'…' : v %>
+            </div>
+            <% }); %>
+          </div>
+          <% } %>
+        </div>
+        <% }); %>
+      </div>
+    </div>
+
+    <p style="font-size:.78rem;color:var(--gray-400);text-align:right;">
+      Aggiornamento automatico ogni 5 minuti · Fonte: Fantapollo 8
+    </p>
+    <% } %>
+  </div>
+
+  <script>
+    let _activeTipo = '';
+    function setTipo(btn, tipo) {
+      document.querySelectorAll('[data-tipo]').forEach(b => { if(b.tagName==='BUTTON') b.classList.remove('active'); });
+      btn.classList.add('active');
+      _activeTipo = tipo;
+      filterLog();
+    }
+    function filterLog() {
+      const q = document.getElementById('log-search').value.toLowerCase();
+      document.querySelectorAll('#log-list .log-row').forEach(row => {
+        const raw  = (row.dataset.raw || '').toLowerCase();
+        const tipo = row.dataset.tipo || '';
+        const show = (!_activeTipo || tipo === _activeTipo) && (!q || raw.includes(q));
+        row.style.display = show ? '' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>

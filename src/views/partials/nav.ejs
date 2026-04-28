@@ -1,0 +1,66 @@
+<%/* views/partials/nav.ejs */%>
+<style>
+  .nav-dropdown { position:relative; }
+  .nav-dropdown > .nav-dd-btn {
+    background:none; border:none; cursor:pointer;
+    color:inherit; font-size:inherit; padding:0;
+    display:flex; align-items:center; gap:4px;
+  }
+  .nav-dd-menu {
+    display:none; position:absolute; top:calc(100%+8px); left:0;
+    background:#fff; border:1px solid var(--gray-200); border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.12); min-width:160px; z-index:200;
+    overflow:hidden;
+  }
+  .nav-dd-menu a {
+    display:block; padding:9px 16px; font-size:.85rem;
+    color:var(--green-dark); text-decoration:none; font-weight:600;
+  }
+  .nav-dd-menu a:hover { background:var(--gray-100); }
+  .nav-dropdown:hover .nav-dd-menu { display:block; }
+</style>
+<nav>
+  <span class="brand">MyFanta</span>
+  <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+  <div class="nav-right">
+    <div class="nav-dropdown">
+      <button class="nav-dd-btn">
+        👤 <%= currentUser.nickname || currentUser.email.split('@')[0] %> ▾
+      </button>
+      <div class="nav-dd-menu" style="right:0;left:auto;">
+        <a href="/profilo">✏️ Il mio profilo</a>
+        <a href="/auth/change-password">🔑 Cambia password</a>
+      </div>
+    </div>
+    <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>"><%= currentUser.role %></span>
+    <a href="/fanta/classifica">🏆 Classifica</a>
+    <div class="nav-dropdown">
+      <button class="nav-dd-btn">📋 Fogli ▾</button>
+      <div class="nav-dd-menu">
+        <a href="/fanta/riepilogo">📊 Riepilogo</a>
+        <a href="/fanta/giocatori">⚽ Giocatori</a>
+        <a href="/fanta/finanze">💰 Finanze</a>
+        <a href="/fanta/diario">📖 Diario</a>
+        <a href="/fanta/log">📝 Log</a>
+      </div>
+    </div>
+    <a href="/fanta/lista-giocatori">📋 Lista Giocatori</a>
+    <% if (currentUser.role === 'ADMIN') { %>
+      <div class="nav-dropdown">
+        <button class="nav-dd-btn">⚙️ Admin ▾</button>
+        <div class="nav-dd-menu">
+          <a href="/admin/pannello">🖥 Pannello</a>
+          <a href="/admin/contratti/riepilogo">📋 Riepilogo Contratti</a>
+          <a href="/admin/contratti/nuovo">📝 Nuovo Contratto</a>
+          <a href="/admin/users">👥 Gestione Utenti</a>
+          <a href="/admin/users/invite">➕ Invita Utente</a>
+          <a href="/admin/log">📝 Log Azioni</a>
+        </div>
+      </div>
+    <% } %>
+    <form action="/auth/logout" method="POST">
+      <button type="submit">Esci</button>
+    </form>
+  </div>
+  <% } %>
+</nav>

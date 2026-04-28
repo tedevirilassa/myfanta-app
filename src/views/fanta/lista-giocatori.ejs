@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Lista Giocatori' }) %>
+  <style>
+    /* ── layout filtri ─────────────────────────────────────── */
+    .filters-card {
+      background: var(--white);
+      border-radius: 10px;
+      padding: 20px 24px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.09);
+      border-top: 4px solid var(--green-mid);
+      margin-bottom: 24px;
+    }
+    .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 14px 18px;
+      align-items: end;
+    }
+    .filters-grid .form-group { margin-bottom: 0; }
+    .range-pair {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .range-pair input[type="number"] {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 7px;
+      font-size: .9rem;
+      outline: none;
+    }
+    .range-pair input[type="number"]:focus {
+      border-color: var(--green-mid);
+      box-shadow: 0 0 0 3px rgba(45,106,79,.15);
+    }
+    .filters-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--gray-200);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    #count-label { font-size: .85rem; color: var(--gray-700); font-weight: 600; }
+
+    /* ── ruolo badge ───────────────────────────────────────── */
+    .ruolo-P { background:#dbeafe; color:#1e40af; }
+    .ruolo-D { background:#dcfce7; color:#166534; }
+    .ruolo-C { background:#fef9c3; color:#854d0e; }
+    .ruolo-A { background:#fee2e2; color:#991b1b; }
+    .ruolo-badge {
+      display:inline-block; padding:3px 10px; border-radius:999px;
+      font-size:.72rem; font-weight:800; letter-spacing:.5px;
+      min-width:32px; text-align:center;
+    }
+
+    /* ── active badge ──────────────────────────────────────── */
+    .active-yes { background:#eafaf1; color:#145a32; border:1px solid #58d68d; }
+    .active-no  { background:#fdecea; color:#7b1d1d; border:1px solid #e74c3c; }
+
+    /* ── table wide ────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; border-radius: 10px; box-shadow: 0 2px 10px rgba(26,58,42,.08); }
+    .table-card table { font-size: .84rem; }
+    .table-card td { white-space: nowrap; }
+    td.nome-col { white-space: normal; font-weight: 600; min-width: 130px; }
+    td.num-col  { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── row nascosta dal filtro ───────────────────────────── */
+    tr.filtered-out { display: none; }
+
+    /* ── empty state ───────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--gray-400);
+    }
+    .empty-state .es-icon { font-size: 3rem; display: block; margin-bottom: 12px; }
+    .empty-state p { font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width: 1300px;">
+    <div class="page-header">
+      <h1>📋 Lista Giocatori</h1>
+      <span id="count-label">…</span>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error">❌ <%= error %></div>
+    <% } %>
+
+    <!-- ── FILTRI ─────────────────────────────────────────────── -->
+    <div class="filters-card">
+      <div class="filters-grid">
+
+        <!-- Ruolo -->
+        <div class="form-group">
+          <label for="f-ruolo">Ruolo</label>
+          <select id="f-ruolo">
+            <option value="">Tutti</option>
+            <option value="P">P – Portiere</option>
+            <option value="D">D – Difensore</option>
+            <option value="C">C – Centrocampista</option>
+            <option value="A">A – Attaccante</option>
+          </select>
+        </div>
+
+        <!-- Ruolo Esteso -->
+        <div class="form-group">
+          <label for="f-ruolo-esteso">Ruolo Esteso</label>
+          <select id="f-ruolo-esteso">
+            <option value="">Tutti</option>
+            <% ruoliEstesi.forEach(re => { %>
+              <option value="<%= re %>"><%= re %></option>
+            <% }) %>
+          </select>
+        </div>
+
+        <!-- Squadra -->
+        <div class="form-group">
+          <label for="f-squadra">Squadra</label>
+          <select id="f-squadra">
+            <option value="">Tutte</option>
+            <% squadre.forEach(s => { %>
+              <option value="<%= s %>"><%= s %></option>
+            <% }) %>
+          </select>
+        </div>
+
+        <!-- Range Età -->
+        <div class="form-group">
+          <label>Età (da – a)</label>
+          <div class="range-pair">
+            <input type="number" id="f-eta-min" min="14" max="50" placeholder="Min">
+            <input type="number" id="f-eta-max" min="14" max="50" placeholder="Max">
+          </div>
+        </div>
+
+        <!-- Range Valore -->
+        <div class="form-group">
+          <label>Valore €&nbsp;(da – a)</label>
+          <div class="range-pair">
+            <input type="number" id="f-val-min" min="0" step="0.5" placeholder="Min">
+            <input type="number" id="f-val-max" min="0" step="0.5" placeholder="Max">
+          </div>
+        </div>
+
+        <!-- Cerca per nome -->
+        <div class="form-group">
+          <label for="f-nome">Cerca nome</label>
+          <input type="text" id="f-nome" placeholder="es. Barella…">
+        </div>
+
+      </div>
+
+      <div class="filters-footer">
+        <span id="count-label2"></span>
+        <button class="btn btn-sm" id="btn-reset" style="background:var(--gray-200);color:var(--gray-700);">
+          ✕ Reset filtri
+        </button>
+      </div>
+    </div>
+
+    <!-- ── TABELLA ────────────────────────────────────────────── -->
+    <div class="table-wrap table-card">
+      <table id="tbl-giocatori">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nome</th>
+            <th>Ruolo</th>
+            <th>Ruolo Esteso</th>
+            <th>Squadra</th>
+            <th>Età</th>
+            <th>Valore €</th>
+            <th>Stato</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (giocatori.length === 0) { %>
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <span class="es-icon">⚽</span>
+                  <p>Nessun giocatore nel database.<br>Esegui <strong>node prisma/seed-giocatori.js</strong> per importarli.</p>
+                </div>
+              </td>
+            </tr>
+          <% } else { %>
+            <% giocatori.forEach(g => { %>
+              <tr
+                data-ruolo="<%= g.ruolo %>"
+                data-ruolo-esteso="<%= g.ruoloEsteso || '' %>"
+                data-squadra="<%= g.squadra || '' %>"
+                data-eta="<%= g.eta !== null ? g.eta : '' %>"
+                data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
+                data-nome="<%= g.nome.toLowerCase() %>"
+              >
+                <td class="num-col" style="color:var(--gray-400);font-size:.78rem;"><%= g.id %></td>
+                <td class="nome-col"><%= g.nome %></td>
+                <td>
+                  <span class="ruolo-badge ruolo-<%= g.ruolo %>"><%= g.ruolo %></span>
+                </td>
+                <td><%= g.ruoloEsteso || '—' %></td>
+                <td><%= g.squadra || '—' %></td>
+                <td class="num-col"><%= g.eta !== null ? g.eta : '—' %></td>
+                <td class="num-col">
+                  <% if (g.valore !== null) { %>
+                    <%= Number(g.valore).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>
+                  <% } else { %>—<% } %>
+                </td>
+                <td>
+                  <span class="badge <%= g.active ? 'active-yes' : 'active-no' %>">
+                    <%= g.active ? 'Attivo' : 'Inattivo' %>
+                  </span>
+                </td>
+              </tr>
+            <% }) %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const rows = Array.from(document.querySelectorAll("#tbl-giocatori tbody tr[data-nome]"));
+      const countEl  = document.getElementById("count-label");
+      const countEl2 = document.getElementById("count-label2");
+      const total    = rows.length;
+
+      function val(id)  { return document.getElementById(id).value.trim(); }
+      function numVal(id) { const v = parseFloat(val(id)); return isNaN(v) ? null : v; }
+
+      function applyFilters() {
+        const ruolo       = val("f-ruolo");
+        const ruoloEsteso = val("f-ruolo-esteso").toLowerCase();
+        const squadra     = val("f-squadra").toLowerCase();
+        const etaMin      = numVal("f-eta-min");
+        const etaMax      = numVal("f-eta-max");
+        const valMin      = numVal("f-val-min");
+        const valMax      = numVal("f-val-max");
+        const nome        = val("f-nome").toLowerCase();
+
+        let visible = 0;
+        rows.forEach(function (row) {
+          const rRuolo  = row.dataset.ruolo;
+          const rRe     = (row.dataset.ruoloEsteso || "").toLowerCase();
+          const rSq     = (row.dataset.squadra || "").toLowerCase();
+          const rEta    = row.dataset.eta !== "" ? parseInt(row.dataset.eta, 10) : null;
+          const rVal    = row.dataset.valore !== "" ? parseFloat(row.dataset.valore) : null;
+          const rNome   = row.dataset.nome;
+
+          let show = true;
+          if (ruolo       && rRuolo  !== ruolo)                    show = false;
+          if (ruoloEsteso && rRe     !== ruoloEsteso)              show = false;
+          if (squadra     && rSq     !== squadra)                  show = false;
+          if (nome        && rNome.indexOf(nome) === -1)           show = false;
+          if (etaMin !== null && (rEta === null || rEta < etaMin)) show = false;
+          if (etaMax !== null && (rEta === null || rEta > etaMax)) show = false;
+          if (valMin !== null && (rVal === null || rVal < valMin)) show = false;
+          if (valMax !== null && (rVal === null || rVal > valMax)) show = false;
+
+          row.classList.toggle("filtered-out", !show);
+          if (show) visible++;
+        });
+
+        const label = visible === total
+          ? total + " giocatori"
+          : visible + " di " + total + " giocatori";
+        countEl.textContent  = label;
+        countEl2.textContent = label;
+      }
+
+      ["f-ruolo","f-ruolo-esteso","f-squadra"].forEach(function(id) {
+        document.getElementById(id).addEventListener("change", applyFilters);
+      });
+      ["f-eta-min","f-eta-max","f-val-min","f-val-max","f-nome"].forEach(function(id) {
+        document.getElementById(id).addEventListener("input", applyFilters);
+      });
+
+      document.getElementById("btn-reset").addEventListener("click", function () {
+        ["f-ruolo","f-ruolo-esteso","f-squadra"].forEach(function(id) {
+          document.getElementById(id).value = "";
+        });
+        ["f-eta-min","f-eta-max","f-val-min","f-val-max","f-nome"].forEach(function(id) {
+          document.getElementById(id).value = "";
+        });
+        applyFilters();
+      });
+
+      applyFilters();
+    })();
+  </script>
+</body>
+</html>

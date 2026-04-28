@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 Int        @id @default(autoincrement())
+  email              String     @unique
+  passwordHash       String
+  role               Role       @default(USER)
+  isActive           Boolean    @default(true)
+  mustChangePassword Boolean    @default(true)
+  invitedById        Int?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  nickname           String?
+  fantaTeam          FantaTeam?
+  invitedBy          User?      @relation("UserInvites", fields: [invitedById], references: [id])
+  invitees           User[]     @relation("UserInvites")
+  logs               Log[]
+
+  @@map("fantapresidenti")
+}
+
+model FantaTeam {
+  id        Int         @id @default(autoincrement())
+  nome      String
+  userId    Int         @unique
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
+  contratti Contratto[]
+  user      User        @relation(fields: [userId], references: [id])
+
+  @@map("fanta_teams")
+}
+
+model Giocatore {
+  id          Int         @id @default(autoincrement())
+  nome        String
+  ruoloEsteso String?
+  ruolo       String      @db.Char(1)
+  squadra     String?
+  eta         Int?
+  valore      Decimal?    @db.Decimal(10, 2)
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  contratti   Contratto[]
+
+  @@map("giocatori")
+}
+
+model Contratto {
+  id                Int                   @id @default(autoincrement())
+  tipo              TipoContratto
+  clausola          ClausolaContratto?
+  dataStipula       String
+  durataContratto   Int
+  dataFine          String?
+  giocatoreId       Int
+  valoreGiocatore   Decimal?              @db.Decimal(10, 2)
+  importoOperazione Decimal?              @db.Decimal(10, 2)
+  provenienza       ProvenienzaContratto?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  fantaTeamId       Int
+  fantaTeam         FantaTeam             @relation(fields: [fantaTeamId], references: [id])
+  giocatore         Giocatore             @relation(fields: [giocatoreId], references: [id])
+
+  @@map("contratti")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum TipoContratto {
+  Acquisto
+  Cessione
+  Prestito
+}
+
+enum ClausolaContratto {
+  DirittoRiscatto
+  DirittoRicompra
+  ObbligoRiscatto
+  ObbligoRicompra
+}
+
+enum ProvenienzaContratto {
+  Pubblico
+  Privato
+}
+
+model Log {
+  id         Int      @id @default(autoincrement())
+  azione     String              // CREATE | UPDATE | DELETE
+  entita     String              // contratto | utente | giocatore | ...
+  entitaId   Int?                // id dell'oggetto coinvolto
+  dettaglio  String?  @db.Text  // JSON con i campi modificati
+  adminId    Int
+  admin      User     @relation(fields: [adminId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@map("log_azioni")
+}

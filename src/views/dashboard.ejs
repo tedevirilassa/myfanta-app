@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('partials/head', { title: 'Dashboard' }) %>
+</head>
+<body>
+  <%- include('partials/nav') %>
+
+  <div class="container">
+    <div class="card">
+      <h1>Benvenuto, <%= currentUser.email %></h1>
+      <p style="color:#64748b; margin-top:8px;">
+        Hai effettuato l'accesso come
+        <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>">
+          <%= currentUser.role %>
+        </span>
+      </p>
+
+      <% if (currentUser.role === 'ADMIN') { %>
+      <div style="margin-top:24px;">
+        <a href="/admin/users" class="btn btn-primary">Gestisci utenti</a>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

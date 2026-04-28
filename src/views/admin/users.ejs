@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Gestione utenti' }) %>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Gestione utenti</h1>
+      <a href="/admin/users/invite" class="btn btn-primary">+ Invita utente</a>
+    </div>
+
+    <% if (message) { %>
+      <div class="alert alert-success"><%= message %></div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <div class="card" style="padding:0; overflow:hidden;">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Nickname</th>
+            <th>Squadra</th>
+            <th>Ruolo</th>
+            <th>Stato</th>
+            <th>Cambio pwd</th>
+            <th>Creato il</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% users.forEach(function(u) { %>
+          <tr>
+            <td><%= u.email %></td>
+            <td style="font-size:.85rem;">
+              <%= u.nickname || '<span style="color:#94a3b8;font-style:italic;">—</span>' %>
+            </td>
+            <td style="font-size:.85rem;">
+              <%= u.teamName || '<span style="color:#94a3b8;font-style:italic;">—</span>' %>
+            </td>
+            <td>
+              <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>">
+                <%= u.role %>
+              </span>
+            </td>
+            <td>
+              <span class="badge <%= u.isActive ? 'badge-active' : 'badge-inactive' %>">
+                <%= u.isActive ? 'Attivo' : 'Disabilitato' %>
+              </span>
+            </td>
+            <td style="font-size:.82rem; color:<%= u.mustChangePassword ? '#b45309' : '#64748b' %>;">
+              <%= u.mustChangePassword ? 'Richiesto' : 'No' %>
+            </td>
+            <td style="font-size:.82rem; color:#64748b;">
+              <%= u.createdAt.toLocaleDateString('it-IT') %>
+            </td>
+            <td>
+              <div class="actions">
+                <!-- Modifica profilo (nickname + squadra) -->
+                <a href="/admin/users/<%= u.id %>/edit-profile" class="btn btn-primary btn-sm">
+                  ✏️ Profilo
+                </a>
+                <% if (u.id !== currentUser.id) { %>
+                <!-- Reimposta password -->
+                <form action="/admin/users/<%= u.id %>/reset-password" method="POST"
+                      onsubmit="return confirm('Reimpostare la password di <%= u.email %>?')">
+                  <button type="submit" class="btn btn-warning btn-sm">Reset pwd</button>
+                </form>
+
+                <!-- Abilita / Disabilita -->
+                <form action="/admin/users/<%= u.id %>/toggle" method="POST"
+                      onsubmit="return confirm('<%= u.isActive ? 'Disabilitare' : 'Abilitare' %> <%= u.email %>?')">
+                  <button type="submit" class="btn btn-sm <%= u.isActive ? 'btn-danger' : 'btn-success' %>">
+                    <%= u.isActive ? 'Disabilita' : 'Abilita' %>
+                  </button>
+                </form>
+                <% } else { %>
+                  <span style="font-size:.8rem; color:#94a3b8;">(tu)</span>
+                <% } %>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+          <% if (users.length === 0) { %>
+          <tr>
+            <td colspan="8" style="text-align:center; color:#94a3b8; padding:32px;">
+              Nessun utente trovato.
+            </td>
+          </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

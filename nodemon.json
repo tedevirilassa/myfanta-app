@@ -1,0 +1,6 @@
+{
+  "watch": ["src"],
+  "ext": "js,ejs",
+  "ignore": ["generated/**", "prisma/migrations/**", "node_modules/**"],
+  "delay": 500
+}

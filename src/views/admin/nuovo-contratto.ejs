@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Nuovo Contratto' }) %>
+  <style>
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px 28px;
+    }
+    @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+    .form-grid .span-2 { grid-column: 1 / -1; }
+
+    /* valore calcolato in sola lettura */
+    .readonly-field {
+      width: 100%; padding: 10px 14px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 7px; font-size: 1rem;
+      background: #f0faf4; color: var(--gray-700);
+      cursor: default;
+    }
+
+    /* select giocatore con ricerca */
+    .select-hint { font-size: .75rem; color: var(--gray-400); margin-top: 4px; }
+
+    /* highlight campo obbligatorio */
+    .required-mark { color: var(--red); margin-left: 2px; }
+
+    .form-footer {
+      display: flex; gap: 12px; align-items: center;
+      padding-top: 20px; margin-top: 8px;
+      border-top: 1px solid var(--gray-200);
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width: 780px;">
+    <div class="page-header">
+      <h1>📝 Nuovo Contratto</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">
+        ← Pannello
+      </a>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error">❌ <%= error %></div>
+    <% } %>
+
+    <div class="card">
+      <form action="/admin/contratti/nuovo" method="POST" id="form-contratto">
+        <div class="form-grid">
+
+          <!-- ── TIPO ────────────────────────────────────── -->
+          <div class="form-group">
+            <label for="tipo">Tipo <span class="required-mark">*</span></label>
+            <select id="tipo" name="tipo" required>
+              <option value="">— Scegli —</option>
+              <option value="Acquisto">Acquisto</option>
+              <option value="Cessione">Cessione</option>
+              <option value="Prestito">Prestito</option>
+            </select>
+          </div>
+
+          <!-- ── CLAUSOLA ───────────────────────────────── -->
+          <div class="form-group">
+            <label for="clausola">Clausola</label>
+            <select id="clausola" name="clausola">
+              <option value="">— Nessuna —</option>
+              <option value="DirittoRiscatto">Diritto di riscatto</option>
+              <option value="DirittoRicompra">Diritto di ricompra</option>
+              <option value="ObbligoRiscatto">Obbligo di riscatto</option>
+              <option value="ObbligoRicompra">Obbligo di ricompra</option>
+            </select>
+          </div>
+
+          <!-- ── GIOCATORE ──────────────────────────────── -->
+          <div class="form-group span-2">
+            <label for="giocatoreId">Giocatore <span class="required-mark">*</span></label>
+            <select id="giocatoreId" name="giocatoreId" required>
+              <option value="">— Seleziona giocatore —</option>
+              <% giocatori.forEach(function(g) { %>
+                <option
+                  value="<%= g.id %>"
+                  data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
+                >
+                  [<%= g.ruolo %>] <%= g.nome %><%= g.squadra ? ' – ' + g.squadra : '' %>
+                </option>
+              <% }); %>
+            </select>
+            <div class="select-hint">Mostra solo giocatori attivi</div>
+          </div>
+
+          <!-- ── VALORE GIOCATORE (auto-fill) ──────────── -->
+          <div class="form-group span-2">
+            <label>Valore giocatore alla stipula (€)</label>
+            <div class="readonly-field" id="valore-display">— seleziona prima un giocatore —</div>
+            <input type="hidden" id="valoreGiocatore" name="valoreGiocatore">
+          </div>
+
+          <!-- ── FANTAPRESIDENTE ────────────────────────── -->
+          <div class="form-group span-2">
+            <label for="fantaPresidenteId">Fantapresidente <span class="required-mark">*</span></label>
+            <select id="fantaPresidenteId" name="fantaPresidenteId" required>
+              <option value="">— Seleziona presidente —</option>
+              <% presidenti.forEach(function(p) { %>
+                <option value="<%= p.id %>">
+                  <%= p.nickname ? p.nickname + ' (' + p.email + ')' : p.email %>
+                  <% if (p.teamName) { %> – <%= p.teamName %><% } %>
+                </option>
+              <% }); %>
+            </select>
+          </div>
+
+          <!-- ── DATA STIPULA ───────────────────────────── -->
+          <div class="form-group">
+            <label for="dataStipula">Data stipula (MM-YYYY) <span class="required-mark">*</span></label>
+            <input type="text" id="dataStipula" name="dataStipula"
+                   placeholder="es. 01-2026" pattern="\d{2}-\d{4}"
+                   title="Formato MM-YYYY" required>
+          </div>
+
+          <!-- ── DURATA ─────────────────────────────────── -->
+          <div class="form-group">
+            <label for="durataContratto">Durata (anni) <span class="required-mark">*</span></label>
+            <select id="durataContratto" name="durataContratto" required>
+              <option value="">— Scegli —</option>
+              <option value="1">1 anno</option>
+              <option value="2">2 anni</option>
+              <option value="3">3 anni</option>
+            </select>
+          </div>
+
+          <!-- ── DATA FINE (auto-calcolata) ────────────── -->
+          <div class="form-group">
+            <label>Data fine (MM-YYYY)</label>
+            <div class="readonly-field" id="dataFine-display">— si calcola automaticamente —</div>
+            <input type="hidden" id="dataFine" name="dataFine">
+          </div>
+
+          <!-- ── IMPORTO OPERAZIONE ─────────────────────── -->
+          <div class="form-group">
+            <label for="importoOperazione">Importo operazione (€)</label>
+            <input type="number" id="importoOperazione" name="importoOperazione"
+                   min="0" step="0.5" placeholder="es. 25.5">
+          </div>
+
+          <!-- ── PROVENIENZA ────────────────────────────── -->
+          <div class="form-group span-2">
+            <label for="provenienza">Provenienza</label>
+            <select id="provenienza" name="provenienza">
+              <option value="">— Nessuna —</option>
+              <option value="Pubblico">Pubblico</option>
+              <option value="Privato">Privato</option>
+            </select>
+          </div>
+
+        </div><!-- /form-grid -->
+
+        <div class="form-footer">
+          <button type="submit" class="btn btn-primary">💾 Salva contratto</button>
+          <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">
+            Annulla
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const selGiocatore = document.getElementById("giocatoreId");
+      const valoreDisplay = document.getElementById("valore-display");
+      const valoreInput = document.getElementById("valoreGiocatore");
+      const selDurata = document.getElementById("durataContratto");
+      const inputStipula = document.getElementById("dataStipula");
+      const dataFineDisplay = document.getElementById("dataFine-display");
+      const dataFineInput = document.getElementById("dataFine");
+
+      // ── Aggiorna valore giocatore ──────────────────────────
+      selGiocatore.addEventListener("change", function () {
+        const opt = selGiocatore.options[selGiocatore.selectedIndex];
+        const val = opt ? opt.dataset.valore : "";
+        if (val !== "") {
+          const num = parseFloat(val);
+          valoreDisplay.textContent = num.toLocaleString("it-IT", {
+            minimumFractionDigits: 2, maximumFractionDigits: 2
+          }) + " €";
+          valoreInput.value = num;
+        } else {
+          valoreDisplay.textContent = "— seleziona prima un giocatore —";
+          valoreInput.value = "";
+        }
+      });
+
+      const selProvenienza = document.getElementById("provenienza");
+
+      // ── Calcola data fine ──────────────────────────────────
+      // Regole mercato PUBBLICO:
+      //   Sessione estiva  (stipula mese 07): fine = 07-(anno + durata)
+      //   Sessione invernale (stipula mese 01): fine = 07-(anno + durata - 1)
+      // Mercato PRIVATO o non specificato: fine = stesso mese, anno + durata
+      function calcDataFine() {
+        const stipula     = inputStipula.value.trim();   // MM-YYYY
+        const durata      = parseInt(selDurata.value, 10);
+        const provenienza = selProvenienza.value;
+
+        if (!stipula || !/^\d{2}-\d{4}$/.test(stipula) || !durata) {
+          dataFineDisplay.textContent = "— si calcola automaticamente —";
+          dataFineInput.value = "";
+          return;
+        }
+        const [mm, yyyy] = stipula.split("-").map(Number);
+        if (!mm || mm < 1 || mm > 12 || !yyyy) {
+          dataFineDisplay.textContent = "— data stipula non valida —";
+          dataFineInput.value = "";
+          return;
+        }
+
+        let fineStr;
+        if (provenienza === "Pubblico") {
+          // La data fine è sempre in luglio (07)
+          const fineAnno = (mm === 7)
+            ? yyyy + durata          // sessione estiva
+            : yyyy + durata - 1;     // sessione invernale (gennaio)
+          fineStr = "07-" + fineAnno;
+        } else {
+          // Contratto privato: stesso mese, +durata anni
+          fineStr = String(mm).padStart(2, "0") + "-" + (yyyy + durata);
+        }
+
+        dataFineDisplay.textContent = fineStr;
+        dataFineInput.value = fineStr;
+      }
+
+      inputStipula.addEventListener("input", calcDataFine);
+      selDurata.addEventListener("change", calcDataFine);
+      selProvenienza.addEventListener("change", calcDataFine);
+    })();
+  </script>
+</body>
+</html>

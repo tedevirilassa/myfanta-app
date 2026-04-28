@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Riepilogo Contratti' }) %>
+  <style>
+    /* ── filtri ───────────────────────────────────────── */
+    .filter-bar {
+      display: flex; flex-wrap: wrap; gap: 10px;
+      align-items: center; margin-bottom: 24px;
+    }
+    .filter-bar select, .filter-bar input {
+      padding: 7px 12px; border: 1.5px solid var(--gray-200);
+      border-radius: 8px; font-size: .85rem;
+      background: #fafdfa; outline: none;
+      min-width: 160px;
+    }
+    .filter-bar select:focus, .filter-bar input:focus {
+      border-color: var(--green-mid);
+      box-shadow: 0 0 0 2px rgba(45,106,79,.12);
+    }
+
+    /* ── team section ─────────────────────────────────── */
+    .team-section { margin-bottom: 36px; }
+    .team-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .team-title {
+      font-size: 1.05rem; font-weight: 800;
+      color: var(--green-dark);
+    }
+    .team-meta {
+      font-size: .78rem; color: var(--gray-400);
+      font-weight: 600;
+    }
+    .badge-count {
+      background: var(--green-mid); color: #fff;
+      border-radius: 20px; padding: 2px 10px;
+      font-size: .75rem; font-weight: 700;
+    }
+
+    /* ── table ────────────────────────────────────────── */
+    .contratti-table-wrap {
+      overflow-x: auto;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.07);
+    }
+    .contratti-table-wrap table { min-width: 760px; }
+    .contratti-table-wrap td, .contratti-table-wrap th {
+      font-size: .82rem;
+    }
+    .ruolo-badge {
+      display: inline-block; width: 26px; height: 26px;
+      line-height: 26px; text-align: center;
+      border-radius: 50%; font-weight: 800; font-size: .75rem;
+      color: #fff;
+    }
+    .ruolo-P { background: #64748b; }
+    .ruolo-D { background: #2563eb; }
+    .ruolo-C { background: #16a34a; }
+    .ruolo-A { background: #dc2626; }
+    .scad-vicina { color: #b45309; font-weight: 700; }
+    .scad-ok     { color: var(--green-dark); }
+
+    /* ── summary cards ────────────────────────────────── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px; margin-bottom: 32px;
+    }
+    .summary-card {
+      background: var(--white); border-radius: 10px;
+      padding: 16px 20px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.07);
+      border-top: 3px solid var(--green-mid);
+    }
+    .summary-card .s-label {
+      font-size: .7rem; font-weight: 800;
+      text-transform: uppercase; letter-spacing: .8px;
+      color: var(--gray-400); margin-bottom: 4px;
+    }
+    .summary-card .s-value {
+      font-size: 1.4rem; font-weight: 800;
+      color: var(--green-dark);
+    }
+
+    /* ── no data ──────────────────────────────────────── */
+    .empty-row td { text-align:center; color:#94a3b8; padding: 28px; }
+
+    /* ── btn azioni ──────────────────────────────────── */
+    .btn-edit {
+      background: none; border: 1.5px solid var(--gray-200);
+      border-radius: 6px; padding: 4px 9px; cursor: pointer;
+      font-size: .8rem; color: var(--green-dark);
+      transition: background .15s, border-color .15s;
+    }
+    .btn-edit:hover { background: var(--gray-100); border-color: var(--green-mid); }
+
+    /* ── drawer overlay ──────────────────────────────── */
+    #drawer-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.35); z-index: 400;
+    }
+    #drawer-overlay.open { display: block; }
+
+    /* ── drawer panel ─────────────────────────────────── */
+    #edit-drawer {
+      position: fixed; top: 0; right: -480px; width: 460px; max-width: 100vw;
+      height: 100vh; background: #fff; z-index: 401;
+      box-shadow: -6px 0 32px rgba(0,0,0,.15);
+      display: flex; flex-direction: column;
+      transition: right .25s ease;
+      overflow-y: auto;
+    }
+    #edit-drawer.open { right: 0; }
+
+    .drawer-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px 16px; border-bottom: 1px solid var(--gray-200);
+      position: sticky; top: 0; background: #fff; z-index: 1;
+    }
+    .drawer-header h2 { font-size: 1rem; font-weight: 800; color: var(--green-dark); margin: 0; }
+    .drawer-close {
+      background: none; border: none; font-size: 1.3rem; cursor: pointer;
+      color: var(--gray-400); line-height: 1; padding: 2px 6px;
+    }
+    .drawer-close:hover { color: var(--green-dark); }
+
+    .drawer-body { padding: 24px; flex: 1; }
+    .drawer-footer {
+      padding: 16px 24px; border-top: 1px solid var(--gray-200);
+      display: flex; gap: 10px; align-items: center;
+      position: sticky; bottom: 0; background: #fff;
+    }
+
+    /* ── form inside drawer ───────────────────────────── */
+    .d-form-group { margin-bottom: 16px; }
+    .d-form-group label {
+      display: block; font-size: .78rem; font-weight: 700;
+      color: var(--gray-700); margin-bottom: 5px;
+    }
+    .d-form-group input,
+    .d-form-group select {
+      width: 100%; padding: 8px 12px;
+      border: 1.5px solid var(--gray-200); border-radius: 7px;
+      font-size: .88rem; background: #fafdfa; outline: none;
+      box-sizing: border-box;
+    }
+    .d-form-group input:focus,
+    .d-form-group select:focus {
+      border-color: var(--green-mid);
+      box-shadow: 0 0 0 2px rgba(45,106,79,.12);
+    }
+    .d-readonly {
+      padding: 8px 12px; border-radius: 7px;
+      border: 1.5px solid var(--gray-200); background: #f0faf4;
+      font-size: .88rem; color: var(--gray-700);
+    }
+    .d-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .required-mark { color: #dc2626; }
+
+    /* ── delete confirm ───────────────────────────────── */
+    .btn-delete-contract {
+      margin-left: auto;
+      background: none; border: 1.5px solid #fca5a5;
+      color: #dc2626; border-radius: 6px;
+      padding: 7px 14px; font-size: .82rem; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-delete-contract:hover { background: #fef2f2; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1280px;">
+
+    <div class="page-header">
+      <h1>📋 Riepilogo Contratti</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="border:1.5px solid var(--gray-200);background:#fff;">
+        ← Pannello
+      </a>
+    </div>
+
+    <!-- ── Statistiche globali ── -->
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="s-label">Totale contratti</div>
+        <div class="s-value"><%= totaleContratti %></div>
+      </div>
+      <div class="summary-card">
+        <div class="s-label">Scadono questo anno</div>
+        <div class="s-value"><%= scadenzaVicina %></div>
+      </div>
+      <div class="summary-card">
+        <div class="s-label">Valore totale rose</div>
+        <div class="s-value">M <%= valoreTotal.toFixed(1) %></div>
+      </div>
+      <div class="summary-card">
+        <div class="s-label">Team attivi</div>
+        <div class="s-value"><%= teams.length %></div>
+      </div>
+    </div>
+
+    <!-- ── Filtri ── -->
+    <div class="filter-bar">
+      <select id="filter-team">
+        <option value="">Tutti i team</option>
+        <% teams.forEach(t => { %>
+          <option value="team-<%= t.id %>"><%= t.nome %></option>
+        <% }) %>
+      </select>
+      <select id="filter-ruolo">
+        <option value="">Tutti i ruoli</option>
+        <option value="P">P – Portiere</option>
+        <option value="D">D – Difensore</option>
+        <option value="C">C – Centrocampista</option>
+        <option value="A">A – Attaccante</option>
+      </select>
+      <input id="filter-nome" type="text" placeholder="🔍 Cerca giocatore…">
+    </div>
+
+    <!-- ── Tabelle per team ── -->
+    <% teams.forEach(function(team) { %>
+    <div class="team-section" data-team-id="team-<%= team.id %>">
+      <div class="team-header">
+        <span class="team-title">🏟 <%= team.nome %></span>
+        <span class="badge-count"><%= team.contratti.length %> contratti</span>
+        <span class="team-meta">
+          Valore rosa: M <%= team.contratti.reduce((s, c) => s + parseFloat(c.valoreGiocatore || 0), 0).toFixed(1) %>
+          &nbsp;·&nbsp;
+          Stipendi: M <%= team.contratti.reduce((s, c) => s + parseFloat(c.importoOperazione || 0), 0).toFixed(2) %>
+        </span>
+      </div>
+
+      <div class="contratti-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>R</th>
+              <th>Giocatore</th>
+              <th>Squadra reale</th>
+              <th>Tipo</th>
+              <th>Valore (M)</th>
+              <th>Stipendio (M)</th>
+              <th>Stipula</th>
+              <th>Scadenza</th>
+              <th>Anni</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (team.contratti.length === 0) { %>
+            <tr class="empty-row"><td colspan="10">Nessun contratto</td></tr>
+            <% } %>
+            <% team.contratti.forEach(function(c) {
+               const scadAnno = c.dataFine ? parseInt(c.dataFine.split('-')[1]) : null;
+               const annoCorrente = new Date().getFullYear();
+               const scadClass = scadAnno && scadAnno <= annoCorrente ? 'scad-vicina' : 'scad-ok';
+            %>
+            <tr class="contratto-row"
+                data-ruolo="<%= c.giocatore.ruolo %>"
+                data-nome="<%= c.giocatore.nome.toLowerCase() %>"
+                data-id="<%= c.id %>"
+                data-giocatore-nome="<%= c.giocatore.nome %>"
+                data-giocatore-ruolo="<%= c.giocatore.ruolo %>"
+                data-giocatore-squadra="<%= c.giocatore.squadra || '' %>"
+                data-fanta-team-id="<%= c.fantaTeamId %>"
+                data-fanta-team-nome="<%= team.nome %>"
+                data-tipo="<%= c.tipo %>"
+                data-clausola="<%= c.clausola || '' %>"
+                data-data-stipula="<%= c.dataStipula %>"
+                data-durata="<%= c.durataContratto %>"
+                data-data-fine="<%= c.dataFine || '' %>"
+                data-valore="<%= c.valoreGiocatore || '' %>"
+                data-importo="<%= c.importoOperazione || '' %>"
+                data-provenienza="<%= c.provenienza || '' %>">
+              <td>
+                <span class="ruolo-badge ruolo-<%= c.giocatore.ruolo %>">
+                  <%= c.giocatore.ruolo %>
+                </span>
+              </td>
+              <td style="font-weight:600;"><%= c.giocatore.nome %></td>
+              <td style="color:var(--gray-700);"><%= c.giocatore.squadra || '—' %></td>
+              <td>
+                <span class="badge" style="font-size:.72rem;">
+                  <%= c.tipo %>
+                </span>
+              </td>
+              <td style="text-align:right;">
+                <%= c.valoreGiocatore ? parseFloat(c.valoreGiocatore).toFixed(1) : '—' %>
+              </td>
+              <td style="text-align:right;">
+                <%= c.importoOperazione ? parseFloat(c.importoOperazione).toFixed(2) : '—' %>
+              </td>
+              <td><%= c.dataStipula %></td>
+              <td class="<%= scadClass %>"><%= c.dataFine || '—' %></td>
+              <td style="text-align:center;"><%= c.durataContratto %></td>
+              <td>
+                <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% }) %>
+
+    <% if (teams.length === 0) { %>
+    <div style="text-align:center; color:#94a3b8; padding:60px 0;">
+      <div style="font-size:2.5rem; margin-bottom:12px;">📭</div>
+      <p>Nessun contratto presente nel database.</p>
+    </div>
+    <% } %>
+  </div><!-- /container -->
+
+  <!-- ══ DRAWER OVERLAY ══════════════════════════════════════════ -->
+  <div id="drawer-overlay" onclick="closeDrawer()"></div>
+
+  <!-- ══ EDIT DRAWER ═════════════════════════════════════════════ -->
+  <div id="edit-drawer">
+    <div class="drawer-header">
+      <h2 id="drawer-title">✏️ Modifica contratto</h2>
+      <button class="drawer-close" onclick="closeDrawer()" title="Chiudi">✕</button>
+    </div>
+
+    <% if (locals.editSuccess) { %>
+    <div class="alert alert-success" style="margin:16px 24px 0;">✔ <%= editSuccess %></div>
+    <% } %>
+    <% if (locals.editError) { %>
+    <div class="alert alert-error" style="margin:16px 24px 0;">❌ <%= editError %></div>
+    <% } %>
+
+    <div class="drawer-body">
+      <!-- giocatore (readonly) -->
+      <div class="d-form-group">
+        <label>Giocatore</label>
+        <div class="d-readonly" id="d-giocatore">—</div>
+      </div>
+
+      <!-- team (readonly) -->
+      <div class="d-form-group">
+        <label>FantaTeam</label>
+        <div class="d-readonly" id="d-team">—</div>
+      </div>
+
+      <form id="form-edit-contratto" method="POST">
+        <input type="hidden" name="_method" value="PUT">
+
+        <div class="d-form-row">
+          <!-- tipo -->
+          <div class="d-form-group">
+            <label for="d-tipo">Tipo <span class="required-mark">*</span></label>
+            <select id="d-tipo" name="tipo" required>
+              <option value="Acquisto">Acquisto</option>
+              <option value="Cessione">Cessione</option>
+              <option value="Prestito">Prestito</option>
+            </select>
+          </div>
+          <!-- clausola -->
+          <div class="d-form-group">
+            <label for="d-clausola">Clausola</label>
+            <select id="d-clausola" name="clausola">
+              <option value="">— Nessuna —</option>
+              <option value="DirittoRiscatto">Dir. riscatto</option>
+              <option value="DirittoRicompra">Dir. ricompra</option>
+              <option value="ObbligoRiscatto">Obbl. riscatto</option>
+              <option value="ObbligoRicompra">Obbl. ricompra</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="d-form-row">
+          <!-- data stipula -->
+          <div class="d-form-group">
+            <label for="d-stipula">Stipula (MM-YYYY) <span class="required-mark">*</span></label>
+            <input type="text" id="d-stipula" name="dataStipula"
+                   pattern="\d{2}-\d{4}" placeholder="es. 07-2025" required>
+          </div>
+          <!-- durata -->
+          <div class="d-form-group">
+            <label for="d-durata">Durata (anni) <span class="required-mark">*</span></label>
+            <select id="d-durata" name="durataContratto" required>
+              <option value="1">1 anno</option>
+              <option value="2">2 anni</option>
+              <option value="3">3 anni</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="d-form-row">
+          <!-- data fine -->
+          <div class="d-form-group">
+            <label for="d-datafine">Scadenza (MM-YYYY)</label>
+            <input type="text" id="d-datafine" name="dataFine"
+                   pattern="\d{2}-\d{4}" placeholder="es. 07-2026">
+          </div>
+          <!-- provenienza -->
+          <div class="d-form-group">
+            <label for="d-provenienza">Provenienza</label>
+            <select id="d-provenienza" name="provenienza">
+              <option value="">— Nessuna —</option>
+              <option value="Pubblico">Pubblico</option>
+              <option value="Privato">Privato</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="d-form-row">
+          <!-- valore -->
+          <div class="d-form-group">
+            <label for="d-valore">Valore (M€)</label>
+            <input type="number" id="d-valore" name="valoreGiocatore"
+                   min="0" step="0.1" placeholder="es. 15">
+          </div>
+          <!-- importo -->
+          <div class="d-form-group">
+            <label for="d-importo">Stipendio/Importo (M€)</label>
+            <input type="number" id="d-importo" name="importoOperazione"
+                   min="0" step="0.01" placeholder="es. 1.5">
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="drawer-footer">
+      <button type="submit" form="form-edit-contratto" class="btn btn-primary">
+        💾 Salva modifiche
+      </button>
+      <button class="btn btn-sm" onclick="closeDrawer()"
+              style="background:var(--gray-200);color:var(--gray-700);">
+        Annulla
+      </button>
+      <button class="btn-delete-contract" id="btn-delete"
+              onclick="confirmDelete()">
+        🗑 Elimina
+      </button>
+    </div>
+  </div>
+
+  <!-- form delete separato (submit via JS) -->
+  <form id="form-delete-contratto" method="POST" style="display:none;">
+    <input type="hidden" name="_method" value="DELETE">
+  </form>
+
+  <script>
+    // ── Filtri ────────────────────────────────────────────────────
+    const filterTeam  = document.getElementById('filter-team');
+    const filterRuolo = document.getElementById('filter-ruolo');
+    const filterNome  = document.getElementById('filter-nome');
+
+    function applyFilters() {
+      const teamVal  = filterTeam.value;
+      const ruoloVal = filterRuolo.value;
+      const nomeVal  = filterNome.value.toLowerCase().trim();
+
+      document.querySelectorAll('.team-section').forEach(section => {
+        const teamMatch = !teamVal || section.dataset.teamId === teamVal;
+        let visibleRows = 0;
+
+        section.querySelectorAll('.contratto-row').forEach(row => {
+          const ruoloMatch = !ruoloVal || row.dataset.ruolo === ruoloVal;
+          const nomeMatch  = !nomeVal  || row.dataset.nome.includes(nomeVal);
+          const show = ruoloMatch && nomeMatch;
+          row.style.display = show ? '' : 'none';
+          if (show) visibleRows++;
+        });
+
+        section.style.display = (teamMatch && (visibleRows > 0 || (!ruoloVal && !nomeVal))) ? '' : 'none';
+      });
+    }
+
+    filterTeam.addEventListener('change', applyFilters);
+    filterRuolo.addEventListener('change', applyFilters);
+    filterNome.addEventListener('input', applyFilters);
+
+    // ── Drawer ────────────────────────────────────────────────────
+    let currentContrattoId = null;
+
+    function openDrawer(row) {
+      const d = row.dataset;
+      currentContrattoId = d.id;
+
+      document.getElementById('drawer-title').textContent =
+        '✏️ ' + d.giocatoreNome + ' · ' + d.fantaTeamNome;
+      document.getElementById('d-giocatore').textContent =
+        '[' + d.giocatoreRuolo + '] ' + d.giocatoreNome +
+        (d.giocatoreSquadra ? ' – ' + d.giocatoreSquadra : '');
+      document.getElementById('d-team').textContent = d.fantaTeamNome;
+
+      setSelectVal('d-tipo',       d.tipo);
+      setSelectVal('d-clausola',   d.clausola);
+      setSelectVal('d-durata',     d.durata);
+      setSelectVal('d-provenienza', d.provenienza);
+
+      document.getElementById('d-stipula').value  = d.dataStipula;
+      document.getElementById('d-datafine').value = d.dataFine;
+      document.getElementById('d-valore').value   = d.valore;
+      document.getElementById('d-importo').value  = d.importo;
+
+      document.getElementById('form-edit-contratto').action =
+        '/admin/contratti/' + currentContrattoId + '/edit';
+      document.getElementById('form-delete-contratto').action =
+        '/admin/contratti/' + currentContrattoId + '/delete';
+
+      document.getElementById('edit-drawer').classList.add('open');
+      document.getElementById('drawer-overlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDrawer() {
+      document.getElementById('edit-drawer').classList.remove('open');
+      document.getElementById('drawer-overlay').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    function setSelectVal(id, val) {
+      const sel = document.getElementById(id);
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === val) { sel.selectedIndex = i; return; }
+      }
+      sel.selectedIndex = 0;
+    }
+
+    function confirmDelete() {
+      if (confirm('Eliminare definitivamente questo contratto?')) {
+        document.getElementById('form-delete-contratto').submit();
+      }
+    }
+
+    // Apertura drawer automatica dopo salvataggio (se redirect con ?edited=ID)
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const editedId = params.get('edited');
+      if (editedId) {
+        const row = document.querySelector('[data-id="' + editedId + '"]');
+        if (row) openDrawer(row);
+      }
+    })();
+
+    // ESC chiude il drawer
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+  </script>
+</body>
+</html>

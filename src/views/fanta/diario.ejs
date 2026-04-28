@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Diario' }) %>
+  <style>
+    .op-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: .7rem; font-weight: 700; text-transform: uppercase; white-space: nowrap;
+    }
+    .op-Acquisto   { background:#dcfce7; color:#166534; }
+    .op-Cessione   { background:#fee2e2; color:#991b1b; }
+    .op-Prestito   { background:#e0e7ff; color:#3730a3; }
+    .op-Riscatto   { background:#fef9c3; color:#713f12; }
+    .op-Taglio     { background:#fce7f3; color:#831843; }
+    .op-default    { background:#f3f4f6; color:#374151; }
+    .search-wrap { position:relative; }
+    .search-wrap input {
+      width:100%; padding:8px 12px 8px 36px; border:1px solid var(--gray-200);
+      border-radius:8px; font-size:.88rem; outline:none;
+    }
+    .search-wrap input:focus { border-color:var(--green-mid); box-shadow:0 0 0 2px rgba(45,106,79,.15); }
+    .search-icon { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--gray-400); }
+    .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }
+    .filter-btn {
+      padding:4px 12px; border-radius:16px; font-size:.78rem; font-weight:700;
+      cursor:pointer; border:2px solid transparent; background:var(--gray-100); color:var(--gray-600);
+    }
+    .filter-btn.active { background:var(--green-mid); color:#fff; border-color:var(--green-dark); }
+    #diario-count { font-size:.78rem; color:var(--gray-400); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1200px;">
+    <div class="page-header">
+      <h1>📖 Diario Operazioni</h1>
+      <a href="/fanta/classifica" class="btn btn-primary btn-sm">🏆 Classifica</a>
+    </div>
+
+    <% if (error) { %>
+    <div class="alert alert-error">Impossibile caricare i dati: <strong><%= error %></strong></div>
+    <% } %>
+
+    <% if (diario.length > 0) {
+         const operazioni = [...new Set(diario.map(d => d.operazione).filter(Boolean))];
+         const presidenti = [...new Set([...diario.map(d=>d.da), ...diario.map(d=>d.a)].filter(Boolean).filter(p=>p!=='Libero'))].sort();
+    %>
+
+    <!-- stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px;">
+      <% const countOp = {}; diario.forEach(d=>{ if(d.operazione) countOp[d.operazione]=(countOp[d.operazione]||0)+1; }); %>
+      <% Object.entries(countOp).forEach(function([op,cnt]){ %>
+      <div class="card" style="padding:12px 14px;text-align:center;">
+        <div style="font-size:.68rem;text-transform:uppercase;color:var(--gray-400);font-weight:700;"><%= op %></div>
+        <div style="font-size:1.6rem;font-weight:900;color:var(--green-dark);"><%= cnt %></div>
+      </div>
+      <% }); %>
+    </div>
+
+    <!-- filtri -->
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;margin-bottom:16px;">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Cerca giocatore, presidente…" oninput="applyFilters()">
+      </div>
+    </div>
+    <div class="filter-bar">
+      <span style="font-size:.8rem;color:var(--gray-400);font-weight:700;">Operazione:</span>
+      <button class="filter-btn active" data-filter-op="" onclick="setFilterOp(this,'')">Tutte</button>
+      <% operazioni.forEach(function(op){ %>
+      <button class="filter-btn" data-filter-op="<%= op %>" onclick="setFilterOp(this,'<%= op %>')"><%= op %></button>
+      <% }); %>
+    </div>
+    <div class="filter-bar">
+      <span style="font-size:.8rem;color:var(--gray-400);font-weight:700;">Presidente:</span>
+      <button class="filter-btn active" data-filter-pres="" onclick="setFilterPres(this,'')">Tutti</button>
+      <% presidenti.forEach(function(p){ %>
+      <button class="filter-btn" data-filter-pres="<%= p %>" onclick="setFilterPres(this,'<%= p %>')"><%= p %></button>
+      <% }); %>
+    </div>
+
+    <!-- tabella -->
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+      <div style="padding:10px 14px;background:var(--gray-100);border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);font-weight:700;">
+          Operazioni (<%= diario.length %> totali)
+        </span>
+        <span id="diario-count"></span>
+      </div>
+      <div style="overflow-x:auto;max-height:640px;overflow-y:auto;">
+        <table style="font-size:.82rem;white-space:nowrap;" id="diario-table">
+          <thead style="position:sticky;top:0;background:#fff;z-index:1;">
+            <tr>
+              <th>Data</th>
+              <th>Operazione</th>
+              <th>Giocatore</th>
+              <th>Da</th>
+              <th>A</th>
+              <th>Importo</th>
+              <th>Stipendio</th>
+              <th>Valore TM</th>
+            </tr>
+          </thead>
+          <tbody id="diario-body">
+            <% diario.slice().reverse().forEach(function(d) {
+                 const opKey = (d.operazione||'').charAt(0).toUpperCase()+d.operazione.slice(1);
+                 const opClass = ['Acquisto','Cessione','Prestito','Riscatto','Taglio'].includes(opKey)
+                   ? 'op-'+opKey : 'op-default';
+            %>
+            <tr data-nome="<%= d.nome.toLowerCase() %>"
+                data-op="<%= d.operazione %>"
+                data-da="<%= d.da %>"
+                data-a="<%= d.a %>">
+              <td><%= d.data || '—' %></td>
+              <td><span class="op-badge <%= opClass %>"><%= d.operazione || '—' %></span></td>
+              <td><strong><%= d.nome %></strong></td>
+              <td><%= d.da || '—' %></td>
+              <td><%= d.a || '—' %></td>
+              <td>
+                <% if(d.importoAcquisto > 0) { %><%= d.importoAcquisto.toFixed(1) %>M<% }
+                   else if(d.importoPrestito > 0) { %>(<%= d.importoPrestito.toFixed(1) %>M)<% }
+                   else { %>—<% } %>
+              </td>
+              <td><%= d.stipendio > 0 ? d.stipendio.toFixed(3)+'M' : '—' %></td>
+              <td><%= d.valoreTM > 0 ? d.valoreTM.toFixed(1)+'M' : '—' %></td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p style="font-size:.78rem;color:var(--gray-400);text-align:right;">
+      Aggiornamento automatico ogni 5 minuti · Fonte: Fantapollo 8
+    </p>
+    <% } %>
+  </div>
+
+  <script>
+    let _activeOp = '';
+    let _activePres = '';
+
+    function setFilterOp(btn, val) {
+      document.querySelectorAll('[data-filter-op]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _activeOp = val;
+      applyFilters();
+    }
+    function setFilterPres(btn, val) {
+      document.querySelectorAll('[data-filter-pres]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _activePres = val;
+      applyFilters();
+    }
+    function applyFilters() {
+      const q = document.getElementById('search-input').value.toLowerCase();
+      let visible = 0;
+      document.querySelectorAll('#diario-body tr').forEach(tr => {
+        const nome = tr.dataset.nome || '';
+        const op   = tr.dataset.op   || '';
+        const da   = tr.dataset.da   || '';
+        const a    = tr.dataset.a    || '';
+        const show =
+          (!_activeOp   || op === _activeOp) &&
+          (!_activePres || da === _activePres || a === _activePres) &&
+          (!q           || nome.includes(q) || da.toLowerCase().includes(q) || a.toLowerCase().includes(q));
+        tr.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      const cnt = document.getElementById('diario-count');
+      if (cnt) cnt.textContent = visible + ' righe';
+    }
+  </script>
+</body>
+</html>

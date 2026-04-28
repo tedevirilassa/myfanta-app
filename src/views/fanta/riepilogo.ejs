@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Riepilogo' }) %>
+  <style>
+    .pm-pos  { color: #15803d; font-weight: 700; }
+    .pm-neg  { color: #b91c1c; font-weight: 700; }
+    .section-title {
+      font-size: .7rem; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--gray-400); font-weight: 700; padding: 10px 14px;
+      background: var(--gray-100); border-bottom: 1px solid var(--gray-200);
+    }
+    .ruolo-bar-wrap { display:flex; gap:4px; align-items:center; font-size:.78rem; }
+    .ruolo-bar { height:8px; border-radius:4px; display:inline-block; }
+    .rb-p { background:#6366f1; }
+    .rb-d { background:#22c55e; }
+    .rb-c { background:#f59e0b; }
+    .rb-a { background:#ef4444; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1200px;">
+    <div class="page-header">
+      <h1>📊 Riepilogo Fantapollo 8</h1>
+      <a href="/fanta/classifica" class="btn btn-primary btn-sm">🏆 Classifica</a>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error">
+        Impossibile caricare i dati: <strong><%= error %></strong>
+      </div>
+    <% } %>
+
+    <% if (quotaRinnovi > 0) { %>
+    <div class="alert alert-info" style="margin-bottom:24px;">
+      📋 Quota rinnovi: <strong><%= quotaRinnovi.toFixed(4) %></strong>
+    </div>
+    <% } %>
+
+    <!-- ── TABELLA PRINCIPALE ───────────────────────────────────────────── -->
+    <% if (presidenti.length > 0) { %>
+    <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
+      <div class="section-title">Situazione patrimoniale</div>
+      <table style="font-size:.82rem;">
+        <thead>
+          <tr>
+            <th>Presidente</th>
+            <th>Valore Rosa</th>
+            <th>Crediti</th>
+            <th>Patrimonio</th>
+            <th>Giocatori</th>
+            <th>Età media</th>
+            <th>Stipendi</th>
+            <th>Prestiti IN</th>
+            <th>Ultimo ±</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% const sorted = [...presidenti].sort((a,b)=>b.patrimonio-a.patrimonio);
+             sorted.forEach(function(p) {
+               const pmC = p.ultimoPM > 0 ? 'pm-pos' : p.ultimoPM < 0 ? 'pm-neg' : '';
+          %>
+          <tr>
+            <td>
+              <a href="/fanta/presidente/<%= encodeURIComponent(p.nome) %>"
+                 style="font-weight:700; color:var(--green-dark); text-decoration:none;">
+                <%= p.nome %>
+              </a>
+            </td>
+            <td><%= p.valoreRose.toFixed(2) %></td>
+            <td><%= p.crediti.toFixed(2) %></td>
+            <td><strong><%= p.patrimonio.toFixed(2) %></strong></td>
+            <td style="text-align:center;"><%= p.giocatori %></td>
+            <td style="text-align:center;"><%= p.etaMedia.toFixed(2) %></td>
+            <td><%= p.stipendi.toFixed(2) %></td>
+            <td><%= p.montePrestitiIn.toFixed(2) %></td>
+            <td class="<%= pmC %>"><%= p.ultimoPM > 0 ? '+' : '' %><%= p.ultimoPM.toFixed(2) %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── RIPARTIZIONE REPARTI ────────────────────────────────────────── -->
+    <% if (Object.keys(reparti).length > 0) { %>
+    <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
+      <div class="section-title">Composizione rose</div>
+      <table style="font-size:.82rem;">
+        <thead>
+          <tr>
+            <th>Presidente</th>
+            <th style="text-align:center;">Tot.</th>
+            <th style="text-align:center;">🧤 Por</th>
+            <th style="text-align:center;">🛡️ Dif</th>
+            <th style="text-align:center;">⚙️ Cen</th>
+            <th style="text-align:center;">⚽ Att</th>
+            <th>Distribuzione</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% sorted.forEach(function(p) {
+               const rep = reparti[p.nome];
+               if (!rep) return;
+               const tot = rep.tot || 1;
+               const wP = Math.round(rep.portieri/tot*100);
+               const wD = Math.round(rep.difensori/tot*100);
+               const wC = Math.round(rep.centrocampisti/tot*100);
+               const wA = Math.round(rep.attaccanti/tot*100);
+          %>
+          <tr>
+            <td><a href="/fanta/presidente/<%= encodeURIComponent(p.nome) %>"
+                   style="font-weight:700; color:var(--green-dark); text-decoration:none;"><%= p.nome %></a></td>
+            <td style="text-align:center;"><strong><%= rep.tot %></strong></td>
+            <td style="text-align:center;"><%= rep.portieri %></td>
+            <td style="text-align:center;"><%= rep.difensori %></td>
+            <td style="text-align:center;"><%= rep.centrocampisti %></td>
+            <td style="text-align:center;"><%= rep.attaccanti %></td>
+            <td>
+              <div style="display:flex; gap:2px; height:12px; border-radius:4px; overflow:hidden; min-width:120px;">
+                <div class="ruolo-bar rb-p" style="width:<%= wP %>%; title='Por'"></div>
+                <div class="ruolo-bar rb-d" style="width:<%= wD %>%"></div>
+                <div class="ruolo-bar rb-c" style="width:<%= wC %>%"></div>
+                <div class="ruolo-bar rb-a" style="width:<%= wA %>%"></div>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <div style="padding:10px 14px; font-size:.75rem; color:var(--gray-400); display:flex; gap:16px;">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#6366f1;border-radius:2px;"></span> Portieri</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#22c55e;border-radius:2px;"></span> Difensori</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#f59e0b;border-radius:2px;"></span> Centrocampisti</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:2px;"></span> Attaccanti</span>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- ── STORICO PLUS/MINUS ──────────────────────────────────────────── -->
+    <% if (pmHistory.length > 0) { %>
+    <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
+      <div class="section-title">Storico Plus / Minus</div>
+      <div style="overflow-x:auto;">
+        <table style="font-size:.78rem; white-space:nowrap;">
+          <thead>
+            <tr>
+              <th>Presidente</th>
+              <th>Ultimo ±</th>
+              <% pmHdrCols.forEach(function(h){ %><th><%= h.label %></th><% }); %>
+            </tr>
+          </thead>
+          <tbody>
+            <% pmHistory.forEach(function(pm) {
+                 const pmC = pm.ultimoPM > 0 ? 'pm-pos' : pm.ultimoPM < 0 ? 'pm-neg' : '';
+            %>
+            <tr>
+              <td><strong><%= pm.nome %></strong></td>
+              <td class="<%= pmC %>"><%= pm.ultimoPM > 0 ? '+' : '' %><%= pm.ultimoPM.toFixed(2) %></td>
+              <% pm.values.forEach(function(v) {
+                   const vc = v.value > 0 ? 'pm-pos' : v.value < 0 ? 'pm-neg' : '';
+              %>
+              <td class="<%= vc %>"><%= v.value > 0 ? '+' : '' %><%= v.value !== 0 ? v.value.toFixed(2) : '—' %></td>
+              <% }); %>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } %>
+    <% } %>
+
+    <p style="font-size:.78rem; color:var(--gray-400); text-align:right; margin-top:8px;">
+      Aggiornamento automatico ogni 5 minuti · Fonte: Fantapollo 8 (luglio 2025 – luglio 2026)
+    </p>
+  </div>
+</body>
+</html>

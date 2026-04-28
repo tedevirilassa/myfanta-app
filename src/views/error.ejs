@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('partials/head', { title: 'Errore' }) %>
+</head>
+<body>
+  <%- include('partials/nav') %>
+  <div class="container-sm">
+    <div class="card" style="text-align:center; margin-top:60px;">
+      <h1 style="margin-bottom:16px;">Accesso negato</h1>
+      <p style="color:#64748b; margin-bottom:24px;"><%= message || 'Non hai i permessi per questa pagina.' %></p>
+      <a href="/" class="btn btn-primary">Torna alla home</a>
+    </div>
+  </div>
+</body>
+</html>

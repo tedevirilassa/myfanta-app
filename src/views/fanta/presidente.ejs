@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: presidente.nome }) %>
+  <style>
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-box {
+      background: var(--white);
+      border-radius: 8px;
+      padding: 16px 18px;
+      border-top: 3px solid var(--green-mid);
+      box-shadow: 0 2px 8px rgba(26,58,42,.08);
+    }
+    .stat-box .label { font-size:.72rem; text-transform:uppercase; letter-spacing:.5px; color:var(--gray-400); margin-bottom:4px; font-weight:700; }
+    .stat-box .value { font-size:1.4rem; font-weight:900; color:var(--green-dark); }
+    .stat-box .sub   { font-size:.78rem; color:var(--gray-400); margin-top:2px; }
+    .pm-pos { color:#15803d; font-weight:700; }
+    .pm-neg { color:#b91c1c; font-weight:700; }
+    .ruolo-bar { height:14px; border-radius:4px; display:inline-block; }
+    .section-title {
+      font-size:.7rem; text-transform:uppercase; letter-spacing:1px;
+      color:var(--gray-400); font-weight:700; padding:8px 14px;
+      background:var(--gray-100); border-bottom:1px solid var(--gray-200);
+      margin-top:24px; margin-bottom:0;
+    }
+    /* mini chart patrimonio */
+    .pat-chart {
+      display:flex; align-items:flex-end; gap:3px;
+      height:60px; padding:8px 0;
+    }
+    .pat-bar {
+      flex:1; background:var(--green-mid); border-radius:2px 2px 0 0;
+      min-width:4px; transition:height .3s;
+      position:relative;
+    }
+    .pat-bar:hover::after {
+      content:attr(data-val);
+      position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
+      background:var(--green-dark); color:#fff;
+      padding:2px 6px; border-radius:4px; font-size:.68rem; white-space:nowrap;
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container">
+    <div style="margin-bottom:16px;">
+      <a href="/fanta/classifica" style="font-size:.88rem; color:var(--green-mid); text-decoration:none;">← Classifica</a>
+      &nbsp;·&nbsp;
+      <a href="/fanta/riepilogo" style="font-size:.88rem; color:var(--green-mid); text-decoration:none;">Riepilogo</a>
+    </div>
+
+    <!-- titolo ---------------------------------------------------------------->
+    <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px;">
+      <div style="width:56px; height:56px; background:var(--green-mid); border-radius:50%;
+                  display:flex; align-items:center; justify-content:center;
+                  font-size:1.5rem; color:#fff; font-weight:900;">
+        <%= presidente.nome.charAt(0).toUpperCase() %>
+      </div>
+      <div>
+        <h1 style="margin-bottom:2px;"><%= presidente.nome %></h1>
+        <span style="font-size:.85rem; color:var(--gray-400);">Fantapollo 8 · stagione luglio 2025 – luglio 2026</span>
+      </div>
+    </div>
+
+    <!-- stat boxes ------------------------------------------------------------->
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="label">Patrimonio</div>
+        <div class="value"><%= presidente.patrimonio.toFixed(2) %></div>
+        <div class="sub">Rosa + Crediti</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Valore Rosa</div>
+        <div class="value"><%= presidente.valoreRose.toFixed(2) %></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Crediti</div>
+        <div class="value"><%= presidente.crediti.toFixed(2) %></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Giocatori</div>
+        <div class="value"><%= presidente.giocatori %></div>
+        <div class="sub">Età media: <%= presidente.etaMedia.toFixed(2) %></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Stipendi</div>
+        <div class="value"><%= presidente.stipendi.toFixed(2) %></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Prestiti IN</div>
+        <div class="value"><%= presidente.montePrestitiIn.toFixed(2) %></div>
+        <div class="sub">Limite: 5M</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Ultimo ±</div>
+        <div class="value <%= presidente.ultimoPM > 0 ? 'pm-pos' : presidente.ultimoPM < 0 ? 'pm-neg' : '' %>">
+          <%= presidente.ultimoPM > 0 ? '+' : '' %><%= presidente.ultimoPM.toFixed(2) %>
+        </div>
+      </div>
+    </div>
+
+    <!-- composizione rosa ----------------------------------------------------->
+    <% if (reparto) { %>
+    <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
+      <div class="section-title">Composizione rosa</div>
+      <div style="padding:20px;">
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px;">
+          <% const rep = reparto; %>
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem; font-weight:900; color:#6366f1;"><%= rep.portieri %></div>
+            <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase;">Portieri</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem; font-weight:900; color:#22c55e;"><%= rep.difensori %></div>
+            <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase;">Difensori</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem; font-weight:900; color:#f59e0b;"><%= rep.centrocampisti %></div>
+            <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase;">Centrocampisti</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:1.6rem; font-weight:900; color:#ef4444;"><%= rep.attaccanti %></div>
+            <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase;">Attaccanti</div>
+          </div>
+        </div>
+        <% const tot = rep.tot || 1; %>
+        <div style="display:flex; height:16px; border-radius:6px; overflow:hidden; gap:2px;">
+          <div style="width:<%= Math.round(rep.portieri/tot*100) %>%; background:#6366f1;"></div>
+          <div style="width:<%= Math.round(rep.difensori/tot*100) %>%; background:#22c55e;"></div>
+          <div style="width:<%= Math.round(rep.centrocampisti/tot*100) %>%; background:#f59e0b;"></div>
+          <div style="width:<%= Math.round(rep.attaccanti/tot*100) %>%; background:#ef4444;"></div>
+        </div>
+        <div style="font-size:.75rem; color:var(--gray-400); margin-top:6px;">Totale con stipendio: <strong><%= rep.tot %></strong></div>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- andamento patrimonio -------------------------------------------------->
+    <% if (pat && pat.history.length > 0) {
+         const vals = pat.history.map(h => h.value).filter(v => v > 0);
+         const maxVal = Math.max(...vals);
+         const minVal = Math.min(...vals);
+         const range = maxVal - minVal || 1;
+         const lastVal = vals[vals.length - 1];
+         const firstVal = vals[0];
+         const delta = lastVal - firstVal;
+    %>
+    <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
+      <div class="section-title">Andamento patrimonio storico</div>
+      <div style="padding:20px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:12px; font-size:.82rem;">
+          <span style="color:var(--gray-400);">Da <%= pat.history[0].label %></span>
+          <span class="<%= delta >= 0 ? 'pm-pos' : 'pm-neg' %>">
+            <%= delta >= 0 ? '+' : '' %><%= delta.toFixed(2) %> dall'inizio
+          </span>
+        </div>
+        <div class="pat-chart">
+          <% pat.history.filter(h=>h.value>0).forEach(function(h) {
+               const heightPct = Math.round(((h.value - minVal) / range) * 80 + 15);
+          %>
+          <div class="pat-bar"
+               style="height:<%= heightPct %>%;"
+               data-val="<%= h.label %>: <%= h.value.toFixed(2) %>"></div>
+          <% }); %>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:.72rem; color:var(--gray-400); margin-top:4px;">
+          <span><%= pat.history[0].label %></span>
+          <span>Max: <strong style="color:var(--green-dark);"><%= maxVal.toFixed(2) %></strong></span>
+          <span><%= pat.history[pat.history.length-1].label %></span>
+        </div>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- storico plus/minus --------------------------------------------------->
+    <% if (pm && pm.values.length > 0) { %>
+    <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
+      <div class="section-title">Storico Plus / Minus</div>
+      <div style="padding:20px; overflow-x:auto;">
+        <table style="font-size:.82rem; white-space:nowrap;">
+          <thead>
+            <tr>
+              <% pm.values.forEach(function(v){ %>
+              <th><%= v.label %></th>
+              <% }); %>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <% pm.values.forEach(function(v){
+                   const c = v.value > 0 ? 'pm-pos' : v.value < 0 ? 'pm-neg' : '';
+              %>
+              <td class="<%= c %>"><%= v.value !== 0 ? (v.value > 0 ? '+' : '') + v.value.toFixed(2) : '—' %></td>
+              <% }); %>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <% } %>
+
+    <p style="font-size:.78rem; color:var(--gray-400); text-align:right;">
+      Dati aggiornati ogni 5 minuti · Fonte: Fantapollo 8
+    </p>
+  </div>
+</body>
+</html>
