@@ -26,7 +26,8 @@
     <% } %>
 
     <div class="card" style="padding:0; overflow:hidden;">
-      <table>
+      <div style="overflow-x:auto;">
+      <table style="min-width:900px;">
         <thead>
           <tr>
             <th>Email</th>
@@ -44,10 +45,10 @@
           <tr>
             <td><%= u.email %></td>
             <td style="font-size:.85rem;">
-              <%= u.nickname || '<span style="color:#94a3b8;font-style:italic;">—</span>' %>
+              <%= u.nickname || 'NONE' %>
             </td>
             <td style="font-size:.85rem;">
-              <%= u.teamName || '<span style="color:#94a3b8;font-style:italic;">—</span>' %>
+              <%= u.teamName || 'NONE' %>
             </td>
             <td>
               <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : u.role === 'POWER_USER' ? 'badge-poweruser' : 'badge-user' %>">
@@ -111,6 +112,7 @@
           <% } %>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 </body>
