@@ -1,0 +1,6 @@
+npm run render:migrate-and-sync
+per allineare anche il Db su render
+
+npm run dev
+per eseguito il sito 
+
