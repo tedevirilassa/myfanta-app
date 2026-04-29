@@ -245,7 +245,8 @@
               <th>Stipendio (M)</th>
               <th>Stipula</th>
               <th>Scadenza</th>
-              <th>Anni</th>
+              <th>Anni di Contratto</th>
+              <th>Età</th>
               <th>Provenienza</th>
               <th>Destinazione</th>
               <th></th>
@@ -253,7 +254,7 @@
           </thead>
           <tbody>
             <% if (team.contratti.length === 0) { %>
-            <tr class="empty-row"><td colspan="12">Nessun contratto</td></tr>
+            <tr class="empty-row"><td colspan="13">Nessun contratto</td></tr>
             <% } %>
             <% team.contratti.forEach(function(c) {
                const annoCorrente = new Date().getFullYear();
@@ -305,7 +306,8 @@
               </td>
               <td><%= c.dataStipula %></td>
               <td class="<%= scadClass %>"><%= dataFineEffettiva || '—' %></td>
-              <td style="text-align:center;"><%= anniRimanenti !== null ? anniRimanenti : '—' %></td>
+              <td style="text-align:center;"><%= c.giocatore.anniContratto !== null && c.giocatore.anniContratto !== undefined ? c.giocatore.anniContratto : '—' %></td>
+              <td style="text-align:center;"><%= c.giocatore.eta !== null && c.giocatore.eta !== undefined ? c.giocatore.eta : '—' %></td>
               <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
               <td style="color:var(--gray-700);"><%= c.destinazione || '—' %></td>
               <td>

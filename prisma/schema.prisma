@@ -43,8 +43,9 @@ model Giocatore {
   ruoloEsteso String?
   ruolo       String      @db.Char(1)
   squadra     String?
-  eta         Int?
-  valore      Decimal?    @db.Decimal(10, 2)
+  eta            Int?
+  anniContratto  Int?
+  valore         Decimal?    @db.Decimal(10, 2)
   active      Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt

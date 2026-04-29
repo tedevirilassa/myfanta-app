@@ -7,8 +7,9 @@ require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg }     = require("@prisma/adapter-pg");
 
-const SHEET_ID = "1LY5jlGtdId9l2moK5mwNNj1OR5BBEFQqS_jHaqyov_c";
-const CSV_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+const SHEET_ID  = "1LY5jlGtdId9l2moK5mwNNj1OR5BBEFQqS_jHaqyov_c";
+const SHEET_TAB = "Giocatore";
+const CSV_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}&range=A:K`;
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
 function parseCSVLine(line) {
@@ -88,15 +89,18 @@ async function main() {
   }
 
   const headers = rows[0];
-  console.log("\nColonne trovate:", headers.map((h, i) => `[${i}]${h}`).join("  "));
+  console.log("\nColonne trovate:", headers.map((h, i) => `[${i}]${h || "(vuota)"}`).join("  "));
+  // Mostra la prima riga dati per capire la struttura reale
+  if (rows[1]) console.log("Prima riga dati:  ", rows[1].map((v, i) => `[${i}]${v || "(vuota)"}`).join("  "));
 
   // Trova indici colonne (con alias comuni)
   const iNome        = findCol(headers, "nome", "name", "giocatore", "player");
   const iRuoloEsteso = findCol(headers, "ruoloEsteso", "ruolo esteso", "ruoloe", "RuoloExt", "portiere", "difensore");
   const iRuolo       = findCol(headers, "ruolo", "r", "role", "pos");
   const iSquadra     = findCol(headers, "squadra", "club", "team", "società", "societa");
-  const iEta         = findCol(headers, "età", "eta", "age", "anni");
-  const iValore      = findCol(headers, "valore", "quotazione", "quota", "val", "costo");
+  const iEta           = findCol(headers, "età", "eta", "age");
+  const iAnniContratto  = findCol(headers, "anni contratto", "annicontratto", "anni_contratto", "durata contratto");
+  const iValore         = findCol(headers, "valore", "quotazione", "quota", "val", "costo");
 
   if (iNome === -1) {
     console.error("\n❌ Colonna 'Nome' non trovata tra le colonne disponibili.");
@@ -109,8 +113,9 @@ async function main() {
   console.log(`  ruoloEsteso → colonna ${iRuoloEsteso === -1 ? "non trovata" : iRuoloEsteso}`);
   console.log(`  ruolo       → colonna ${iRuolo       === -1 ? "non trovata" : iRuolo}`);
   console.log(`  squadra     → colonna ${iSquadra     === -1 ? "non trovata" : iSquadra}`);
-  console.log(`  eta         → colonna ${iEta         === -1 ? "non trovata" : iEta}`);
-  console.log(`  valore      → colonna ${iValore      === -1 ? "non trovata" : iValore}`);
+  console.log(`  eta          → colonna ${iEta           === -1 ? "non trovata" : iEta}`);
+  console.log(`  anniContratto→ colonna ${iAnniContratto  === -1 ? "non trovata" : iAnniContratto}`);
+  console.log(`  valore       → colonna ${iValore         === -1 ? "non trovata" : iValore}`);
 
   // Costruisce i record
   const records = [];
@@ -119,11 +124,13 @@ async function main() {
     const nome = (r[iNome] || "").trim();
     if (!nome) continue; // salta righe vuote
 
-    const etaRaw    = iEta    !== -1 ? (r[iEta]    || "").replace(/[^\d]/g, "") : "";
-    const valoreRaw = iValore !== -1 ? (r[iValore] || "").replace(",", ".").replace(/[^\d.]/g, "") : "";
+    const etaRaw          = iEta           !== -1 ? (r[iEta]           || "").replace(/[^\d]/g, "") : "";
+    const anniContrattoRaw = iAnniContratto  !== -1 ? (r[iAnniContratto] || "").replace(/[^\d]/g, "") : "";
+    const valoreRaw       = iValore         !== -1 ? (r[iValore]        || "").replace(",", ".").replace(/[^\d.]/g, "") : "";
 
-    const eta    = etaRaw    ? parseInt(etaRaw,    10) : null;
-    const valore = valoreRaw ? parseFloat(valoreRaw)  : null;
+    const eta          = etaRaw          ? parseInt(etaRaw,          10) : null;
+    const anniContratto = anniContrattoRaw ? parseInt(anniContrattoRaw, 10) : null;
+    const valore       = valoreRaw       ? parseFloat(valoreRaw)          : null;
 
     const ruoloRaw = iRuolo !== -1 ? (r[iRuolo] || "").trim() : "";
     // Ruolo: prende solo il primo carattere, deve essere P/D/C/A
@@ -134,9 +141,10 @@ async function main() {
       ruoloEsteso: iRuoloEsteso !== -1 ? ((r[iRuoloEsteso] || "").trim() || null) : null,
       ruolo,
       squadra:     iSquadra     !== -1 ? ((r[iSquadra]     || "").trim() || null) : null,
-      eta:         Number.isFinite(eta)    ? eta    : null,
-      valore:      Number.isFinite(valore) ? valore : null,
-      active:      true,
+      eta:          Number.isFinite(eta)          ? eta          : null,
+      anniContratto: Number.isFinite(anniContratto) ? anniContratto : null,
+      valore:       Number.isFinite(valore)        ? valore       : null,
+      active:       true,
     });
   }
 
@@ -175,6 +183,7 @@ async function main() {
           found.ruoloEsteso !== rec.ruoloEsteso  ||
           found.squadra     !== rec.squadra      ||
           found.eta         !== rec.eta          ||
+          found.anniContratto !== rec.anniContratto ||
           String(found.valore ?? "") !== String(rec.valore ?? "") ||
           found.active      !== true;
 
@@ -186,6 +195,7 @@ async function main() {
               ruoloEsteso: rec.ruoloEsteso,
               squadra:     rec.squadra,
               eta:         rec.eta,
+              anniContratto: rec.anniContratto,
               valore:      rec.valore,
               active:      true,
             },

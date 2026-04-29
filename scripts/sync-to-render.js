@@ -294,7 +294,7 @@ async function main() {
       table: "giocatori",
       columns: [
         "id", "nome", '"ruoloEsteso"', "ruolo", "squadra",
-        "eta", "valore", "active", '"createdAt"', '"updatedAt"',
+        "eta", '"anniContratto"', "valore", "active", '"createdAt"', '"updatedAt"',
       ],
     });
     await resetSequence(remotePool, "giocatori");
