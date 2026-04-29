@@ -5,7 +5,7 @@ require("dotenv").config();
 const app = require("./app");
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || "localhost";
+//const HOST = process.env.HOST || "localhost";
 
 process.on("unhandledRejection", (reason) => {
   console.error("❌ Unhandled Rejection:", reason);
