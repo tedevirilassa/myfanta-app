@@ -166,7 +166,7 @@
           <% logs.forEach(function(l, idx) { %>
           <tr>
             <td style="font-size:.78rem; color:var(--gray-700); white-space:nowrap;">
-              <%= l.createdAt.toLocaleString('it-IT', { dateStyle:'short', timeStyle:'short' }) %>
+              <%= l.createdAt.toLocaleString('it-IT', { dateStyle:'short', timeStyle:'short', timeZone:'Europe/Rome' }) %>
             </td>
             <td>
               <span class="azione-badge badge-<%= l.azione %>"><%= l.azione %></span>
