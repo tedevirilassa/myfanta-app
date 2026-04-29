@@ -22,6 +22,7 @@
     .badge-CREATE { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     .badge-UPDATE { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
     .badge-DELETE { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .badge-LOGIN  { background: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
 
     .azione-badge {
       display: inline-block; padding: 2px 10px; border-radius: 20px;
@@ -112,12 +113,15 @@
         <option value="CREATE"  <%= filtroAzione === 'CREATE'  ? 'selected' : '' %>>CREATE</option>
         <option value="UPDATE"  <%= filtroAzione === 'UPDATE'  ? 'selected' : '' %>>UPDATE</option>
         <option value="DELETE"  <%= filtroAzione === 'DELETE'  ? 'selected' : '' %>>DELETE</option>
+        <option value="LOGIN"   <%= filtroAzione === 'LOGIN'   ? 'selected' : '' %>>LOGIN</option>
       </select>
       <select name="entita" onchange="this.form.submit()">
         <option value="">Tutte le entità</option>
         <option value="contratto" <%= filtroEntita === 'contratto' ? 'selected' : '' %>>contratto</option>
         <option value="utente"    <%= filtroEntita === 'utente'    ? 'selected' : '' %>>utente</option>
         <option value="giocatore" <%= filtroEntita === 'giocatore' ? 'selected' : '' %>>giocatore</option>
+        <option value="profilo"   <%= filtroEntita === 'profilo'   ? 'selected' : '' %>>profilo</option>
+        <option value="password"  <%= filtroEntita === 'password'  ? 'selected' : '' %>>password</option>
       </select>
       <select name="adminId" onchange="this.form.submit()">
         <option value="">Tutti gli admin</option>

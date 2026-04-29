@@ -538,7 +538,6 @@ async function listLog(req, res) {
       include: { admin: { select: { id: true, email: true, nickname: true } } },
     }),
     prisma.user.findMany({
-      where:   { role: "ADMIN" },
       orderBy: { email: "asc" },
       select:  { id: true, email: true, nickname: true },
     }),
