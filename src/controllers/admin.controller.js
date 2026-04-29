@@ -81,7 +81,7 @@ async function inviteUser(req, res) {
     });
   }
 
-  const validRoles = ["ADMIN", "USER"];
+  const validRoles = ["ADMIN", "USER", "POWER_USER"];
   if (!validRoles.includes(role)) {
     return res.render("admin/invite", {
       error: "Ruolo non valido.",
@@ -169,7 +169,36 @@ async function saveEditProfile(req, res) {
   }
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog };
+// POST /admin/users/:id/change-role
+async function changeRole(req, res) {
+  const id = parseInt(req.params.id, 10);
+
+  if (id === req.user.id) {
+    return res.redirect("/admin/users?roleError=self");
+  }
+
+  const { role } = req.body;
+  const validRoles = ["ADMIN", "USER", "POWER_USER"];
+  if (!validRoles.includes(role)) {
+    return res.redirect("/admin/users?roleError=invalid");
+  }
+
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return res.redirect("/admin/users");
+
+  await prisma.user.update({ where: { id }, data: { role } });
+  await logAction({
+    azione: "UPDATE",
+    entita: "utente",
+    entitaId: id,
+    dettaglio: { prima: { role: user.role }, dopo: { role } },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/admin/users?roleSaved=1");
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole };
 
 // ── GET /admin/contratti/riepilogo ────────────────────────────────────────────
 async function listContrattiRiepilogo(req, res) {

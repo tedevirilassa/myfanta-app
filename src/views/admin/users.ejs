@@ -15,6 +15,15 @@
     <% if (message) { %>
       <div class="alert alert-success"><%= message %></div>
     <% } %>
+    <% if (req.query.roleSaved) { %>
+      <div class="alert alert-success">Ruolo aggiornato con successo.</div>
+    <% } %>
+    <% if (req.query.roleError === 'self') { %>
+      <div class="alert alert-error">Non puoi modificare il tuo ruolo.</div>
+    <% } %>
+    <% if (req.query.roleError === 'invalid') { %>
+      <div class="alert alert-error">Ruolo non valido.</div>
+    <% } %>
     <% if (error) { %>
       <div class="alert alert-error"><%= error %></div>
     <% } %>
@@ -44,8 +53,8 @@
               <%= u.teamName || '<span style="color:#94a3b8;font-style:italic;">—</span>' %>
             </td>
             <td>
-              <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>">
-                <%= u.role %>
+              <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : u.role === 'POWER_USER' ? 'badge-poweruser' : 'badge-user' %>">
+                <%= u.role === 'POWER_USER' ? 'Power User' : u.role %>
               </span>
             </td>
             <td>
@@ -70,6 +79,16 @@
                 <form action="/admin/users/<%= u.id %>/reset-password" method="POST"
                       onsubmit="return confirm('Reimpostare la password di <%= u.email %>?')">
                   <button type="submit" class="btn btn-warning btn-sm">Reset pwd</button>
+                </form>
+
+                <!-- Cambio ruolo -->
+                <form action="/admin/users/<%= u.id %>/change-role" method="POST" style="display:flex; gap:4px; align-items:center;">
+                  <select name="role" style="font-size:.8rem; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1;">
+                    <option value="USER"       <%= u.role === 'USER'       ? 'selected' : '' %>>User</option>
+                    <option value="POWER_USER" <%= u.role === 'POWER_USER' ? 'selected' : '' %>>Power User</option>
+                    <option value="ADMIN"      <%= u.role === 'ADMIN'      ? 'selected' : '' %>>Admin</option>
+                  </select>
+                  <button type="submit" class="btn btn-sm btn-primary">Salva</button>
                 </form>
 
                 <!-- Abilita / Disabilita -->

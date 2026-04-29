@@ -22,6 +22,7 @@ router.post("/users/:id/edit-profile", ctrl.saveEditProfile);
 router.post("/users/:id/inline-profile", ctrl.inlineEditUser);
 router.post("/users/:id/toggle", ctrl.toggleActive);
 router.post("/users/:id/reset-password", ctrl.resetPassword);
+router.post("/users/:id/change-role", ctrl.changeRole);
 router.post("/tools/seed-giocatori", ctrl.runSeedGiocatori);
 
 module.exports = router;

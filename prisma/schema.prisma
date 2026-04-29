@@ -76,6 +76,7 @@ model Contratto {
 enum Role {
   ADMIN
   USER
+  POWER_USER
 }
 
 enum TipoContratto {
