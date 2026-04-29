@@ -28,11 +28,11 @@ model User {
 model FantaTeam {
   id        Int         @id @default(autoincrement())
   nome      String
-  userId    Int         @unique
+  userId    Int?        @unique
   createdAt DateTime    @default(now())
   updatedAt DateTime    @default(now()) @updatedAt
   contratti Contratto[]
-  user      User        @relation(fields: [userId], references: [id])
+  user      User?       @relation(fields: [userId], references: [id])
 
   @@map("fanta_teams")
 }
@@ -63,7 +63,7 @@ model Contratto {
   giocatoreId       Int
   valoreGiocatore   Decimal?              @db.Decimal(10, 2)
   importoOperazione Decimal?              @db.Decimal(10, 2)
-  provenienza       ProvenienzaContratto?
+  provenienza       String?
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
   fantaTeamId       Int
@@ -90,11 +90,6 @@ enum ClausolaContratto {
   DirittoRicompra
   ObbligoRiscatto
   ObbligoRicompra
-}
-
-enum ProvenienzaContratto {
-  Pubblico
-  Privato
 }
 
 model Log {

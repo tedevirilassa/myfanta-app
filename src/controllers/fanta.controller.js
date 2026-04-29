@@ -115,13 +115,15 @@ async function showListaGiocatori(req, res) {
       orderBy: [{ ruolo: "asc" }, { nome: "asc" }],
     });
 
-    // Valori distinti per i filtri dropdown
     const ruoliEstesi = [...new Set(giocatori.map(g => g.ruoloEsteso).filter(Boolean))].sort();
     const squadre     = [...new Set(giocatori.map(g => g.squadra).filter(Boolean))].sort();
 
     res.render("fanta/lista-giocatori", {
       giocatori, ruoliEstesi, squadre,
       currentUser: req.user,
+      gSaved:   req.query.gSaved === "1",
+      gDeleted: req.query.gDeleted === "1",
+      gError:   req.query.gError || null,
       error: null,
     });
   } catch (err) {
@@ -129,6 +131,7 @@ async function showListaGiocatori(req, res) {
     res.render("fanta/lista-giocatori", {
       giocatori: [], ruoliEstesi: [], squadre: [],
       currentUser: req.user,
+      gSaved: false, gDeleted: false, gError: null,
       error: err.message,
     });
   }

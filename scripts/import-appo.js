@@ -89,10 +89,32 @@ function normalizeName(n) {
 async function main() {
   console.log(DRY_RUN ? "\n[DRY RUN] Nessuna scrittura su DB\n" : "");
 
-  // 1. Fetch del foglio
+  // 1. Fetch dei fogli
   console.log("Scarico il foglio 'appo'...");
   const csv = await fetchCSV("appo");
   const rows = parseCSV(csv);
+
+  console.log("Scarico il foglio 'Diario'...");
+  const diarioCsv = await fetchCSV("Diario");
+  const diarioRows = parseCSV(diarioCsv);
+
+  // Costruisce mappa nome → provenienza (primo acquisto trovato, campo "da", col2)
+  // col0=nome, col1=operazione, col2=da, col3=a
+  const provenienzaMap = new Map();
+  for (let i = 1; i < diarioRows.length; i++) {
+    const r = diarioRows[i];
+    if (!r || !r[0]) continue;
+    const nome = normalizeName(r[0]);
+    if (!provenienzaMap.has(nome) && r[2]) {
+      const da = r[2].trim();
+      // "Libero" = mercato libero → Pubblico, nome presidente → nome del presidente
+      let prov = null;
+      if (/^libero$/i.test(da)) prov = "Pubblico";
+      else if (da) prov = da;
+      provenienzaMap.set(nome, prov);
+    }
+  }
+  console.log(`Provenienza trovata per ${provenienzaMap.size} giocatori nel Diario.\n`);
 
   // 2. Estrai solo le righe con ruolo valido (P, D, C, A) e nome
   const RUOLI_VALIDI = new Set(["P", "D", "C", "A"]);
@@ -104,11 +126,21 @@ async function main() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   const prisma = new PrismaClient({ adapter });
 
-  // 4. Trova il FantaTeam "The President"
-  const team = await prisma.fantaTeam.findFirst({
-    where: { nome: { contains: "president", mode: "insensitive" } },
+  // 4. Trova o crea il FantaTeam "Borsello e Tappina"
+  let team = await prisma.fantaTeam.findFirst({
+    where: { nome: { contains: "Borsello", mode: "insensitive" } },
   });
-  if (!team) throw new Error("FantaTeam 'The President' non trovato nel DB.");
+  if (!team) {
+    if (!DRY_RUN) {
+      team = await prisma.fantaTeam.create({ data: { nome: "Borsello e Tappina" } });
+      console.log(`FantaTeam creato: ${team.nome} (id: ${team.id})\n`);
+    } else {
+      console.log(`[DRY RUN] FantaTeam "Borsello e Tappina" verrebbe creato.\n`);
+      team = { id: 0, nome: "Borsello e Tappina" };
+    }
+  } else {
+    console.log(`FantaTeam trovato: ${team.nome} (id: ${team.id})\n`);
+  }
   console.log(`FantaTeam: ${team.nome} (id: ${team.id})\n`);
 
   // 5. Carica tutti i giocatori dal DB per il matching
@@ -140,7 +172,12 @@ async function main() {
     const scadenza = scadenzaRaw && scadenzaRaw.includes("/") ? scadenzaRaw : null;
 
     const dataStipula = scadenza ? calcolaStipula(scadenza, anni) : "07-2025";
-    const dataFine = scadenza ? formatDataFine(scadenza) : null;
+    // Calcola sempre dataFine: dalla scadenza del foglio oppure da dataStipula + anni
+    let dataFine = scadenza ? formatDataFine(scadenza) : null;
+    if (!dataFine) {
+      const [mm, yyyy] = dataStipula.split("-");
+      dataFine = `${mm}-${parseInt(yyyy) + anni}`;
+    }
 
     // Cerca giocatore nel DB
     const key = normalizeName(nome);
@@ -164,7 +201,7 @@ async function main() {
       continue;
     }
 
-    console.log(`  [OK] ${nome.padEnd(28)} → giocatore id ${String(giocatore.id).padStart(4)}  stipula: ${dataStipula}  fine: ${dataFine || "-"}  anni: ${anni}  valore: ${valore ?? "-"}`);
+    console.log(`  [OK] ${nome.padEnd(28)} → giocatore id ${String(giocatore.id).padStart(4)}  stipula: ${dataStipula}  fine: ${dataFine || "-"}  anni: ${anni}  valore: ${valore ?? "-"}  prov: ${provenienzaMap.get(normalizeName(nome)) ?? "NULL"}`);
 
     if (!DRY_RUN) {
       await prisma.contratto.create({
@@ -177,7 +214,7 @@ async function main() {
           fantaTeamId:      team.id,
           valoreGiocatore:  valore,
           importoOperazione: stipendio,
-          provenienza:      "Pubblico",
+          provenienza:      provenienzaMap.get(normalizeName(nome)) ?? null,
         },
       });
       created++;

@@ -23,6 +23,10 @@ router.post("/users/:id/inline-profile", ctrl.inlineEditUser);
 router.post("/users/:id/toggle", ctrl.toggleActive);
 router.post("/users/:id/reset-password", ctrl.resetPassword);
 router.post("/users/:id/change-role", ctrl.changeRole);
+router.post("/giocatori", ctrl.createGiocatore);
+router.post("/giocatori/:id", ctrl.updateGiocatore);
+router.post("/giocatori/:id/delete", ctrl.deleteGiocatore);
+router.post("/fanta-teams/:id/assign", ctrl.assignFantaTeam);
 router.post("/tools/seed-giocatori", ctrl.runSeedGiocatori);
 
 module.exports = router;

@@ -9,16 +9,21 @@ const DEFAULT_PASSWORD = "primalogin2026";
 
 // GET /admin/users
 async function listUsers(req, res) {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const [users, teamLiberi] = await Promise.all([
+    prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { fantaTeam: true } }),
+    prisma.fantaTeam.findMany({ where: { userId: null }, orderBy: { nome: "asc" } }),
+  ]);
   const reset = req.query.reset === "1";
   res.render("admin/users", {
     users,
+    teamLiberi,
     currentUser: req.user,
-    message: reset         ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso."
-           : req.query.roleSaved ? "Ruolo aggiornato con successo."
+    message: reset              ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso."
+           : req.query.roleSaved    ? "Ruolo aggiornato con successo."
+           : req.query.teamAssigned ? "FantaTeam assegnato con successo."
            : null,
     roleError: req.query.roleError || null,
-    error: null,
+    error: req.query.teamError ? decodeURIComponent(req.query.teamError) : null,
   });
 }
 
@@ -201,7 +206,123 @@ async function changeRole(req, res) {
   res.redirect("/admin/users?roleSaved=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole };
+// POST /admin/fanta-teams/:id/assign
+async function assignFantaTeam(req, res) {
+  const teamId = parseInt(req.params.id, 10);
+  const userId = parseInt(req.body.userId, 10);
+
+  if (!userId) {
+    return res.redirect("/admin/users?teamError=" + encodeURIComponent("Seleziona un presidente."));
+  }
+
+  // Verifica che il team esista e sia senza owner
+  const team = await prisma.fantaTeam.findUnique({ where: { id: teamId } });
+  if (!team) {
+    return res.redirect("/admin/users?teamError=" + encodeURIComponent("FantaTeam non trovato."));
+  }
+  if (team.userId !== null) {
+    return res.redirect("/admin/users?teamError=" + encodeURIComponent("Questo FantaTeam è già assegnato a un utente."));
+  }
+
+  // Verifica che l'utente non abbia già un team
+  const esistente = await prisma.fantaTeam.findFirst({ where: { userId } });
+  if (esistente) {
+    return res.redirect("/admin/users?teamError=" + encodeURIComponent("Questo presidente ha già un FantaTeam assegnato."));
+  }
+
+  await prisma.fantaTeam.update({ where: { id: teamId }, data: { userId } });
+  await logAction({
+    azione: "UPDATE",
+    entita: "fantateam",
+    entitaId: teamId,
+    dettaglio: { prima: { userId: null }, dopo: { userId } },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/admin/users?teamAssigned=1");
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam };
+
+// ── POST /admin/giocatori (crea) ──────────────────────────────────────────────
+async function createGiocatore(req, res) {
+  const { nome, ruolo, ruoloEsteso, squadra, eta, valore, active } = req.body;
+
+  if (!nome || !ruolo) {
+    return res.redirect("/fanta/lista-giocatori?gError=missing");
+  }
+  const RUOLI = ["P", "D", "C", "A"];
+  if (!RUOLI.includes(ruolo)) return res.redirect("/fanta/lista-giocatori?gError=invalid");
+
+  const g = await prisma.giocatore.create({
+    data: {
+      nome: nome.trim(),
+      ruolo,
+      ruoloEsteso: ruoloEsteso?.trim() || null,
+      squadra: squadra?.trim() || null,
+      eta: eta ? parseInt(eta) : null,
+      valore: valore ? parseFloat(valore) : null,
+      active: active === "1",
+    },
+  });
+
+  await logAction({ azione: "CREATE", entita: "giocatore", entitaId: g.id,
+    dettaglio: { dopo: { nome: g.nome, ruolo: g.ruolo, squadra: g.squadra } },
+    adminId: req.user.id });
+
+  res.redirect("/fanta/lista-giocatori?gSaved=1");
+}
+
+// ── POST /admin/giocatori/:id (modifica) ──────────────────────────────────────
+async function updateGiocatore(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const { nome, ruolo, ruoloEsteso, squadra, eta, valore, active } = req.body;
+
+  const pre = await prisma.giocatore.findUnique({ where: { id } });
+  if (!pre) return res.redirect("/fanta/lista-giocatori?gError=notfound");
+
+  const updated = await prisma.giocatore.update({
+    where: { id },
+    data: {
+      nome: nome.trim(),
+      ruolo,
+      ruoloEsteso: ruoloEsteso?.trim() || null,
+      squadra: squadra?.trim() || null,
+      eta: eta ? parseInt(eta) : null,
+      valore: valore ? parseFloat(valore) : null,
+      active: active === "1",
+    },
+  });
+
+  await logAction({ azione: "UPDATE", entita: "giocatore", entitaId: id,
+    dettaglio: {
+      prima: { nome: pre.nome, ruolo: pre.ruolo, squadra: pre.squadra, valore: pre.valore, active: pre.active },
+      dopo:  { nome: updated.nome, ruolo: updated.ruolo, squadra: updated.squadra, valore: updated.valore, active: updated.active },
+    },
+    adminId: req.user.id });
+
+  res.redirect("/fanta/lista-giocatori?gSaved=1");
+}
+
+// ── POST /admin/giocatori/:id/delete ──────────────────────────────────────────
+async function deleteGiocatore(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const g = await prisma.giocatore.findUnique({ where: { id } });
+  if (!g) return res.redirect("/fanta/lista-giocatori?gError=notfound");
+
+  // Controlla se ha contratti attivi
+  const contratti = await prisma.contratto.count({ where: { giocatoreId: id } });
+  if (contratti > 0) {
+    return res.redirect(`/fanta/lista-giocatori?gError=hasContratti&nome=${encodeURIComponent(g.nome)}`);
+  }
+
+  await prisma.giocatore.delete({ where: { id } });
+  await logAction({ azione: "DELETE", entita: "giocatore", entitaId: id,
+    dettaglio: { prima: { nome: g.nome, ruolo: g.ruolo, squadra: g.squadra } },
+    adminId: req.user.id });
+
+  res.redirect("/fanta/lista-giocatori?gDeleted=1");
+}
 
 // ── GET /admin/contratti/riepilogo ────────────────────────────────────────────
 async function listContrattiRiepilogo(req, res) {

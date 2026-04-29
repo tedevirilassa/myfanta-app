@@ -246,16 +246,24 @@
               <th>Stipula</th>
               <th>Scadenza</th>
               <th>Anni</th>
+              <th>Provenienza</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             <% if (team.contratti.length === 0) { %>
-            <tr class="empty-row"><td colspan="10">Nessun contratto</td></tr>
+            <tr class="empty-row"><td colspan="11">Nessun contratto</td></tr>
             <% } %>
             <% team.contratti.forEach(function(c) {
-               const scadAnno = c.dataFine ? parseInt(c.dataFine.split('-')[1]) : null;
                const annoCorrente = new Date().getFullYear();
+               // Calcola dataFine effettiva: usa quella salvata oppure la ricava da dataStipula + durataContratto
+               let dataFineEffettiva = c.dataFine || null;
+               if (!dataFineEffettiva && c.dataStipula && c.durataContratto) {
+                 const [mm, yyyy] = c.dataStipula.split('-');
+                 dataFineEffettiva = mm + '-' + (parseInt(yyyy) + parseInt(c.durataContratto));
+               }
+               const scadAnno = dataFineEffettiva ? parseInt(dataFineEffettiva.split('-')[1]) : null;
+               const anniRimanenti = scadAnno !== null ? scadAnno - annoCorrente : null;
                const scadClass = scadAnno && scadAnno <= annoCorrente ? 'scad-vicina' : 'scad-ok';
             %>
             <tr class="contratto-row"
@@ -294,8 +302,9 @@
                 <%= c.importoOperazione ? parseFloat(c.importoOperazione).toFixed(2) : '—' %>
               </td>
               <td><%= c.dataStipula %></td>
-              <td class="<%= scadClass %>"><%= c.dataFine || '—' %></td>
-              <td style="text-align:center;"><%= c.durataContratto %></td>
+              <td class="<%= scadClass %>"><%= dataFineEffettiva || '—' %></td>
+              <td style="text-align:center;"><%= anniRimanenti !== null ? anniRimanenti : '—' %></td>
+              <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
               <td>
                 <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
               </td>
@@ -399,11 +408,8 @@
           <!-- provenienza -->
           <div class="d-form-group">
             <label for="d-provenienza">Provenienza</label>
-            <select id="d-provenienza" name="provenienza">
-              <option value="">— Nessuna —</option>
-              <option value="Pubblico">Pubblico</option>
-              <option value="Privato">Privato</option>
-            </select>
+            <input type="text" id="d-provenienza" name="provenienza"
+                   placeholder="es. Pubblico, Lorenzo, …">
           </div>
         </div>
 
@@ -492,7 +498,7 @@
       setSelectVal('d-tipo',       d.tipo);
       setSelectVal('d-clausola',   d.clausola);
       setSelectVal('d-durata',     d.durata);
-      setSelectVal('d-provenienza', d.provenienza);
+      document.getElementById('d-provenienza').value = d.provenienza || '';
 
       document.getElementById('d-stipula').value  = d.dataStipula;
       document.getElementById('d-datafine').value = d.dataFine;

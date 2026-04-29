@@ -79,6 +79,21 @@
     }
     .empty-state .es-icon { font-size: 3rem; display: block; margin-bottom: 12px; }
     .empty-state p { font-size: .9rem; }
+
+    /* ── modal ─────────────────────────────────────────────── */
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.45); z-index:500;
+      align-items:center; justify-content:center;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal-box {
+      background:#fff; border-radius:12px; padding:28px 28px 20px;
+      width:100%; max-width:480px; box-shadow:0 16px 48px rgba(0,0,0,.22);
+      max-height:90vh; overflow-y:auto;
+    }
+    .modal-box h2 { font-size:1.1rem; margin-bottom:18px; color:var(--green-dark); }
+    .modal-footer { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
   </style>
 </head>
 <body>
@@ -87,8 +102,26 @@
   <div class="container" style="max-width: 1300px;">
     <div class="page-header">
       <h1>📋 Lista Giocatori</h1>
-      <span id="count-label">…</span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="count-label"></span>
+        <% if (currentUser.role === 'ADMIN') { %>
+          <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Aggiungi</button>
+        <% } %>
+      </div>
     </div>
+
+    <% if (typeof gSaved !== 'undefined' && gSaved) { %>
+      <div class="alert alert-success">Giocatore salvato con successo.</div>
+    <% } %>
+    <% if (typeof gDeleted !== 'undefined' && gDeleted) { %>
+      <div class="alert alert-success">Giocatore eliminato.</div>
+    <% } %>
+    <% if (typeof gError !== 'undefined' && gError === 'hasContratti') { %>
+      <div class="alert alert-error">Impossibile eliminare: il giocatore ha contratti associati.</div>
+    <% } %>
+    <% if (typeof gError !== 'undefined' && gError && gError !== 'hasContratti') { %>
+      <div class="alert alert-error">Errore: <%= gError %>.</div>
+    <% } %>
 
     <% if (error) { %>
       <div class="alert alert-error">❌ <%= error %></div>
@@ -179,6 +212,7 @@
             <th>Età</th>
             <th>Valore €</th>
             <th>Stato</th>
+            <% if (currentUser.role === 'ADMIN') { %><th>Azioni</th><% } %>
           </tr>
         </thead>
         <tbody>
@@ -219,6 +253,24 @@
                     <%= g.active ? 'Attivo' : 'Inattivo' %>
                   </span>
                 </td>
+                <% if (currentUser.role === 'ADMIN') { %>
+                <td>
+                  <div class="actions">
+                    <button class="btn btn-primary btn-sm" onclick="openEditModal(
+                      <%= g.id %>,'<%= g.nome.replace(/'/g,"&#39;") %>','<%= g.ruolo %>',
+                      '<%= (g.ruoloEsteso||'').replace(/'/g,"&#39;") %>',
+                      '<%= (g.squadra||'').replace(/'/g,"&#39;") %>',
+                      '<%= g.eta !== null ? g.eta : '' %>',
+                      '<%= g.valore !== null ? Number(g.valore) : '' %>',
+                      <%= g.active ? 1 : 0 %>
+                    )">✏️</button>
+                    <form action="/admin/giocatori/<%= g.id %>/delete" method="POST"
+                          onsubmit="return confirm('Eliminare <%= g.nome %>?')">
+                      <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+                    </form>
+                  </div>
+                </td>
+                <% } %>
               </tr>
             <% }) %>
           <% } %>
@@ -227,7 +279,62 @@
     </div>
   </div>
 
+  <% if (currentUser.role === 'ADMIN') { %>
+  <!-- ── MODAL AGGIUNGI ──────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-add">
+    <div class="modal-box">
+      <h2>➕ Aggiungi Giocatore</h2>
+      <form action="/admin/giocatori" method="POST">
+        <%- include('./giocatore-form-fields', { g: null }) %>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);" onclick="closeModal('modal-add')">Annulla</button>
+          <button type="submit" class="btn btn-primary btn-sm">Salva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── MODAL MODIFICA ──────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-edit">
+    <div class="modal-box">
+      <h2>✏️ Modifica Giocatore</h2>
+      <form id="form-edit" action="" method="POST">
+        <%- include('./giocatore-form-fields', { g: null }) %>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);" onclick="closeModal('modal-edit')">Annulla</button>
+          <button type="submit" class="btn btn-primary btn-sm">Salva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <% } %>
+
   <script>
+    function openAddModal() {
+      document.getElementById('modal-add').classList.add('open');
+    }
+    function openEditModal(id, nome, ruolo, ruoloEsteso, squadra, eta, valore, active) {
+      const f = document.getElementById('form-edit');
+      f.action = '/admin/giocatori/' + id;
+      f.querySelector('[name=nome]').value = nome;
+      f.querySelector('[name=ruolo]').value = ruolo;
+      f.querySelector('[name=ruoloEsteso]').value = ruoloEsteso;
+      f.querySelector('[name=squadra]').value = squadra;
+      f.querySelector('[name=eta]').value = eta;
+      f.querySelector('[name=valore]').value = valore;
+      f.querySelector('[name=active]').value = active ? '1' : '0';
+      document.getElementById('modal-edit').classList.add('open');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('open');
+    }
+    // chiudi cliccando fuori dal box
+    document.querySelectorAll('.modal-overlay').forEach(function(m) {
+      m.addEventListener('click', function(e) {
+        if (e.target === m) m.classList.remove('open');
+      });
+    });
+  </script>
     (function () {
       const rows = Array.from(document.querySelectorAll("#tbl-giocatori tbody tr[data-nome]"));
       const countEl  = document.getElementById("count-label");
