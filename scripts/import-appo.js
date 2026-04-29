@@ -126,17 +126,17 @@ async function main() {
   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   const prisma = new PrismaClient({ adapter });
 
-  // 4. Trova o crea il FantaTeam "Borsello e Tappina"
+  // 4. Trova o crea il FantaTeam "Feromoni"
   let team = await prisma.fantaTeam.findFirst({
-    where: { nome: { contains: "Borsello", mode: "insensitive" } },
+    where: { nome: { contains: "Feromoni", mode: "insensitive" } },
   });
   if (!team) {
     if (!DRY_RUN) {
-      team = await prisma.fantaTeam.create({ data: { nome: "Borsello e Tappina" } });
+      team = await prisma.fantaTeam.create({ data: { nome: "Feromoni" } });
       console.log(`FantaTeam creato: ${team.nome} (id: ${team.id})\n`);
     } else {
-      console.log(`[DRY RUN] FantaTeam "Borsello e Tappina" verrebbe creato.\n`);
-      team = { id: 0, nome: "Borsello e Tappina" };
+      console.log(`[DRY RUN] FantaTeam "Feromoni" verrebbe creato.\n`);
+      team = { id: 0, nome: "Feromoni" };
     }
   } else {
     console.log(`FantaTeam trovato: ${team.nome} (id: ${team.id})\n`);
