@@ -247,12 +247,13 @@
               <th>Scadenza</th>
               <th>Anni</th>
               <th>Provenienza</th>
+              <th>Destinazione</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             <% if (team.contratti.length === 0) { %>
-            <tr class="empty-row"><td colspan="11">Nessun contratto</td></tr>
+            <tr class="empty-row"><td colspan="12">Nessun contratto</td></tr>
             <% } %>
             <% team.contratti.forEach(function(c) {
                const annoCorrente = new Date().getFullYear();
@@ -282,7 +283,8 @@
                 data-data-fine="<%= c.dataFine || '' %>"
                 data-valore="<%= c.valoreGiocatore || '' %>"
                 data-importo="<%= c.importoOperazione || '' %>"
-                data-provenienza="<%= c.provenienza || '' %>">
+                data-provenienza="<%= c.provenienza || '' %>"
+                data-destinazione="<%= c.destinazione || '' %>">
               <td>
                 <span class="ruolo-badge ruolo-<%= c.giocatore.ruolo %>">
                   <%= c.giocatore.ruolo %>
@@ -305,6 +307,7 @@
               <td class="<%= scadClass %>"><%= dataFineEffettiva || '—' %></td>
               <td style="text-align:center;"><%= anniRimanenti !== null ? anniRimanenti : '—' %></td>
               <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
+              <td style="color:var(--gray-700);"><%= c.destinazione || '—' %></td>
               <td>
                 <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
               </td>
@@ -407,9 +410,15 @@
           </div>
           <!-- provenienza -->
           <div class="d-form-group">
-            <label for="d-provenienza">Provenienza</label>
+            <label for="d-provenienza">Provenienza (Da)</label>
             <input type="text" id="d-provenienza" name="provenienza"
                    placeholder="es. Pubblico, Lorenzo, …">
+          </div>
+          <!-- destinazione -->
+          <div class="d-form-group">
+            <label for="d-destinazione">Destinazione (A)</label>
+            <input type="text" id="d-destinazione" name="destinazione"
+                   placeholder="es. Pubblico, Giulio, …">
           </div>
         </div>
 
@@ -499,6 +508,7 @@
       setSelectVal('d-clausola',   d.clausola);
       setSelectVal('d-durata',     d.durata);
       document.getElementById('d-provenienza').value = d.provenienza || '';
+      document.getElementById('d-destinazione').value = d.destinazione || '';
 
       document.getElementById('d-stipula').value  = d.dataStipula;
       document.getElementById('d-datafine').value = d.dataFine;

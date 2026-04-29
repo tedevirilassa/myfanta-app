@@ -98,9 +98,10 @@ async function main() {
   const diarioCsv = await fetchCSV("Diario");
   const diarioRows = parseCSV(diarioCsv);
 
-  // Costruisce mappa nome → provenienza (primo acquisto trovato, campo "da", col2)
+  // Costruisce mappa nome → provenienza (Da, col2) e destinazione (A, col3)
   // col0=nome, col1=operazione, col2=da, col3=a
   const provenienzaMap = new Map();
+  const destinazioneMap = new Map();
   for (let i = 1; i < diarioRows.length; i++) {
     const r = diarioRows[i];
     if (!r || !r[0]) continue;
@@ -112,6 +113,11 @@ async function main() {
       if (/^libero$/i.test(da)) prov = "Pubblico";
       else if (da) prov = da;
       provenienzaMap.set(nome, prov);
+    }
+    if (!destinazioneMap.has(nome) && r[3]) {
+      const a = r[3].trim();
+      if (/^libero$/i.test(a)) destinazioneMap.set(nome, "Pubblico");
+      else if (a) destinazioneMap.set(nome, a);
     }
   }
   console.log(`Provenienza trovata per ${provenienzaMap.size} giocatori nel Diario.\n`);
@@ -201,7 +207,7 @@ async function main() {
       continue;
     }
 
-    console.log(`  [OK] ${nome.padEnd(28)} → giocatore id ${String(giocatore.id).padStart(4)}  stipula: ${dataStipula}  fine: ${dataFine || "-"}  anni: ${anni}  valore: ${valore ?? "-"}  prov: ${provenienzaMap.get(normalizeName(nome)) ?? "NULL"}`);
+    console.log(`  [OK] ${nome.padEnd(28)} → giocatore id ${String(giocatore.id).padStart(4)}  stipula: ${dataStipula}  fine: ${dataFine || "-"}  anni: ${anni}  valore: ${valore ?? "-"}  prov: ${provenienzaMap.get(normalizeName(nome)) ?? "NULL"}  dest: ${destinazioneMap.get(normalizeName(nome)) ?? "NULL"}`);
 
     if (!DRY_RUN) {
       await prisma.contratto.create({
@@ -215,6 +221,7 @@ async function main() {
           valoreGiocatore:  valore,
           importoOperazione: stipendio,
           provenienza:      provenienzaMap.get(normalizeName(nome)) ?? null,
+          destinazione:     destinazioneMap.get(normalizeName(nome)) ?? null,
         },
       });
       created++;

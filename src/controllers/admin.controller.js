@@ -452,7 +452,7 @@ async function saveNuovoContratto(req, res) {
   const {
     tipo, clausola, dataStipula, durataContratto,
     dataFine, giocatoreId, fantaPresidenteId,
-    importoOperazione, provenienza,
+    importoOperazione, provenienza, destinazione,
   } = req.body;
 
   // Validazione base
@@ -509,6 +509,7 @@ async function saveNuovoContratto(req, res) {
       valoreGiocatore:    giocatore?.valore ?? null,
       importoOperazione:  Number.isFinite(importo) ? importo : null,
       provenienza:        provenienza || null,
+      destinazione:       destinazione || null,
     },
   });
   await logAction({ azione: "CREATE", entita: "contratto", entitaId: nuovoContratto.id,
@@ -538,7 +539,7 @@ async function saveEditContratto(req, res) {
 
   const {
     tipo, clausola, dataStipula, durataContratto,
-    dataFine, valoreGiocatore, importoOperazione, provenienza,
+    dataFine, valoreGiocatore, importoOperazione, provenienza, destinazione,
   } = req.body;
 
   const errors = [];
@@ -560,7 +561,7 @@ async function saveEditContratto(req, res) {
   const contrattoPre = await prisma.contratto.findUnique({
     where: { id },
     select: { tipo: true, clausola: true, dataStipula: true, durataContratto: true,
-              dataFine: true, valoreGiocatore: true, importoOperazione: true, provenienza: true },
+              dataFine: true, valoreGiocatore: true, importoOperazione: true, provenienza: true, destinazione: true },
   });
 
   await prisma.contratto.update({
@@ -574,6 +575,7 @@ async function saveEditContratto(req, res) {
       valoreGiocatore:   Number.isFinite(valore)  ? valore  : null,
       importoOperazione: Number.isFinite(importo) ? importo : null,
       provenienza:       provenienza || null,
+      destinazione:      destinazione || null,
     },
   });
   await logAction({ azione: "UPDATE", entita: "contratto", entitaId: id,
@@ -587,6 +589,7 @@ async function saveEditContratto(req, res) {
         valoreGiocatore:   contrattoPre.valoreGiocatore ? Number(contrattoPre.valoreGiocatore) : null,
         importoOperazione: contrattoPre.importoOperazione ? Number(contrattoPre.importoOperazione) : null,
         provenienza:       contrattoPre.provenienza ?? null,
+        destinazione:      contrattoPre.destinazione ?? null,
       } : null,
       dopo: {
         tipo,
@@ -597,6 +600,7 @@ async function saveEditContratto(req, res) {
         valoreGiocatore:   Number.isFinite(valore)  ? valore  : null,
         importoOperazione: Number.isFinite(importo) ? importo : null,
         provenienza:       provenienza || null,
+        destinazione:      destinazione || null,
       },
     },
     adminId: req.user.id });
