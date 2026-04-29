@@ -100,24 +100,20 @@ async function main() {
 
   // Costruisce mappa nome → provenienza (Da, col2) e destinazione (A, col3)
   // col0=nome, col1=operazione, col2=da, col3=a
+  // Scansione in avanti: ogni riga SOVRASCRIVE la precedente → ultima riga vince
   const provenienzaMap = new Map();
   const destinazioneMap = new Map();
   for (let i = 1; i < diarioRows.length; i++) {
     const r = diarioRows[i];
     if (!r || !r[0]) continue;
     const nome = normalizeName(r[0]);
-    if (!provenienzaMap.has(nome) && r[2]) {
+    if (r[2] && r[2].trim()) {
       const da = r[2].trim();
-      // "Libero" = mercato libero → Pubblico, nome presidente → nome del presidente
-      let prov = null;
-      if (/^libero$/i.test(da)) prov = "Pubblico";
-      else if (da) prov = da;
-      provenienzaMap.set(nome, prov);
+      provenienzaMap.set(nome, /^libero$/i.test(da) ? "Pubblico" : da);
     }
-    if (!destinazioneMap.has(nome) && r[3]) {
+    if (r[3] && r[3].trim()) {
       const a = r[3].trim();
-      if (/^libero$/i.test(a)) destinazioneMap.set(nome, "Pubblico");
-      else if (a) destinazioneMap.set(nome, a);
+      destinazioneMap.set(nome, /^libero$/i.test(a) ? "Pubblico" : a);
     }
   }
   console.log(`Provenienza trovata per ${provenienzaMap.size} giocatori nel Diario.\n`);
