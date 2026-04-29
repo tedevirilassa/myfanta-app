@@ -2,6 +2,7 @@
 const jwt = require("jsonwebtoken");
 const authService = require("../services/auth.service");
 const { COOKIE_NAME } = require("../middleware/auth.middleware");
+const { logAction } = require("../services/log.service");
 
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -33,6 +34,8 @@ async function login(req, res) {
     );
 
     res.cookie(COOKIE_NAME, token, COOKIE_OPTS);
+
+    logAction({ azione: "LOGIN", entita: "utente", entitaId: user.id, adminId: user.id });
 
     if (user.mustChangePassword) {
       return res.redirect("/auth/change-password");
@@ -75,6 +78,8 @@ async function changePassword(req, res) {
       { expiresIn: "8h" }
     );
     res.cookie(COOKIE_NAME, token, COOKIE_OPTS);
+
+    logAction({ azione: "UPDATE", entita: "password", entitaId: req.user.id, adminId: req.user.id });
 
     return res.redirect("/");
   } catch (err) {

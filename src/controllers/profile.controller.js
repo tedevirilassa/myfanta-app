@@ -1,5 +1,6 @@
 // src/controllers/profile.controller.js
 const prisma = require("../lib/prisma");
+const { logAction } = require("../services/log.service");
 
 // GET /profilo
 function showProfile(req, res) {
@@ -27,6 +28,14 @@ async function saveProfile(req, res) {
     // aggiorna req.user in-place così le view riflettono subito il cambiamento
     req.user.nickname = updated.nickname;
     req.user.teamName = updated.teamName;
+
+    logAction({
+      azione: "UPDATE",
+      entita: "profilo",
+      entitaId: req.user.id,
+      dettaglio: { nickname: nick || null, teamName: team || null },
+      adminId: req.user.id,
+    });
 
     res.render("profile/index", {
       currentUser: req.user,
