@@ -12,7 +12,7 @@ process.on("unhandledRejection", (reason) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`✅ [pid=${process.pid}] Server avviato: http://${HOST}:${PORT}`, JSON.stringify(server.address()));
+  console.log(`✅ [pid=${process.pid}] Server avviato sulla porta ${PORT}`, JSON.stringify(server.address()));
 });
 
 server.on("close", () => console.log(`⚠️  [pid=${process.pid}] server CLOSED`));
