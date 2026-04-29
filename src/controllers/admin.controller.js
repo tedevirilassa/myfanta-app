@@ -14,7 +14,10 @@ async function listUsers(req, res) {
   res.render("admin/users", {
     users,
     currentUser: req.user,
-    message: reset ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso." : null,
+    message: reset         ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso."
+           : req.query.roleSaved ? "Ruolo aggiornato con successo."
+           : null,
+    roleError: req.query.roleError || null,
     error: null,
   });
 }
