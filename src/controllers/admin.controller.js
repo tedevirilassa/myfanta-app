@@ -2,6 +2,7 @@
 const prisma = require("../lib/prisma");
 const authService = require("../services/auth.service");
 const { logAction } = require("../services/log.service");
+const parametriService = require("../services/parametri.service");
 const { spawn } = require("child_process");
 const path = require("path");
 
@@ -247,7 +248,7 @@ async function assignFantaTeam(req, res) {
   res.redirect("/admin/users?teamAssigned=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, saveUserFields };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, saveUserFields, listParametri, saveParametro };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -565,6 +566,7 @@ async function showNuovoContratto(req, res) {
     presidenti,
     currentUser: req.user,
     error: null,
+    parametri: await parametriService.getAll(),
   });
 }
 
@@ -585,7 +587,10 @@ async function saveNuovoContratto(req, res) {
   if (!fantaPresidenteId)  errors.push("Fantapresidente obbligatorio.");
 
   const durata = parseInt(durataContratto, 10);
-  if (![1, 2, 3].includes(durata)) errors.push("Durata deve essere 1, 2 o 3.");
+  const params = await parametriService.getAll();
+  const durataMin = params.contratto_durata_min || 1;
+  const durataMax = params.contratto_durata_max || 3;
+  if (durata < durataMin || durata > durataMax) errors.push(`Durata deve essere tra ${durataMin} e ${durataMax}.`);
 
   if (errors.length > 0) {
     const [giocatori, presidenti] = await Promise.all([
@@ -593,7 +598,7 @@ async function saveNuovoContratto(req, res) {
       prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, teamName: true } }),
     ]);
     return res.render("admin/nuovo-contratto", {
-      giocatori, presidenti, currentUser: req.user, error: errors.join(" "),
+      giocatori, presidenti, currentUser: req.user, error: errors.join(" "), parametri: params,
     });
   }
 
@@ -669,7 +674,10 @@ async function saveEditContratto(req, res) {
   if (!durataContratto) errors.push("Durata obbligatoria.");
 
   const durata = parseInt(durataContratto, 10);
-  if (![1, 2, 3].includes(durata)) errors.push("Durata deve essere 1, 2 o 3.");
+  const params = await parametriService.getAll();
+  const durataMin = params.contratto_durata_min || 1;
+  const durataMax = params.contratto_durata_max || 3;
+  if (durata < durataMin || durata > durataMax) errors.push(`Durata deve essere tra ${durataMin} e ${durataMax}.`);
 
   if (errors.length > 0) {
     return res.redirect(`/admin/contratti/riepilogo?edited=${id}&error=${encodeURIComponent(errors.join(" "))}`);
@@ -809,4 +817,25 @@ async function listLog(req, res) {
     queryString: qp.toString(),
     currentUser: req.user,
   });
+}
+
+// ── GET /admin/parametri ─────────────────────────────────────────────────────
+async function listParametri(req, res) {
+  const parametri = await prisma.parametro.findMany({ orderBy: { chiave: "asc" } });
+  const message = req.query.saved ? "Parametro aggiornato." : null;
+  res.render("admin/parametri", { parametri, currentUser: req.user, message });
+}
+
+// ── POST /admin/parametri/:id ────────────────────────────────────────────────
+async function saveParametro(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const { valore } = req.body;
+  if (valore === undefined || valore === null) {
+    return res.redirect("/admin/parametri");
+  }
+  await prisma.parametro.update({ where: { id }, data: { valore: valore.trim() } });
+  parametriService.invalidateCache();
+  await logAction({ azione: "UPDATE", entita: "parametro", entitaId: id,
+    dettaglio: { valore: valore.trim() }, adminId: req.user.id });
+  res.redirect("/admin/parametri?saved=1");
 }

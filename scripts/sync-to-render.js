@@ -351,6 +351,18 @@ async function main() {
     });
     await resetSequence(remotePool, "situazione_finanziaria");
 
+    // ── parametri ──
+    logSection("Sync tabella: parametri");
+    await syncTable({
+      localPool, remotePool,
+      table: "parametri",
+      columns: [
+        '"id"', '"chiave"', '"valore"', '"descrizione"',
+        '"createdAt"', '"updatedAt"',
+      ],
+    });
+    await resetSequence(remotePool, "parametri");
+
     logSection("Sincronizzazione completata con successo");
   } catch (err) {
     console.error("\nERRORE durante la sincronizzazione:", err.message);

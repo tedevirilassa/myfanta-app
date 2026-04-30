@@ -126,9 +126,11 @@
             <label for="durataContratto">Durata (anni) <span class="required-mark">*</span></label>
             <select id="durataContratto" name="durataContratto" required>
               <option value="">— Scegli —</option>
-              <option value="1">1 anno</option>
-              <option value="2">2 anni</option>
-              <option value="3">3 anni</option>
+              <% const dMin = (parametri && parametri.contratto_durata_min) || 1;
+                 const dMax = (parametri && parametri.contratto_durata_max) || 3;
+                 for (let d = dMin; d <= dMax; d++) { %>
+              <option value="<%= d %>"><%= d %> ann<%= d === 1 ? 'o' : 'i' %></option>
+              <% } %>
             </select>
           </div>
 
