@@ -248,7 +248,52 @@ async function assignFantaTeam(req, res) {
   res.redirect("/admin/users?teamAssigned=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, saveUserFields, listParametri, saveParametro };
+// ── POST /admin/situazione-finanziaria/:id/crediti ────────────────────────────
+async function adjustCrediti(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const importo = parseFloat(req.body.importo);
+  const motivo = (req.body.motivo || "").trim();
+
+  if (isNaN(id)) {
+    return res.redirect("/admin/situazione-finanziaria?error=" + encodeURIComponent("ID non valido."));
+  }
+  if (!importo || isNaN(importo)) {
+    return res.redirect("/admin/situazione-finanziaria?error=" + encodeURIComponent("Importo non valido."));
+  }
+
+  const situazione = await prisma.situazioneFinanziaria.findUnique({ where: { id } });
+  if (!situazione) {
+    return res.redirect("/admin/situazione-finanziaria?error=" + encodeURIComponent("Record non trovato."));
+  }
+
+  const creditiPre = parseFloat(situazione.crediti);
+  const nuoviCrediti = Math.round((creditiPre + importo) * 100) / 100;
+  const patrimonioPre = parseFloat(situazione.patrimonio);
+  const nuovoPatrimonio = Math.round((patrimonioPre + importo) * 100) / 100;
+
+  await prisma.situazioneFinanziaria.update({
+    where: { id },
+    data: { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio },
+  });
+
+  await logAction({
+    azione: "UPDATE",
+    entita: "situazione_finanziaria",
+    entitaId: id,
+    dettaglio: {
+      operazione: "aggiustamento_crediti",
+      importo,
+      motivo: motivo || null,
+      prima: { crediti: creditiPre, patrimonio: patrimonioPre },
+      dopo:  { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio },
+    },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/admin/situazione-finanziaria?saved=1&adj=" + importo);
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -310,22 +355,17 @@ async function saveUserFields(req, res) {
 
 // ── GET /admin/situazione-finanziaria ────────────────────────────────────────
 async function listSituazioneFinanziaria(req, res) {
-  const [situazioni, fantaTeams] = await Promise.all([
-    prisma.situazioneFinanziaria.findMany({
-      orderBy: [{ stagione: "desc" }, { nomePresidente: "asc" }],
-      include: { fantaTeam: true },
-    }),
-    prisma.fantaTeam.findMany({ orderBy: { nome: "asc" } }),
-  ]);
+  const situazioni = await prisma.situazioneFinanziaria.findMany({
+    orderBy: [{ stagione: "desc" }, { nomePresidente: "asc" }],
+  });
 
   const stagioni = [...new Set(situazioni.map((s) => s.stagione))].sort().reverse();
 
   res.render("admin/situazione-finanziaria", {
     situazioni,
-    fantaTeams,
     stagioni,
     currentUser: req.user,
-    message: req.query.saved   === "1" ? "Associazione salvata."       : null,
+    message: req.query.saved   === "1" ? "Crediti aggiornati."          : null,
     error:   req.query.error   ? decodeURIComponent(req.query.error) : null,
   });
 }

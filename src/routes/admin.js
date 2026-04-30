@@ -31,6 +31,7 @@ router.post("/fanta-teams/:id/assign", ctrl.assignFantaTeam);
 router.post("/tools/seed-giocatori", ctrl.runSeedGiocatori);
 router.get("/situazione-finanziaria", ctrl.listSituazioneFinanziaria);
 router.post("/situazione-finanziaria/:id/assign", ctrl.assignFantaTeamToSituazione);
+router.post("/situazione-finanziaria/:id/crediti", ctrl.adjustCrediti);
 router.get("/parametri", ctrl.listParametri);
 router.post("/parametri/:id", ctrl.saveParametro);
 

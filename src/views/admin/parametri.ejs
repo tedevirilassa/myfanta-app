@@ -57,18 +57,53 @@
       <div class="alert alert-success">✔ <%= message %></div>
     <% } %>
 
-    <div class="param-grid">
-      <% parametri.forEach(function(p) { %>
-      <div class="param-card">
-        <div class="param-key"><%= p.chiave %></div>
-        <div class="param-desc"><%= p.descrizione || '—' %></div>
-        <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
-          <input type="text" name="valore" value="<%= p.valore %>" required>
-          <button type="submit">💾</button>
-        </form>
+    <%
+      // Raggruppa parametri per sezione in base al prefisso della chiave
+      const sezioni = {
+        'Rosa':      { icon: '👥', params: [] },
+        'Prestiti':  { icon: '🔄', params: [] },
+        'Contratti': { icon: '📝', params: [] },
+        'Stipendi':  { icon: '💰', params: [] },
+        'Mercato':   { icon: '🏪', params: [] },
+        'Stagione':  { icon: '📅', params: [] },
+        'Budget':    { icon: '💵', params: [] },
+        'Altro':     { icon: '⚙️', params: [] },
+      };
+      parametri.forEach(function(p) {
+        const k = p.chiave;
+        if (k.startsWith('rosa_'))        sezioni['Rosa'].params.push(p);
+        else if (k.startsWith('prestiti_'))  sezioni['Prestiti'].params.push(p);
+        else if (k.startsWith('contratto_')) sezioni['Contratti'].params.push(p);
+        else if (k.startsWith('stipendio_')) sezioni['Stipendi'].params.push(p);
+        else if (k.startsWith('mercato_'))   sezioni['Mercato'].params.push(p);
+        else if (k.startsWith('stagione_'))  sezioni['Stagione'].params.push(p);
+        else if (k.startsWith('budget_'))    sezioni['Budget'].params.push(p);
+        else                                 sezioni['Altro'].params.push(p);
+      });
+    %>
+
+    <% Object.keys(sezioni).forEach(function(nome) {
+         const sez = sezioni[nome];
+         if (sez.params.length === 0) return;
+    %>
+    <div style="margin-bottom: 32px;">
+      <h2 style="font-size: 1rem; font-weight: 800; color: var(--green-dark); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+        <span><%= sez.icon %></span> <%= nome %>
+      </h2>
+      <div class="param-grid">
+        <% sez.params.forEach(function(p) { %>
+        <div class="param-card">
+          <div class="param-key"><%= p.chiave %></div>
+          <div class="param-desc"><%= p.descrizione || '—' %></div>
+          <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
+            <input type="text" name="valore" value="<%= p.valore %>" required>
+            <button type="submit">💾</button>
+          </form>
+        </div>
+        <% }); %>
       </div>
-      <% }); %>
     </div>
+    <% }); %>
 
     <% if (parametri.length === 0) { %>
     <div class="alert alert-info">Nessun parametro configurato. Esegui <code>node prisma/seed-parametri.js</code>.</div>
