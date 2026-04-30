@@ -488,35 +488,29 @@ async function deleteGiocatore(req, res) {
 
 // ── GET /admin/contratti/riepilogo ────────────────────────────────────────────
 async function listContrattiRiepilogo(req, res) {
-  const teams = await prisma.fantaTeam.findMany({
-    orderBy: { nome: "asc" },
-    include: {
-      contratti: {
-        orderBy: [{ giocatore: { ruolo: "asc" } }, { giocatore: { nome: "asc" } }],
-        include: { giocatore: true },
-      },
-    },
+  const contratti = await prisma.contratto.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { giocatore: true, fantaTeam: true },
   });
 
   const annoCorrente = new Date().getFullYear();
-  let totaleContratti = 0;
   let scadenzaVicina = 0;
   let valoreTotal = 0;
 
-  for (const team of teams) {
-    totaleContratti += team.contratti.length;
-    for (const c of team.contratti) {
-      valoreTotal += parseFloat(c.valoreGiocatore || 0);
-      if (c.dataFine) {
-        const anno = parseInt(c.dataFine.split("-")[1]);
-        if (anno <= annoCorrente) scadenzaVicina++;
-      }
+  for (const c of contratti) {
+    valoreTotal += parseFloat(c.valoreGiocatore || 0);
+    if (c.dataFine) {
+      const anno = parseInt(c.dataFine.split("-")[1]);
+      if (anno <= annoCorrente) scadenzaVicina++;
     }
   }
 
+  const teams = await prisma.fantaTeam.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } });
+
   res.render("admin/contratti-riepilogo", {
+    contratti,
     teams,
-    totaleContratti,
+    totaleContratti: contratti.length,
     scadenzaVicina,
     valoreTotal,
     currentUser: req.user,

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Rose' }) %>
+  <style>
+    .rose-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
+
+    .team-card {
+      background: var(--white); border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.07);
+      overflow: hidden;
+    }
+    .team-card-header {
+      padding: 14px 18px; background: var(--green-dark); color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .team-card-header h3 { margin: 0; font-size: .95rem; font-weight: 800; }
+    .team-card-header .team-meta { font-size: .75rem; opacity: .8; }
+
+    .rosa-section { padding: 0 14px; }
+    .rosa-section-title {
+      font-size: .72rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .7px; color: var(--gray-400);
+      padding: 10px 0 4px; border-bottom: 1px solid var(--gray-100);
+      margin-top: 8px;
+    }
+    .rosa-section-title.fuorirosa { color: #854d0e; }
+    .rosa-section-title.u21 { color: #1e40af; }
+
+    .rosa-list { list-style: none; padding: 0; margin: 0; }
+    .rosa-list li {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; font-size: .82rem;
+      border-bottom: 1px solid var(--gray-50);
+    }
+    .rosa-list li:last-child { border-bottom: none; }
+
+    .ruolo-dot {
+      display: inline-block; width: 22px; height: 22px;
+      line-height: 22px; text-align: center;
+      border-radius: 50%; font-weight: 800; font-size: .68rem;
+      color: #fff; flex-shrink: 0;
+    }
+    .ruolo-P { background: #64748b; }
+    .ruolo-D { background: #2563eb; }
+    .ruolo-C { background: #16a34a; }
+    .ruolo-A { background: #dc2626; }
+
+    .g-nome { font-weight: 600; }
+    .g-squadra { color: var(--gray-400); font-size: .75rem; margin-left: auto; }
+
+    .team-card-footer {
+      padding: 10px 18px; font-size: .75rem; color: var(--gray-400);
+      border-top: 1px solid var(--gray-100); text-align: right;
+    }
+
+    .empty-section { padding: 8px 0; font-size: .78rem; color: var(--gray-300); font-style: italic; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>📋 Rose — <%= stagione %></h1>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
+
+    <% if (roseData.length === 0) { %>
+      <p style="color:var(--gray-400); font-style:italic;">Nessun team con giocatori trovato.</p>
+    <% } else { %>
+    <div class="rose-grid">
+      <% roseData.forEach(function(team) { %>
+      <div class="team-card">
+        <div class="team-card-header">
+          <h3>🏟 <%= team.nome %></h3>
+          <span class="team-meta"><%= team.presidente %></span>
+        </div>
+
+        <div class="rosa-section">
+          <div class="rosa-section-title">In Rosa (<%= team.inRosa.length %>)</div>
+          <% if (team.inRosa.length === 0) { %>
+            <div class="empty-section">Nessun giocatore</div>
+          <% } else { %>
+          <ul class="rosa-list">
+            <% team.inRosa.forEach(function(g) { %>
+            <li>
+              <span class="ruolo-dot ruolo-<%= g.ruolo %>"><%= g.ruolo %></span>
+              <span class="g-nome"><%= g.nome %></span>
+              <span class="g-squadra"><%= g.squadra || '' %></span>
+            </li>
+            <% }) %>
+          </ul>
+          <% } %>
+
+          <div class="rosa-section-title fuorirosa">Fuori Rosa (<%= team.fuoriRosa.length %>)</div>
+          <% if (team.fuoriRosa.length === 0) { %>
+            <div class="empty-section">Nessun giocatore</div>
+          <% } else { %>
+          <ul class="rosa-list">
+            <% team.fuoriRosa.forEach(function(g) { %>
+            <li>
+              <span class="ruolo-dot ruolo-<%= g.ruolo %>"><%= g.ruolo %></span>
+              <span class="g-nome"><%= g.nome %></span>
+              <span class="g-squadra"><%= g.squadra || '' %></span>
+            </li>
+            <% }) %>
+          </ul>
+          <% } %>
+
+          <div class="rosa-section-title u21">U21 (<%= team.u21.length %>)</div>
+          <% if (team.u21.length === 0) { %>
+            <div class="empty-section">Nessun giocatore</div>
+          <% } else { %>
+          <ul class="rosa-list">
+            <% team.u21.forEach(function(g) { %>
+            <li>
+              <span class="ruolo-dot ruolo-<%= g.ruolo %>"><%= g.ruolo %></span>
+              <span class="g-nome"><%= g.nome %></span>
+              <span class="g-squadra"><%= g.squadra || '' %></span>
+            </li>
+            <% }) %>
+          </ul>
+          <% } %>
+        </div>
+
+        <div class="team-card-footer">
+          Totale: <%= team.totale %> giocatori
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+</body>
+</html>

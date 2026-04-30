@@ -1,6 +1,7 @@
 // src/controllers/fanta.controller.js
 const sheets = require("../services/sheets.service");
 const prisma  = require("../lib/prisma");
+const parametriService = require("../services/parametri.service");
 
 async function showClassifica(req, res) {
   try {
@@ -175,4 +176,83 @@ async function showListaGiocatori(req, res) {
   }
 }
 
-module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori };
+module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose };
+
+// ── GET /fanta/rose ───────────────────────────────────────────────────────────
+async function showRose(req, res) {
+  try {
+    const params = await parametriService.getAll();
+    const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+    const now = new Date();
+    const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
+    const stagione = `${annoInizio}-${annoInizio + 1}`;
+
+    // Tutti i team con contratti validi e rosa assignments
+    const teams = await prisma.fantaTeam.findMany({
+      orderBy: { nome: "asc" },
+      include: {
+        user: { select: { nickname: true, email: true } },
+        contratti: {
+          where: { valido: true },
+          include: { giocatore: true },
+        },
+        rosaGiocatori: {
+          where: { stagione },
+          select: { giocatoreId: true, categoria: true },
+        },
+      },
+    });
+
+    const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
+
+    const roseData = teams.map((team) => {
+      const rosaMap = {};
+      team.rosaGiocatori.forEach((r) => { rosaMap[r.giocatoreId] = r.categoria; });
+
+      const giocatori = team.contratti.map((c) => ({
+        id: c.giocatore.id,
+        nome: c.giocatore.nome,
+        ruolo: c.giocatore.ruolo,
+        squadra: c.giocatore.squadra,
+        eta: c.giocatore.eta,
+        valore: c.giocatore.valore ? +c.giocatore.valore : null,
+        categoria: rosaMap[c.giocatore.id] || "InRosa",
+      }));
+
+      const inRosa = giocatori
+        .filter((g) => g.categoria === "InRosa")
+        .sort((a, b) => (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) || a.nome.localeCompare(b.nome));
+      const fuoriRosa = giocatori
+        .filter((g) => g.categoria === "FuoriRosa")
+        .sort((a, b) => (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) || a.nome.localeCompare(b.nome));
+      const u21 = giocatori
+        .filter((g) => g.categoria === "U21")
+        .sort((a, b) => (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) || a.nome.localeCompare(b.nome));
+
+      return {
+        id: team.id,
+        nome: team.nome,
+        presidente: team.user?.nickname || team.user?.email || "—",
+        inRosa,
+        fuoriRosa,
+        u21,
+        totale: giocatori.length,
+      };
+    });
+
+    res.render("fanta/rose", {
+      roseData,
+      stagione,
+      currentUser: req.user,
+      error: null,
+    });
+  } catch (err) {
+    console.error("showRose error:", err.message);
+    res.render("fanta/rose", {
+      roseData: [],
+      stagione: "",
+      currentUser: req.user,
+      error: "Errore nel caricamento: " + err.message,
+    });
+  }
+}

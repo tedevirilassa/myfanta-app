@@ -12,31 +12,11 @@
       padding: 7px 12px; border: 1.5px solid var(--gray-200);
       border-radius: 8px; font-size: .85rem;
       background: #fafdfa; outline: none;
-      min-width: 160px;
+      min-width: 140px;
     }
     .filter-bar select:focus, .filter-bar input:focus {
       border-color: var(--green-mid);
       box-shadow: 0 0 0 2px rgba(45,106,79,.12);
-    }
-
-    /* ── team section ─────────────────────────────────── */
-    .team-section { margin-bottom: 36px; }
-    .team-header {
-      display: flex; align-items: center; gap: 12px;
-      margin-bottom: 12px; flex-wrap: wrap;
-    }
-    .team-title {
-      font-size: 1.05rem; font-weight: 800;
-      color: var(--green-dark);
-    }
-    .team-meta {
-      font-size: .78rem; color: var(--gray-400);
-      font-weight: 600;
-    }
-    .badge-count {
-      background: var(--green-mid); color: #fff;
-      border-radius: 20px; padding: 2px 10px;
-      font-size: .75rem; font-weight: 700;
     }
 
     /* ── table ────────────────────────────────────────── */
@@ -170,6 +150,8 @@
       transition: background .15s;
     }
     .btn-delete-contract:hover { background: #fef2f2; }
+
+    .results-count { font-size: .8rem; color: var(--gray-400); margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -206,10 +188,11 @@
 
     <!-- ── Filtri ── -->
     <div class="filter-bar">
+      <input id="filter-nome" type="text" placeholder="🔍 Cerca giocatore…">
       <select id="filter-team">
         <option value="">Tutti i team</option>
         <% teams.forEach(t => { %>
-          <option value="team-<%= t.id %>"><%= t.nome %></option>
+          <option value="<%= t.id %>"><%= t.nome %></option>
         <% }) %>
       </select>
       <select id="filter-ruolo">
@@ -219,122 +202,115 @@
         <option value="C">C – Centrocampista</option>
         <option value="A">A – Attaccante</option>
       </select>
-      <input id="filter-nome" type="text" placeholder="🔍 Cerca giocatore…">
+      <select id="filter-tipo">
+        <option value="">Tutti i tipi</option>
+        <option value="Acquisto">Acquisto</option>
+        <option value="Cessione">Cessione</option>
+        <option value="Prestito">Prestito</option>
+      </select>
+      <select id="filter-stato">
+        <option value="">Tutti gli stati</option>
+        <option value="1">Valido</option>
+        <option value="0">Scaduto</option>
+      </select>
+      <select id="filter-prov">
+        <option value="">Tutte le provenienze</option>
+        <option value="Pubblico">Pubblico</option>
+        <option value="Privato">Privato</option>
+      </select>
     </div>
 
-    <!-- ── Tabelle per team ── -->
-    <% teams.forEach(function(team) { %>
-    <div class="team-section" data-team-id="team-<%= team.id %>">
-      <div class="team-header">
-        <span class="team-title">🏟 <%= team.nome %></span>
-        <span class="badge-count"><%= team.contratti.length %> contratti</span>
-        <span class="team-meta">
-          Valore rosa: M <%= team.contratti.reduce((s, c) => s + parseFloat(c.valoreGiocatore || 0), 0).toFixed(1) %>
-          &nbsp;·&nbsp;
-          Stipendi: M <%= team.contratti.reduce((s, c) => s + parseFloat(c.importoOperazione || 0), 0).toFixed(2) %>
-        </span>
-      </div>
-
-      <div class="contratti-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>R</th>
-              <th>Giocatore</th>
-              <th>Squadra reale</th>
-              <th>Tipo</th>
-              <th>Valore (M)</th>
-              <th>Stipendio (M)</th>
-              <th>Stipula</th>
-              <th>Scadenza</th>
-              <th>Anni di Contratto</th>
-              <th>Età</th>
-              <th>Provenienza</th>
-              <th>Destinazione</th>
-              <th>Stato</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <% if (team.contratti.length === 0) { %>
-            <tr class="empty-row"><td colspan="14">Nessun contratto</td></tr>
-            <% } %>
-            <% team.contratti.forEach(function(c) {
-               const annoCorrente = new Date().getFullYear();
-               // Calcola dataFine effettiva: usa quella salvata oppure la ricava da dataStipula + durataContratto
-               let dataFineEffettiva = c.dataFine || null;
-               if (!dataFineEffettiva && c.dataStipula && c.durataContratto) {
-                 const [mm, yyyy] = c.dataStipula.split('-');
-                 dataFineEffettiva = mm + '-' + (parseInt(yyyy) + parseInt(c.durataContratto));
-               }
-               const scadAnno = dataFineEffettiva ? parseInt(dataFineEffettiva.split('-')[1]) : null;
-               const anniRimanenti = scadAnno !== null ? scadAnno - annoCorrente : null;
-               const scadClass = scadAnno && scadAnno <= annoCorrente ? 'scad-vicina' : 'scad-ok';
-            %>
-            <tr class="contratto-row"
-                data-ruolo="<%= c.giocatore.ruolo %>"
-                data-nome="<%= c.giocatore.nome.toLowerCase() %>"
-                data-id="<%= c.id %>"
-                data-giocatore-nome="<%= c.giocatore.nome %>"
-                data-giocatore-ruolo="<%= c.giocatore.ruolo %>"
-                data-giocatore-squadra="<%= c.giocatore.squadra || '' %>"
-                data-fanta-team-id="<%= c.fantaTeamId %>"
-                data-fanta-team-nome="<%= team.nome %>"
-                data-tipo="<%= c.tipo %>"
-                data-clausola="<%= c.clausola || '' %>"
-                data-data-stipula="<%= c.dataStipula %>"
-                data-durata="<%= c.durataContratto %>"
-                data-data-fine="<%= c.dataFine || '' %>"
-                data-valore="<%= c.valoreGiocatore || '' %>"
-                data-importo="<%= c.importoOperazione || '' %>"
-                data-provenienza="<%= c.provenienza || '' %>"
-                data-destinazione="<%= c.destinazione || '' %>">
-              <td>
-                <span class="ruolo-badge ruolo-<%= c.giocatore.ruolo %>">
-                  <%= c.giocatore.ruolo %>
-                </span>
-              </td>
-              <td style="font-weight:600;"><%= c.giocatore.nome %></td>
-              <td style="color:var(--gray-700);"><%= c.giocatore.squadra || '—' %></td>
-              <td>
-                <span class="badge" style="font-size:.72rem;">
-                  <%= c.tipo %>
-                </span>
-              </td>
-              <td style="text-align:right;">
-                <%= c.valoreGiocatore ? parseFloat(c.valoreGiocatore).toFixed(1) : '—' %>
-              </td>
-              <td style="text-align:right;">
-                <%= c.importoOperazione ? parseFloat(c.importoOperazione).toFixed(2) : '—' %>
-              </td>
-              <td><%= c.dataStipula %></td>
-              <td class="<%= scadClass %>"><%= dataFineEffettiva || '—' %></td>
-              <td style="text-align:center;"><%= c.giocatore.anniContratto !== null && c.giocatore.anniContratto !== undefined ? c.giocatore.anniContratto : '—' %></td>
-              <td style="text-align:center;"><%= c.giocatore.eta !== null && c.giocatore.eta !== undefined ? c.giocatore.eta : '—' %></td>
-              <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
-              <td style="color:var(--gray-700);"><%= c.destinazione || '—' %></td>
-              <td>
-                <span class="badge <%= c.valido ? 'active-yes' : 'active-no' %>">
-                  <%= c.valido ? 'Valido' : 'Scaduto' %>
-                </span>
-              </td>
-              <td>
-                <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
+    <div class="results-count" id="results-count">
+      Mostrati: <strong><%= contratti.length %></strong> contratti
     </div>
-    <% }) %>
 
-    <% if (teams.length === 0) { %>
-    <div style="text-align:center; color:#94a3b8; padding:60px 0;">
-      <div style="font-size:2.5rem; margin-bottom:12px;">📭</div>
-      <p>Nessun contratto presente nel database.</p>
+    <!-- ── Tabella unica ── -->
+    <div class="contratti-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>R</th>
+            <th>Giocatore</th>
+            <th>Squadra</th>
+            <th>FantaTeam</th>
+            <th>Tipo</th>
+            <th>Valore (M)</th>
+            <th>Stipendio (M)</th>
+            <th>Prezzo (M)</th>
+            <th>Stipula</th>
+            <th>Scadenza</th>
+            <th>Durata</th>
+            <th>Età</th>
+            <th>Provenienza</th>
+            <th>Destinazione</th>
+            <th>Stato</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="contratti-body">
+          <% if (contratti.length === 0) { %>
+          <tr class="empty-row"><td colspan="16">Nessun contratto presente.</td></tr>
+          <% } %>
+          <% contratti.forEach(function(c) {
+             const annoCorrente = new Date().getFullYear();
+             let dataFineEffettiva = c.dataFine || null;
+             if (!dataFineEffettiva && c.dataStipula && c.durataContratto) {
+               const [mm, yyyy] = c.dataStipula.split('-');
+               dataFineEffettiva = mm + '-' + (parseInt(yyyy) + parseInt(c.durataContratto));
+             }
+             const scadAnno = dataFineEffettiva ? parseInt(dataFineEffettiva.split('-')[1]) : null;
+             const scadClass = scadAnno && scadAnno <= annoCorrente ? 'scad-vicina' : 'scad-ok';
+          %>
+          <tr class="contratto-row"
+              data-ruolo="<%= c.giocatore.ruolo %>"
+              data-nome="<%= c.giocatore.nome.toLowerCase() %>"
+              data-team-id="<%= c.fantaTeamId %>"
+              data-tipo="<%= c.tipo %>"
+              data-valido="<%= c.valido ? '1' : '0' %>"
+              data-prov="<%= c.provenienza || '' %>"
+              data-id="<%= c.id %>"
+              data-giocatore-nome="<%= c.giocatore.nome %>"
+              data-giocatore-ruolo="<%= c.giocatore.ruolo %>"
+              data-giocatore-squadra="<%= c.giocatore.squadra || '' %>"
+              data-fanta-team-id="<%= c.fantaTeamId %>"
+              data-fanta-team-nome="<%= c.fantaTeam.nome %>"
+              data-clausola="<%= c.clausola || '' %>"
+              data-data-stipula="<%= c.dataStipula %>"
+              data-durata="<%= c.durataContratto %>"
+              data-data-fine="<%= c.dataFine || '' %>"
+              data-valore="<%= c.valoreGiocatore || '' %>"
+              data-importo="<%= c.importoOperazione || '' %>"
+              data-provenienza="<%= c.provenienza || '' %>"
+              data-destinazione="<%= c.destinazione || '' %>">
+            <td>
+              <span class="ruolo-badge ruolo-<%= c.giocatore.ruolo %>"><%= c.giocatore.ruolo %></span>
+            </td>
+            <td style="font-weight:600;"><%= c.giocatore.nome %></td>
+            <td style="color:var(--gray-700);"><%= c.giocatore.squadra || '—' %></td>
+            <td style="font-weight:600; color:var(--green-dark);"><%= c.fantaTeam.nome %></td>
+            <td><span class="badge" style="font-size:.72rem;"><%= c.tipo %></span></td>
+            <td style="text-align:right;"><%= c.valoreGiocatore ? parseFloat(c.valoreGiocatore).toFixed(1) : '—' %></td>
+            <td style="text-align:right;"><%= c.importoOperazione ? parseFloat(c.importoOperazione).toFixed(2) : '—' %></td>
+            <td style="text-align:right;"><%= c.prezzoAcquisto ? parseFloat(c.prezzoAcquisto).toFixed(2) : '—' %></td>
+            <td><%= c.dataStipula %></td>
+            <td class="<%= scadClass %>"><%= dataFineEffettiva || '—' %></td>
+            <td style="text-align:center;"><%= c.durataContratto %></td>
+            <td style="text-align:center;"><%= c.giocatore.eta != null ? c.giocatore.eta : '—' %></td>
+            <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
+            <td style="color:var(--gray-700);"><%= c.destinazione || '—' %></td>
+            <td>
+              <span class="badge <%= c.valido ? 'active-yes' : 'active-no' %>">
+                <%= c.valido ? 'Valido' : 'Scaduto' %>
+              </span>
+            </td>
+            <td>
+              <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
     </div>
-    <% } %>
   </div><!-- /container -->
 
   <!-- ══ DRAWER OVERLAY ══════════════════════════════════════════ -->
@@ -355,23 +331,17 @@
     <% } %>
 
     <div class="drawer-body">
-      <!-- giocatore (readonly) -->
       <div class="d-form-group">
         <label>Giocatore</label>
         <div class="d-readonly" id="d-giocatore">—</div>
       </div>
-
-      <!-- team (readonly) -->
       <div class="d-form-group">
         <label>FantaTeam</label>
         <div class="d-readonly" id="d-team">—</div>
       </div>
 
       <form id="form-edit-contratto" method="POST">
-        <input type="hidden" name="_method" value="PUT">
-
         <div class="d-form-row">
-          <!-- tipo -->
           <div class="d-form-group">
             <label for="d-tipo">Tipo <span class="required-mark">*</span></label>
             <select id="d-tipo" name="tipo" required>
@@ -380,7 +350,6 @@
               <option value="Prestito">Prestito</option>
             </select>
           </div>
-          <!-- clausola -->
           <div class="d-form-group">
             <label for="d-clausola">Clausola</label>
             <select id="d-clausola" name="clausola">
@@ -394,13 +363,11 @@
         </div>
 
         <div class="d-form-row">
-          <!-- data stipula -->
           <div class="d-form-group">
             <label for="d-stipula">Stipula (MM-YYYY) <span class="required-mark">*</span></label>
             <input type="text" id="d-stipula" name="dataStipula"
                    pattern="\d{2}-\d{4}" placeholder="es. 07-2025" required>
           </div>
-          <!-- durata -->
           <div class="d-form-group">
             <label for="d-durata">Durata (anni) <span class="required-mark">*</span></label>
             <select id="d-durata" name="durataContratto" required>
@@ -412,34 +379,32 @@
         </div>
 
         <div class="d-form-row">
-          <!-- data fine -->
           <div class="d-form-group">
             <label for="d-datafine">Scadenza (MM-YYYY)</label>
             <input type="text" id="d-datafine" name="dataFine"
                    pattern="\d{2}-\d{4}" placeholder="es. 07-2026">
           </div>
-          <!-- provenienza -->
           <div class="d-form-group">
-            <label for="d-provenienza">Provenienza (Da)</label>
+            <label for="d-provenienza">Provenienza</label>
             <input type="text" id="d-provenienza" name="provenienza"
                    placeholder="es. Pubblico, Lorenzo, …">
-          </div>
-          <!-- destinazione -->
-          <div class="d-form-group">
-            <label for="d-destinazione">Destinazione (A)</label>
-            <input type="text" id="d-destinazione" name="destinazione"
-                   placeholder="es. Pubblico, Giulio, …">
           </div>
         </div>
 
         <div class="d-form-row">
-          <!-- valore -->
+          <div class="d-form-group">
+            <label for="d-destinazione">Destinazione</label>
+            <input type="text" id="d-destinazione" name="destinazione"
+                   placeholder="es. Pubblico, Giulio, …">
+          </div>
           <div class="d-form-group">
             <label for="d-valore">Valore (M€)</label>
             <input type="number" id="d-valore" name="valoreGiocatore"
                    min="0" step="0.1" placeholder="es. 15">
           </div>
-          <!-- importo -->
+        </div>
+
+        <div class="d-form-row">
           <div class="d-form-group">
             <label for="d-importo">Stipendio/Importo (M€)</label>
             <input type="number" id="d-importo" name="importoOperazione"
@@ -464,41 +429,48 @@
     </div>
   </div>
 
-  <!-- form delete separato (submit via JS) -->
-  <form id="form-delete-contratto" method="POST" style="display:none;">
-    <input type="hidden" name="_method" value="DELETE">
-  </form>
+  <form id="form-delete-contratto" method="POST" style="display:none;"></form>
 
   <script>
     // ── Filtri ────────────────────────────────────────────────────
+    const filterNome  = document.getElementById('filter-nome');
     const filterTeam  = document.getElementById('filter-team');
     const filterRuolo = document.getElementById('filter-ruolo');
-    const filterNome  = document.getElementById('filter-nome');
+    const filterTipo  = document.getElementById('filter-tipo');
+    const filterStato = document.getElementById('filter-stato');
+    const filterProv  = document.getElementById('filter-prov');
+    const resultsCount = document.getElementById('results-count');
 
     function applyFilters() {
+      const nomeVal  = filterNome.value.toLowerCase().trim();
       const teamVal  = filterTeam.value;
       const ruoloVal = filterRuolo.value;
-      const nomeVal  = filterNome.value.toLowerCase().trim();
+      const tipoVal  = filterTipo.value;
+      const statoVal = filterStato.value;
+      const provVal  = filterProv.value;
+      let visible = 0;
 
-      document.querySelectorAll('.team-section').forEach(section => {
-        const teamMatch = !teamVal || section.dataset.teamId === teamVal;
-        let visibleRows = 0;
-
-        section.querySelectorAll('.contratto-row').forEach(row => {
-          const ruoloMatch = !ruoloVal || row.dataset.ruolo === ruoloVal;
-          const nomeMatch  = !nomeVal  || row.dataset.nome.includes(nomeVal);
-          const show = ruoloMatch && nomeMatch;
-          row.style.display = show ? '' : 'none';
-          if (show) visibleRows++;
-        });
-
-        section.style.display = (teamMatch && (visibleRows > 0 || (!ruoloVal && !nomeVal))) ? '' : 'none';
+      document.querySelectorAll('.contratto-row').forEach(row => {
+        const nomeMatch  = !nomeVal  || row.dataset.nome.includes(nomeVal);
+        const teamMatch  = !teamVal  || row.dataset.teamId === teamVal;
+        const ruoloMatch = !ruoloVal || row.dataset.ruolo === ruoloVal;
+        const tipoMatch  = !tipoVal  || row.dataset.tipo === tipoVal;
+        const statoMatch = !statoVal || row.dataset.valido === statoVal;
+        const provMatch  = !provVal  || row.dataset.prov === provVal;
+        const show = nomeMatch && teamMatch && ruoloMatch && tipoMatch && statoMatch && provMatch;
+        row.style.display = show ? '' : 'none';
+        if (show) visible++;
       });
+
+      resultsCount.innerHTML = 'Mostrati: <strong>' + visible + '</strong> contratti';
     }
 
+    filterNome.addEventListener('input', applyFilters);
     filterTeam.addEventListener('change', applyFilters);
     filterRuolo.addEventListener('change', applyFilters);
-    filterNome.addEventListener('input', applyFilters);
+    filterTipo.addEventListener('change', applyFilters);
+    filterStato.addEventListener('change', applyFilters);
+    filterProv.addEventListener('change', applyFilters);
 
     // ── Drawer ────────────────────────────────────────────────────
     let currentContrattoId = null;
@@ -519,7 +491,6 @@
       setSelectVal('d-durata',     d.durata);
       document.getElementById('d-provenienza').value = d.provenienza || '';
       document.getElementById('d-destinazione').value = d.destinazione || '';
-
       document.getElementById('d-stipula').value  = d.dataStipula;
       document.getElementById('d-datafine').value = d.dataFine;
       document.getElementById('d-valore').value   = d.valore;
@@ -555,7 +526,7 @@
       }
     }
 
-    // Apertura drawer automatica dopo salvataggio (se redirect con ?edited=ID)
+    // Apertura drawer automatica dopo salvataggio
     (function () {
       const params = new URLSearchParams(location.search);
       const editedId = params.get('edited');
@@ -565,7 +536,6 @@
       }
     })();
 
-    // ESC chiude il drawer
     document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
   </script>
 </body>
