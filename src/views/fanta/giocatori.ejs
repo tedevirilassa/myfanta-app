@@ -10,6 +10,8 @@
     .op-Acquisto  { background: #dcfce7; color: #166534; }
     .op-Riscatto  { background: #e0e7ff; color: #3730a3; }
     .op-default   { background: #f3f4f6; color: #6b7280; }
+    .avail-yes    { background: #dcfce7; color: #166534; }
+    .avail-no     { background: #fef3c7; color: #92400e; }
     .pres-card {
       background: var(--white);
       border-radius: 10px;
@@ -136,6 +138,7 @@
           <thead>
             <tr>
               <th>Giocatore</th>
+              <th>Status</th>
               <th>Operazione</th>
               <th>Importo</th>
               <th>Stipendio</th>
@@ -149,6 +152,7 @@
             %>
             <tr data-g-nome="<%= g.nome.toLowerCase() %>">
               <td><strong><%= g.nome %></strong></td>
+              <td><span class="op-badge <%= g.presidente ? 'avail-no' : 'avail-yes' %>"><%= g.presidente ? 'Not Available' : 'Available' %></span></td>
               <td><span class="op-badge <%= opClass %>"><%= g.operazione || '—' %></span></td>
               <td>
                 <% if (g.importoAcquisto > 0) { %>

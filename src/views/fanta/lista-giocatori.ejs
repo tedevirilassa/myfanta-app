@@ -188,6 +188,16 @@
           <input type="text" id="f-nome" placeholder="es. Barella…">
         </div>
 
+        <!-- Disponibilità -->
+        <div class="form-group">
+          <label for="f-avail">Disponibilità</label>
+          <select id="f-avail">
+            <option value="">Tutti</option>
+            <option value="1">Available</option>
+            <option value="0">Not Available</option>
+          </select>
+        </div>
+
       </div>
 
       <div class="filters-footer">
@@ -210,6 +220,7 @@
             <th>Squadra</th>
             <th>Età</th>
             <th>Valore €</th>
+            <th>Disponibilità</th>
             <th>Stato</th>
             <% if (currentUser.role === 'ADMIN') { %><th>Azioni</th><% } %>
           </tr>
@@ -233,6 +244,7 @@
                 data-eta="<%= g.eta !== null ? g.eta : '' %>"
                 data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
                 data-nome="<%= g.nome.toLowerCase() %>"
+                data-avail="<%= g.contratti && g.contratti.length > 0 ? '0' : '1' %>"
               >
                 <td class="num-col" style="color:var(--gray-400);font-size:.78rem;"><%= g.id %></td>
                 <td class="nome-col"><%= g.nome %></td>
@@ -246,6 +258,11 @@
                   <% if (g.valore !== null) { %>
                     <%= Number(g.valore).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>
                   <% } else { %>—<% } %>
+                </td>
+                <td>
+                  <span class="badge <%= g.contratti && g.contratti.length > 0 ? 'active-no' : 'active-yes' %>">
+                    <%= g.contratti && g.contratti.length > 0 ? 'Not Available' : 'Available' %>
+                  </span>
                 </td>
                 <td>
                   <span class="badge <%= g.active ? 'active-yes' : 'active-no' %>">
@@ -353,6 +370,7 @@
         const valMin      = numVal("f-val-min");
         const valMax      = numVal("f-val-max");
         const nome        = val("f-nome").toLowerCase();
+        const avail       = val("f-avail");
 
         let visible = 0;
         rows.forEach(function (row) {
@@ -362,12 +380,14 @@
           const rEta    = row.dataset.eta !== "" ? parseInt(row.dataset.eta, 10) : null;
           const rVal    = row.dataset.valore !== "" ? parseFloat(row.dataset.valore) : null;
           const rNome   = row.dataset.nome;
+          const rAvail  = row.dataset.avail;
 
           let show = true;
           if (ruolo       && rRuolo  !== ruolo)                    show = false;
           if (ruoloEsteso && rRe     !== ruoloEsteso)              show = false;
           if (squadra     && rSq     !== squadra)                  show = false;
           if (nome        && rNome.indexOf(nome) === -1)           show = false;
+          if (avail       && rAvail  !== avail)                    show = false;
           if (etaMin !== null && (rEta === null || rEta < etaMin)) show = false;
           if (etaMax !== null && (rEta === null || rEta > etaMax)) show = false;
           if (valMin !== null && (rVal === null || rVal < valMin)) show = false;
@@ -384,7 +404,7 @@
         countEl2.textContent = label;
       }
 
-      ["f-ruolo","f-ruolo-esteso","f-squadra"].forEach(function(id) {
+      ["f-ruolo","f-ruolo-esteso","f-squadra","f-avail"].forEach(function(id) {
         document.getElementById(id).addEventListener("change", applyFilters);
       });
       ["f-eta-min","f-eta-max","f-val-min","f-val-max","f-nome"].forEach(function(id) {
@@ -392,7 +412,7 @@
       });
 
       document.getElementById("btn-reset").addEventListener("click", function () {
-        ["f-ruolo","f-ruolo-esteso","f-squadra"].forEach(function(id) {
+        ["f-ruolo","f-ruolo-esteso","f-squadra","f-avail"].forEach(function(id) {
           document.getElementById(id).value = "";
         });
         ["f-eta-min","f-eta-max","f-val-min","f-val-max","f-nome"].forEach(function(id) {

@@ -150,6 +150,7 @@ async function showListaGiocatori(req, res) {
   try {
     const giocatori = await prisma.giocatore.findMany({
       orderBy: [{ ruolo: "asc" }, { nome: "asc" }],
+      include: { contratti: { select: { id: true } } },
     });
 
     const ruoliEstesi = [...new Set(giocatori.map(g => g.ruoloEsteso).filter(Boolean))].sort();
