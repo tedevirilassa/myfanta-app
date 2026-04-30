@@ -9,21 +9,26 @@ const DEFAULT_PASSWORD = "primalogin2026";
 
 // GET /admin/users
 async function listUsers(req, res) {
-  const [users, teamLiberi] = await Promise.all([
+  const [users, tuttiTeam] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { fantaTeam: true } }),
-    prisma.fantaTeam.findMany({ where: { userId: null }, orderBy: { nome: "asc" } }),
+    prisma.fantaTeam.findMany({ orderBy: { nome: "asc" } }),
   ]);
+  const teamLiberi = tuttiTeam.filter((t) => t.userId === null);
   const reset = req.query.reset === "1";
   res.render("admin/users", {
     users,
     teamLiberi,
+    tuttiTeam,
     currentUser: req.user,
-    message: reset              ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso."
+    message: reset                  ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso."
            : req.query.roleSaved    ? "Ruolo aggiornato con successo."
            : req.query.teamAssigned ? "FantaTeam assegnato con successo."
+           : req.query.fieldSaved   ? "Dati utente aggiornati con successo."
            : null,
     roleError: req.query.roleError || null,
-    error: req.query.teamError ? decodeURIComponent(req.query.teamError) : null,
+    error: req.query.teamError  ? decodeURIComponent(req.query.teamError)
+         : req.query.fieldError ? decodeURIComponent(req.query.fieldError)
+         : null,
   });
 }
 
@@ -242,7 +247,65 @@ async function assignFantaTeam(req, res) {
   res.redirect("/admin/users?teamAssigned=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, saveUserFields };
+
+// ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
+async function saveUserFields(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const email    = (req.body.email    || "").trim().toLowerCase();
+  const nickname = (req.body.nickname || "").trim().slice(0, 40);
+  const fantaTeamId = req.body.fantaTeamId ? parseInt(req.body.fantaTeamId, 10) : null;
+
+  if (!email) {
+    return res.redirect("/admin/users?fieldError=" + encodeURIComponent("L'email è obbligatoria."));
+  }
+
+  // Verifica unicità email (escluso se stesso)
+  const emailConflict = await prisma.user.findFirst({ where: { email, NOT: { id } } });
+  if (emailConflict) {
+    return res.redirect("/admin/users?fieldError=" + encodeURIComponent("Email già in uso da un altro utente."));
+  }
+
+  const user = await prisma.user.findUnique({ where: { id }, include: { fantaTeam: true } });
+  if (!user) return res.redirect("/admin/users");
+
+  const vecchioTeamId = user.fantaTeam?.id ?? null;
+
+  // Gestione riassegnazione FantaTeam in transazione
+  await prisma.$transaction(async (tx) => {
+    if (fantaTeamId !== vecchioTeamId) {
+      if (vecchioTeamId) {
+        await tx.fantaTeam.update({ where: { id: vecchioTeamId }, data: { userId: null } });
+      }
+      if (fantaTeamId) {
+        const targetTeam = await tx.fantaTeam.findUnique({ where: { id: fantaTeamId } });
+        if (targetTeam && targetTeam.userId !== null && targetTeam.userId !== id) {
+          throw new Error("FantaTeam gi\u00e0 assegnato a un altro utente.");
+        }
+        await tx.fantaTeam.update({ where: { id: fantaTeamId }, data: { userId: id } });
+      }
+    }
+    await tx.user.update({
+      where: { id },
+      data: { email, nickname: nickname || null },
+    });
+  }).catch((err) => {
+    return res.redirect("/admin/users?fieldError=" + encodeURIComponent(err.message));
+  });
+
+  await logAction({
+    azione: "UPDATE",
+    entita: "utente",
+    entitaId: id,
+    dettaglio: {
+      prima: { email: user.email, nickname: user.nickname, fantaTeamId: vecchioTeamId },
+      dopo:  { email, nickname: nickname || null, fantaTeamId },
+    },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/admin/users?fieldSaved=1");
+}
 
 // ── GET /admin/situazione-finanziaria ────────────────────────────────────────
 async function listSituazioneFinanziaria(req, res) {

@@ -55,6 +55,7 @@ model SituazioneFinanziaria {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @default(now()) @updatedAt
 
+  @@unique([nomePresidente, stagione])
   @@map("situazione_finanziaria")
 }
 

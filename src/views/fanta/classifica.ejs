@@ -29,7 +29,7 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
-    <% if (stagioni.length > 1) { %>
+    <% if (stagioni.length > 0) { %>
     <div style="margin-bottom:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
       <label style="font-weight:700; font-size:.85rem;">Stagione:</label>
       <% stagioni.forEach(function(s) { %>
@@ -43,7 +43,7 @@
     <% } %>
 
     <% if (classifica.length > 0) {
-      const maxPat = parseFloat(classifica[0].patrimonio);
+      const maxPat = classifica[0].patrimonio;
     %>
     <div class="card" style="padding:0; overflow:hidden;">
       <table>
@@ -65,32 +65,32 @@
           <% classifica.forEach(function(p, idx) {
             const pos = idx + 1;
             const rowClass = pos === 1 ? 'rank-1' : pos === 2 ? 'rank-2' : pos === 3 ? 'rank-3' : '';
-            const pat = parseFloat(p.patrimonio);
-            const barWidth = Math.round((pat / maxPat) * 100);
-            const pm = parseFloat(p.ultimoPlusMinus);
-            const pmClass = pm > 0 ? 'pm-pos' : pm < 0 ? 'pm-neg' : 'pm-zero';
+            const barWidth = Math.round((p.patrimonio / maxPat) * 100);
+            const pmClass = p.ultimoPlusMinus > 0 ? 'pm-pos' : p.ultimoPlusMinus < 0 ? 'pm-neg' : 'pm-zero';
           %>
           <tr class="<%= rowClass %>">
             <td style="text-align:center; font-weight:700;"><%= pos %></td>
             <td>
-              <% if (p.fantaTeam) { %>
-                <span style="font-size:.72rem; color:var(--gray-400); display:block;"><%= p.fantaTeam.nome %></span>
-              <% } %>
               <strong><%= p.nomePresidente %></strong>
+              <% if (p.fantaTeam) { %>
+                <span style="font-size:.8rem; color:var(--gray-500); display:block;">(<%= p.fantaTeam.nome %>)</span>
+              <% } else { %>
+                <span style="font-size:.78rem; color:var(--gray-300); display:block; font-style:italic;">NULL</span>
+              <% } %>
             </td>
             <td>
-              <strong><%= pat.toFixed(2) %></strong>
-              <span class="val-rose">Rosa: <%= parseFloat(p.valoreRose).toFixed(2) %></span>
+              <strong><%= p.patrimonio.toFixed(2) %></strong>
+              <span class="val-rose">Rosa: <%= p.valoreRose.toFixed(2) %></span>
               <span class="patrimonio-bar" style="width:<%= barWidth %>%"></span>
             </td>
-            <td><%= parseFloat(p.valoreRose).toFixed(2) %></td>
-            <td><%= parseFloat(p.crediti).toFixed(2) %></td>
+            <td><%= p.valoreRose.toFixed(2) %></td>
+            <td><%= p.crediti.toFixed(2) %></td>
             <td style="text-align:center;"><%= p.giocatoriTesserati %></td>
-            <td style="text-align:center;"><%= parseFloat(p.etaMedia).toFixed(2) %></td>
-            <td><%= parseFloat(p.stipendi).toFixed(2) %></td>
-            <td><%= parseFloat(p.montePrestiti).toFixed(2) %></td>
+            <td style="text-align:center;"><%= p.etaMedia.toFixed(2) %></td>
+            <td><%= p.stipendi.toFixed(2) %></td>
+            <td><%= p.montePrestiti.toFixed(2) %></td>
             <td class="<%= pmClass %>">
-              <%= pm > 0 ? '+' : '' %><%= pm.toFixed(2) %>
+              <%= p.ultimoPlusMinus > 0 ? '+' : '' %><%= p.ultimoPlusMinus.toFixed(2) %>
             </td>
           </tr>
           <% }); %>
@@ -101,9 +101,9 @@
     <!-- stat cards -->
     <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-top:24px;">
       <% 
-        const totPatrimonio = classifica.reduce((s,p)=>s+parseFloat(p.patrimonio),0);
+        const totPatrimonio = classifica.reduce((s,p)=>s+p.patrimonio,0);
         const leader = classifica[0];
-        const bestPM = [...classifica].sort((a,b)=>parseFloat(b.ultimoPlusMinus)-parseFloat(a.ultimoPlusMinus))[0];
+        const bestPM = [...classifica].sort((a,b)=>b.ultimoPlusMinus-a.ultimoPlusMinus)[0];
         const mostPlayers = [...classifica].sort((a,b)=>b.giocatoriTesserati-a.giocatoriTesserati)[0];
       %>
       <div class="card" style="padding:20px;">
@@ -113,12 +113,12 @@
       <div class="card" style="padding:20px;">
         <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Leader</div>
         <div style="font-size:1.3rem; font-weight:800; color:var(--green-dark);">🥇 <%= leader.nomePresidente %></div>
-        <div style="font-size:.85rem; color:var(--gray-400);"><%= parseFloat(leader.patrimonio).toFixed(2) %></div>
+        <div style="font-size:.85rem; color:var(--gray-400);"><%= leader.patrimonio.toFixed(2) %></div>
       </div>
       <div class="card" style="padding:20px;">
         <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Miglior ± recente</div>
         <div style="font-size:1.3rem; font-weight:800; color:var(--green-dark);">⚡ <%= bestPM.nomePresidente %></div>
-        <div style="font-size:.85rem; color:#15803d; font-weight:700;">+<%= parseFloat(bestPM.ultimoPlusMinus).toFixed(2) %></div>
+        <div style="font-size:.85rem; color:#15803d; font-weight:700;">+<%= bestPM.ultimoPlusMinus.toFixed(2) %></div>
       </div>
       <div class="card" style="padding:20px;">
         <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Più giocatori</div>

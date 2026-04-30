@@ -8,6 +8,7 @@ const ctrl = require("../controllers/admin.controller");
 router.use(requireAuth, requireAdmin);
 
 router.get("/users", ctrl.listUsers);
+router.post("/users/:id/save-fields", ctrl.saveUserFields);
 router.get("/pannello", ctrl.showPannello);
 router.get("/contratti/riepilogo", ctrl.listContrattiRiepilogo);
 router.get("/contratti/nuovo", ctrl.showNuovoContratto);

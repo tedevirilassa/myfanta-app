@@ -3,36 +3,52 @@ const sheets = require("../services/sheets.service");
 const prisma  = require("../lib/prisma");
 
 async function showClassifica(req, res) {
-  // Legge la stagione più recente dalla tabella situazione_finanziaria
-  const ultimaStagione = await prisma.situazioneFinanziaria.findFirst({
-    orderBy: { stagione: "desc" },
-    select: { stagione: true },
-  });
+  try {
+    const stagioni = await prisma.situazioneFinanziaria.findMany({
+      distinct: ["stagione"],
+      orderBy: { stagione: "desc" },
+      select: { stagione: true },
+    });
 
-  const stagioneFiltro = req.query.stagione || ultimaStagione?.stagione || null;
+    const stagioneFiltro = req.query.stagione || stagioni[0]?.stagione || null;
 
-  const [tuttiRecord, stagioni] = await Promise.all([
-    stagioneFiltro
-      ? prisma.situazioneFinanziaria.findMany({
+    const rawRecords = stagioneFiltro
+      ? await prisma.situazioneFinanziaria.findMany({
           where: { stagione: stagioneFiltro },
           orderBy: { patrimonio: "desc" },
           include: { fantaTeam: true },
         })
-      : Promise.resolve([]),
-    prisma.situazioneFinanziaria.findMany({
-      distinct: ["stagione"],
-      orderBy: { stagione: "desc" },
-      select: { stagione: true },
-    }),
-  ]);
+      : [];
 
-  res.render("fanta/classifica", {
-    classifica: tuttiRecord,
-    stagioneFiltro,
-    stagioni: stagioni.map((s) => s.stagione),
-    currentUser: req.user,
-    error: null,
-  });
+    // Converte Decimal → Number una sola volta
+    const classifica = rawRecords.map((p) => ({
+      ...p,
+      valoreRose:      +p.valoreRose,
+      crediti:         +p.crediti,
+      patrimonio:      +p.patrimonio,
+      etaMedia:        +p.etaMedia,
+      stipendi:        +p.stipendi,
+      montePrestiti:   +p.montePrestiti,
+      ultimoPlusMinus: +p.ultimoPlusMinus,
+    }));
+
+    res.render("fanta/classifica", {
+      classifica,
+      stagioneFiltro,
+      stagioni: stagioni.map((s) => s.stagione),
+      currentUser: req.user,
+      error: null,
+    });
+  } catch (err) {
+    console.error("showClassifica error:", err.message);
+    res.render("fanta/classifica", {
+      classifica: [],
+      stagioneFiltro: null,
+      stagioni: [],
+      currentUser: req.user,
+      error: "Errore nel caricamento dei dati: " + err.message,
+    });
+  }
 }
 
 async function showRiepilogo(req, res) {

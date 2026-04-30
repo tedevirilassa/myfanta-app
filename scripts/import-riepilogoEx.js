@@ -146,28 +146,51 @@ function createPrisma() {
 
   const prisma = createPrisma();
 
-  let creati = 0;
-  let aggiornati = 0;
-
-  for (const rec of records) {
-    const existing = await prisma.situazioneFinanziaria.findFirst({
-      where: { nomePresidente: rec.nomePresidente, stagione: rec.stagione },
-    });
-
-    if (existing) {
-      await prisma.situazioneFinanziaria.update({
-        where: { id: existing.id },
-        data: rec,
-      });
-      aggiornati++;
-      console.log(`↻  Aggiornato: ${rec.nomePresidente} (${rec.stagione})`);
-    } else {
-      await prisma.situazioneFinanziaria.create({ data: rec });
-      creati++;
-      console.log(`✔  Creato: ${rec.nomePresidente} (${rec.stagione})`);
+  // Auto-associazione: match nomePresidente → User.nickname → FantaTeam
+  const users = await prisma.user.findMany({
+    where: { nickname: { not: null } },
+    include: { fantaTeam: true },
+    select: undefined,
+  });
+  const nicknameToTeam = {};
+  for (const u of users) {
+    if (u.nickname && u.fantaTeam) {
+      nicknameToTeam[u.nickname.toLowerCase()] = u.fantaTeam.id;
     }
   }
 
+  let creati = 0;
+  let aggiornati = 0;
+  let autoAssociati = 0;
+
+  for (const rec of records) {
+    // Tenta auto-associazione se fantaTeamId è null
+    const autoTeamId = nicknameToTeam[rec.nomePresidente.toLowerCase()] || null;
+    if (autoTeamId) rec.fantaTeamId = autoTeamId;
+
+    const result = await prisma.situazioneFinanziaria.upsert({
+      where: {
+        nomePresidente_stagione: {
+          nomePresidente: rec.nomePresidente,
+          stagione: rec.stagione,
+        },
+      },
+      create: rec,
+      update: rec,
+    });
+
+    // Controlla se era insert o update
+    const isNew = result.createdAt.getTime() === result.updatedAt.getTime();
+    if (isNew) {
+      creati++;
+      console.log(`✔  Creato: ${rec.nomePresidente} (${rec.stagione})${autoTeamId ? ' → team auto-assegnato' : ''}`);
+    } else {
+      aggiornati++;
+      console.log(`↻  Aggiornato: ${rec.nomePresidente} (${rec.stagione})${autoTeamId ? ' → team auto-assegnato' : ''}`);
+    }
+    if (autoTeamId) autoAssociati++;
+  }
+
   await prisma.$disconnect();
-  console.log(`\n✅  Import completato — creati: ${creati}, aggiornati: ${aggiornati}`);
+  console.log(`\n✅  Import completato — creati: ${creati}, aggiornati: ${aggiornati}, auto-associati: ${autoAssociati}`);
 })();

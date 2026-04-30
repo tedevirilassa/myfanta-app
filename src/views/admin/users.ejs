@@ -2,6 +2,32 @@
 <html lang="it">
 <head>
   <%- include('../partials/head', { title: 'Gestione utenti' }) %>
+  <style>
+    details.edit-user summary {
+      cursor: pointer; font-size: .78rem; font-weight: 700;
+      color: var(--green-dark); list-style: none; padding: 3px 8px;
+      border: 1.5px solid var(--green-light); border-radius: 6px;
+      display: inline-block;
+    }
+    details.edit-user summary::-webkit-details-marker { display: none; }
+    details.edit-user[open] summary { background: var(--green-light); }
+    .edit-user-form {
+      margin-top: 10px; padding: 12px 14px; background: #f0fdf4;
+      border: 1px solid var(--green-light); border-radius: 8px;
+      display: flex; flex-direction: column; gap: 8px; min-width: 220px;
+    }
+    .edit-user-form label { font-size: .75rem; font-weight: 700; color: var(--gray-500); }
+    .edit-user-form input, .edit-user-form select {
+      width: 100%; padding: 5px 8px; border: 1.5px solid var(--gray-200);
+      border-radius: 6px; font-size: .82rem; background: #fff;
+    }
+    .edit-user-form .btn-save {
+      padding: 5px 14px; font-size: .8rem; font-weight: 700;
+      background: var(--green-mid); color: #fff;
+      border: none; border-radius: 6px; cursor: pointer; align-self: flex-start;
+    }
+    .edit-user-form .btn-save:hover { background: var(--green-dark); }
+  </style>
 </head>
 <body>
   <%- include('../partials/nav') %>
@@ -32,7 +58,7 @@
           <tr>
             <th>Email</th>
             <th>Nickname</th>
-            <th>Squadra</th>
+            <th>FantaTeam</th>
             <th>Ruolo</th>
             <th>Stato</th>
             <th>Cambio pwd</th>
@@ -43,12 +69,44 @@
         <tbody>
           <% users.forEach(function(u) { %>
           <tr>
-            <td><%= u.email %></td>
-            <td style="font-size:.85rem;">
-              <%= u.nickname || 'NONE' %>
+            <td>
+              <details class="edit-user">
+                <summary>✏️ <%= u.email %></summary>
+                <form action="/admin/users/<%= u.id %>/save-fields" method="POST" class="edit-user-form">
+                  <div>
+                    <label>Email</label>
+                    <input type="email" name="email" value="<%= u.email %>" required>
+                  </div>
+                  <div>
+                    <label>Nickname</label>
+                    <input type="text" name="nickname" value="<%= u.nickname || '' %>" maxlength="40" placeholder="—">
+                  </div>
+                  <div>
+                    <label>FantaTeam</label>
+                    <select name="fantaTeamId">
+                      <option value="">— nessuno —</option>
+                      <% tuttiTeam.forEach(function(ft) { %>
+                        <option value="<%= ft.id %>"
+                          <%= u.fantaTeam && u.fantaTeam.id === ft.id ? 'selected' : '' %>
+                          <%= !ft.userId || ft.userId === u.id ? '' : 'style="color:#b91c1c;"' %>>
+                          <%= ft.nome %><%= ft.userId && ft.userId !== u.id ? ' (occupato)' : '' %>
+                        </option>
+                      <% }) %>
+                    </select>
+                  </div>
+                  <button type="submit" class="btn-save">💾 Salva</button>
+                </form>
+              </details>
             </td>
             <td style="font-size:.85rem;">
-              <%= u.teamName || 'NONE' %>
+              <%= u.nickname || '<span style="color:#cbd5e1;font-style:italic;">—</span>' %>
+            </td>
+            <td style="font-size:.85rem;">
+              <% if (u.fantaTeam) { %>
+                <span style="font-weight:700; color:var(--green-dark);"><%= u.fantaTeam.nome %></span>
+              <% } else { %>
+                <span style="color:#cbd5e1; font-style:italic;">—</span>
+              <% } %>
             </td>
             <td>
               <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : u.role === 'POWER_USER' ? 'badge-poweruser' : 'badge-user' %>">
@@ -68,10 +126,6 @@
             </td>
             <td>
               <div class="actions">
-                <!-- Modifica profilo (nickname + squadra) -->
-                <a href="/admin/users/<%= u.id %>/edit-profile" class="btn btn-primary btn-sm">
-                  ✏️ Profilo
-                </a>
                 <% if (u.id !== currentUser.id) { %>
                 <!-- Reimposta password -->
                 <form action="/admin/users/<%= u.id %>/reset-password" method="POST"
