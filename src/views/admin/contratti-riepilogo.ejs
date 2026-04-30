@@ -251,12 +251,13 @@
               <th>Età</th>
               <th>Provenienza</th>
               <th>Destinazione</th>
+              <th>Stato</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             <% if (team.contratti.length === 0) { %>
-            <tr class="empty-row"><td colspan="13">Nessun contratto</td></tr>
+            <tr class="empty-row"><td colspan="14">Nessun contratto</td></tr>
             <% } %>
             <% team.contratti.forEach(function(c) {
                const annoCorrente = new Date().getFullYear();
@@ -312,6 +313,11 @@
               <td style="text-align:center;"><%= c.giocatore.eta !== null && c.giocatore.eta !== undefined ? c.giocatore.eta : '—' %></td>
               <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
               <td style="color:var(--gray-700);"><%= c.destinazione || '—' %></td>
+              <td>
+                <span class="badge <%= c.valido ? 'active-yes' : 'active-no' %>">
+                  <%= c.valido ? 'Valido' : 'Scaduto' %>
+                </span>
+              </td>
               <td>
                 <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
               </td>

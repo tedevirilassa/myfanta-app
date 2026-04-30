@@ -331,7 +331,7 @@ async function main() {
         "id", "tipo", "clausola", '"dataStipula"', '"durataContratto"',
         '"dataFine"', '"giocatoreId"', '"fantaTeamId"',
         '"valoreGiocatore"', '"importoOperazione"', "provenienza", "destinazione",
-        '"createdAt"', '"updatedAt"',
+        "valido", '"createdAt"', '"updatedAt"',
       ],
     });
     await resetSequence(remotePool, "contratti");

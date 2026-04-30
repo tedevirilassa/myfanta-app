@@ -623,6 +623,36 @@ async function saveNuovoContratto(req, res) {
   }
   const dataFineCalcolata = calcDataFineServer(dataStipula.trim(), durata, provenienza || null);
 
+  // Marca come scaduti i contratti precedenti dello stesso giocatore
+  // - Acquisto/Cessione nuovo → invalida tutti i precedenti (Acquisto + Prestito)
+  // - Prestito nuovo → invalida solo i Prestiti precedenti (l'Acquisto resta valido)
+  if (tipo === "Prestito") {
+    await prisma.contratto.updateMany({
+      where: { giocatoreId: parseInt(giocatoreId, 10), valido: true, tipo: "Prestito" },
+      data: { valido: false },
+    });
+  } else {
+    await prisma.contratto.updateMany({
+      where: { giocatoreId: parseInt(giocatoreId, 10), valido: true },
+      data: { valido: false },
+    });
+  }
+
+  // Trova il fantaTeam associato al presidente selezionato
+  const fantaTeam = await prisma.fantaTeam.findFirst({
+    where: { userId: parseInt(fantaPresidenteId, 10) },
+  });
+  if (!fantaTeam) {
+    const [giocatoriList, presidentiList] = await Promise.all([
+      prisma.giocatore.findMany({ where: { active: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true, ruolo: true, squadra: true, valore: true } }),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, teamName: true } }),
+    ]);
+    return res.render("admin/nuovo-contratto", {
+      giocatori: giocatoriList, presidenti: presidentiList, currentUser: req.user,
+      error: "Il presidente selezionato non ha un FantaTeam associato.", parametri: params,
+    });
+  }
+
   const nuovoContratto = await prisma.contratto.create({
     data: {
       tipo,
@@ -631,7 +661,7 @@ async function saveNuovoContratto(req, res) {
       durataContratto:    durata,
       dataFine:           dataFineCalcolata,
       giocatoreId:        parseInt(giocatoreId, 10),
-      fantaPresidenteId:  parseInt(fantaPresidenteId, 10),
+      fantaTeamId:        fantaTeam.id,
       valoreGiocatore:    giocatore?.valore ?? null,
       importoOperazione:  Number.isFinite(importo) ? importo : null,
       provenienza:        provenienza || null,
@@ -644,7 +674,7 @@ async function saveNuovoContratto(req, res) {
       dopo: {
         tipo,
         giocatoreId:       parseInt(giocatoreId, 10),
-        fantaPresidenteId: parseInt(fantaPresidenteId, 10),
+        fantaTeamId:       fantaTeam.id,
         dataStipula:       dataStipula.trim(),
         durataContratto:   durata,
         dataFine:          nuovoContratto.dataFine,
