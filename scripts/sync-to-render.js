@@ -236,6 +236,15 @@ async function main() {
     const remoteClient = await remotePool.connect();
     try {
       await remoteClient.query("BEGIN");
+
+      // Salva i log remoti prima del TRUNCATE CASCADE
+      const { rows: savedLogs } = await remoteClient.query(
+        `SELECT * FROM log_azioni ORDER BY id`
+      );
+      if (savedLogs.length > 0) {
+        log(`  💾 Salvati ${savedLogs.length} record di log_azioni (verranno ripristinati)`);
+      }
+
       await remoteClient.query(`TRUNCATE TABLE fantapresidenti RESTART IDENTITY CASCADE`);
 
       // Prima passata: inserisci senza invitedById
@@ -263,6 +272,18 @@ async function main() {
         }
       }
 
+      // Ripristina i log remoti salvati
+      if (savedLogs.length > 0) {
+        for (const l of savedLogs) {
+          await remoteClient.query(
+            `INSERT INTO log_azioni (id, azione, entita, "entitaId", dettaglio, "adminId", "createdAt")
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [l.id, l.azione, l.entita, l.entitaId, l.dettaglio, l.adminId, l.createdAt]
+          );
+        }
+        log(`  ✅ Ripristinati ${savedLogs.length} record di log_azioni`);
+      }
+
       await remoteClient.query("COMMIT");
       log(`  OK – ${users.length} righe sincronizzate`);
     } catch (err) {
@@ -273,6 +294,7 @@ async function main() {
     }
 
     await resetSequence(remotePool, "fantapresidenti");
+    await resetSequence(remotePool, "log_azioni");
 
     // ── fanta_teams ──
     logSection("Sync tabella: fanta_teams");
@@ -308,11 +330,26 @@ async function main() {
       columns: [
         "id", "tipo", "clausola", '"dataStipula"', '"durataContratto"',
         '"dataFine"', '"giocatoreId"', '"fantaTeamId"',
-        '"valoreGiocatore"', '"importoOperazione"', "provenienza",
+        '"valoreGiocatore"', '"importoOperazione"', "provenienza", "destinazione",
         '"createdAt"', '"updatedAt"',
       ],
     });
     await resetSequence(remotePool, "contratti");
+
+    // ── situazione_finanziaria ──
+    logSection("Sync tabella: situazione_finanziaria");
+    await syncTable({
+      localPool,
+      remotePool,
+      table: "situazione_finanziaria",
+      columns: [
+        "id", '"nomePresidente"', "stagione", '"valoreRose"', "crediti",
+        "patrimonio", '"giocatoriTesserati"', '"etaMedia"', "stipendi",
+        '"montePrestiti"', '"ultimoPlusMinus"', '"fantaTeamId"',
+        '"createdAt"', '"updatedAt"',
+      ],
+    });
+    await resetSequence(remotePool, "situazione_finanziaria");
 
     logSection("Sincronizzazione completata con successo");
   } catch (err) {
