@@ -155,9 +155,10 @@
     background: var(--green-dark); color: #a7d7b8;
     text-align: left; padding: 11px 14px;
     font-size: .75rem; text-transform: uppercase; letter-spacing: .6px;
+    white-space: nowrap;
   }
   th:first-child { border-radius: 0; }
-  td { padding: 11px 14px; border-bottom: 1px solid var(--gray-200); vertical-align: middle; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--gray-200); vertical-align: middle; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: #f0faf4; }
   tbody tr:nth-child(even) td { background: #f8fdf9; }
@@ -226,5 +227,10 @@
     .actions form button { width: 100%; }
 
     .btn-block { width: 100%; }
+  }
+
+  /* ── TABLE SCROLL SAFETY ─────────────────────────────────────── */
+  .card, .table-wrap, .contratti-table-wrap, .users-table-wrap, .sf-table-wrap {
+    overflow-x: auto;
   }
 </style>
