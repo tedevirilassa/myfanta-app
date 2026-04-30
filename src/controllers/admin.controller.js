@@ -293,7 +293,7 @@ async function adjustCrediti(req, res) {
   res.redirect("/admin/situazione-finanziaria?saved=1&adj=" + importo);
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, showRosa, saveRosa };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -615,7 +615,7 @@ async function saveNuovoContratto(req, res) {
   const {
     tipo, clausola, dataStipula, durataContratto,
     dataFine, giocatoreId, fantaPresidenteId,
-    importoOperazione, provenienza, destinazione,
+    importoOperazione, prezzoAcquisto, provenienza, destinazione,
   } = req.body;
 
   // Validazione base
@@ -642,6 +642,14 @@ async function saveNuovoContratto(req, res) {
     }
     if (durata !== 1) {
       errors.push("Il prestito non può durare più di una stagione (durata = 1).");
+    }
+  }
+
+  // Validazione prezzo acquisto
+  if (tipo === "Acquisto") {
+    const prezzo = parseFloat(prezzoAcquisto);
+    if (!prezzoAcquisto || isNaN(prezzo) || prezzo <= 0) {
+      errors.push("Il prezzo di acquisto è obbligatorio e deve essere positivo.");
     }
   }
 
@@ -763,6 +771,8 @@ async function saveNuovoContratto(req, res) {
     });
   }
 
+  const prezzoNum = tipo === "Acquisto" ? parseFloat(prezzoAcquisto) : null;
+
   const nuovoContratto = await prisma.contratto.create({
     data: {
       tipo,
@@ -774,10 +784,65 @@ async function saveNuovoContratto(req, res) {
       fantaTeamId:        fantaTeam.id,
       valoreGiocatore:    giocatore?.valore ?? null,
       importoOperazione:  Number.isFinite(importo) ? importo : null,
+      prezzoAcquisto:     Number.isFinite(prezzoNum) ? prezzoNum : null,
       provenienza:        provenienza || null,
       destinazione:       destinazione || null,
     },
   });
+
+  // ── Aggiornamento crediti per Acquisto ──────────────────────────────────────
+  if (tipo === "Acquisto" && Number.isFinite(prezzoNum) && prezzoNum > 0) {
+    // Determina la stagione corrente dalla data stipula
+    const meseInizioStagione2 = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+    const [mmStip, yyyyStip] = dataStipula.trim().split("-").map(Number);
+    const annoStagioneInizio = mmStip >= meseInizioStagione2 ? yyyyStip : yyyyStip - 1;
+    const stagione = `${annoStagioneInizio}-${annoStagioneInizio + 1}`;
+
+    // Acquirente: crediti -= prezzo
+    const buyerUser = await prisma.user.findUnique({ where: { id: parseInt(fantaPresidenteId, 10) } });
+    if (buyerUser) {
+      const sfBuyer = await prisma.situazioneFinanziaria.findFirst({
+        where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
+      });
+      if (sfBuyer) {
+        const nuoviCreditiBuyer = Math.round((parseFloat(sfBuyer.crediti) - prezzoNum) * 100) / 100;
+        const nuovoPatrimonioBuyer = Math.round((parseFloat(sfBuyer.patrimonio) - prezzoNum) * 100) / 100;
+        await prisma.situazioneFinanziaria.update({
+          where: { id: sfBuyer.id },
+          data: { crediti: nuoviCreditiBuyer, patrimonio: nuovoPatrimonioBuyer },
+        });
+      }
+    }
+
+    // Venditore (solo Privato): crediti += prezzo
+    if (provenienza === "Privato") {
+      // Il venditore è il presidente dell'ultimo contratto Acquisto valido per lo stesso giocatore (prima di invalidarlo)
+      const contrattoVenditore = await prisma.contratto.findFirst({
+        where: {
+          giocatoreId: parseInt(giocatoreId, 10),
+          tipo: "Acquisto",
+          id: { not: nuovoContratto.id },
+        },
+        orderBy: { createdAt: "desc" },
+        include: { fantaTeam: { include: { user: true } } },
+      });
+      if (contrattoVenditore && contrattoVenditore.fantaTeam?.user) {
+        const sellerUser = contrattoVenditore.fantaTeam.user;
+        const sfSeller = await prisma.situazioneFinanziaria.findFirst({
+          where: { nomePresidente: sellerUser.nickname || sellerUser.email, stagione },
+        });
+        if (sfSeller) {
+          const nuoviCreditiSeller = Math.round((parseFloat(sfSeller.crediti) + prezzoNum) * 100) / 100;
+          const nuovoPatrimonioSeller = Math.round((parseFloat(sfSeller.patrimonio) + prezzoNum) * 100) / 100;
+          await prisma.situazioneFinanziaria.update({
+            where: { id: sfSeller.id },
+            data: { crediti: nuoviCreditiSeller, patrimonio: nuovoPatrimonioSeller },
+          });
+        }
+      }
+    }
+  }
+
   await logAction({ azione: "CREATE", entita: "contratto", entitaId: nuovoContratto.id,
     dettaglio: {
       prima: null,
@@ -790,6 +855,7 @@ async function saveNuovoContratto(req, res) {
         dataFine:          nuovoContratto.dataFine,
         valoreGiocatore:   nuovoContratto.valoreGiocatore ? Number(nuovoContratto.valoreGiocatore) : null,
         importoOperazione: Number.isFinite(importo) ? importo : null,
+        prezzoAcquisto:    Number.isFinite(prezzoNum) ? prezzoNum : null,
         provenienza:       provenienza || null,
       },
     },
@@ -978,4 +1044,99 @@ async function saveParametro(req, res) {
   await logAction({ azione: "UPDATE", entita: "parametro", entitaId: id,
     dettaglio: { valore: valore.trim() }, adminId: req.user.id });
   res.redirect("/admin/parametri?saved=1");
+}
+
+// ── GET /admin/rosa/:fantaTeamId ──────────────────────────────────────────────
+async function showRosa(req, res) {
+  const fantaTeamId = parseInt(req.params.fantaTeamId, 10);
+  if (isNaN(fantaTeamId)) return res.redirect("/admin/pannello");
+
+  const fantaTeam = await prisma.fantaTeam.findUnique({ where: { id: fantaTeamId } });
+  if (!fantaTeam) return res.redirect("/admin/pannello");
+
+  const params = await parametriService.getAll();
+  // Determina stagione corrente
+  const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+  const now = new Date();
+  const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
+  const stagione = `${annoInizio}-${annoInizio + 1}`;
+
+  // Giocatori con contratto valido per questo team
+  const contratti = await prisma.contratto.findMany({
+    where: { fantaTeamId, valido: true },
+    include: { giocatore: true },
+    orderBy: { giocatore: { nome: "asc" } },
+  });
+
+  // Rosa assignments per questa stagione
+  const rosaRecords = await prisma.rosaGiocatore.findMany({
+    where: { fantaTeamId, stagione },
+  });
+  const rosaMap = {};
+  rosaRecords.forEach((r) => { rosaMap[r.giocatoreId] = r.categoria; });
+
+  // Componi lista
+  const giocatori = contratti.map((c) => ({
+    id: c.giocatore.id,
+    nome: c.giocatore.nome,
+    ruolo: c.giocatore.ruolo,
+    squadra: c.giocatore.squadra,
+    eta: c.giocatore.eta,
+    valore: c.giocatore.valore ? +c.giocatore.valore : null,
+    categoria: rosaMap[c.giocatore.id] || "InRosa",
+  }));
+
+  const fantaTeams = await prisma.fantaTeam.findMany({ orderBy: { nome: "asc" } });
+
+  res.render("admin/rosa", {
+    fantaTeam,
+    fantaTeams,
+    giocatori,
+    stagione,
+    params: {
+      maxGiocatori: params.rosa_max_giocatori || 30,
+      maxFuoriRosa: params.rosa_max_fuorirosa || 5,
+      maxU21: params.rosa_max_under21 || 2,
+    },
+    currentUser: req.user,
+    message: req.query.saved === "1" ? "Rosa aggiornata." : null,
+    error: req.query.error ? decodeURIComponent(req.query.error) : null,
+  });
+}
+
+// ── POST /admin/rosa/:fantaTeamId ─────────────────────────────────────────────
+async function saveRosa(req, res) {
+  const fantaTeamId = parseInt(req.params.fantaTeamId, 10);
+  if (isNaN(fantaTeamId)) return res.redirect("/admin/pannello");
+
+  const params = await parametriService.getAll();
+  const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+  const now = new Date();
+  const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
+  const stagione = `${annoInizio}-${annoInizio + 1}`;
+
+  // Il form invia categorie[giocatoreId] = "InRosa" | "FuoriRosa" | "U21"
+  const categorie = req.body.categorie || {};
+  const validCategorie = ["InRosa", "FuoriRosa", "U21"];
+
+  for (const [gId, cat] of Object.entries(categorie)) {
+    const giocatoreId = parseInt(gId, 10);
+    if (isNaN(giocatoreId) || !validCategorie.includes(cat)) continue;
+
+    await prisma.rosaGiocatore.upsert({
+      where: { fantaTeamId_giocatoreId_stagione: { fantaTeamId, giocatoreId, stagione } },
+      update: { categoria: cat },
+      create: { fantaTeamId, giocatoreId, stagione, categoria: cat },
+    });
+  }
+
+  await logAction({
+    azione: "UPDATE",
+    entita: "rosa",
+    entitaId: fantaTeamId,
+    dettaglio: { stagione, categorie },
+    adminId: req.user.id,
+  });
+
+  res.redirect(`/admin/rosa/${fantaTeamId}?saved=1`);
 }

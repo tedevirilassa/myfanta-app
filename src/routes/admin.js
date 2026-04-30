@@ -34,5 +34,7 @@ router.post("/situazione-finanziaria/:id/assign", ctrl.assignFantaTeamToSituazio
 router.post("/situazione-finanziaria/:id/crediti", ctrl.adjustCrediti);
 router.get("/parametri", ctrl.listParametri);
 router.post("/parametri/:id", ctrl.saveParametro);
+router.get("/rosa/:fantaTeamId", ctrl.showRosa);
+router.post("/rosa/:fantaTeamId", ctrl.saveRosa);
 
 module.exports = router;

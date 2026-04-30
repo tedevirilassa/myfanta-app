@@ -149,6 +149,14 @@
             <div class="select-hint" id="hint-importo"></div>
           </div>
 
+          <!-- ── PREZZO ACQUISTO ────────────────────────── -->
+          <div class="form-group" id="grp-prezzo" style="display:none;">
+            <label for="prezzoAcquisto">Prezzo acquisto (M) <span class="required-mark">*</span></label>
+            <input type="number" id="prezzoAcquisto" name="prezzoAcquisto"
+                   min="0" step="0.01" placeholder="Costo per il compratore">
+            <div class="select-hint" id="hint-prezzo">Importo che verrà scalato dai crediti dell'acquirente</div>
+          </div>
+
           <!-- ── PROVENIENZA ────────────────────────────── -->
           <div class="form-group span-2">
             <label for="provenienza">Provenienza</label>
@@ -181,6 +189,8 @@
       const inputImporto = document.getElementById("importoOperazione");
       const lblImporto = document.getElementById("lbl-importo");
       const hintImporto = document.getElementById("hint-importo");
+      const grpPrezzo = document.getElementById("grp-prezzo");
+      const inputPrezzo = document.getElementById("prezzoAcquisto");
       const selDurata = document.getElementById("durataContratto");
       const inputStipula = document.getElementById("dataStipula");
       const dataFineDisplay = document.getElementById("dataFine-display");
@@ -228,6 +238,8 @@
           inputImporto.placeholder = "da 0.1 a 5";
           inputImporto.required = true;
           hintImporto.textContent = "Importo dal prestante al presidente che riceve il giocatore (0.1 – 5 M)";
+          grpPrezzo.style.display = "none";
+          inputPrezzo.required = false;
         } else if (selTipo.value === "Acquisto") {
           lblImporto.innerHTML = 'Stipendio (M) <span class="required-mark">*</span>';
           inputImporto.min = "0";
@@ -237,6 +249,8 @@
           inputImporto.required = true;
           hintImporto.textContent = "Calcolato automaticamente in base alla sessione di mercato";
           calcStipendio();
+          grpPrezzo.style.display = "";
+          inputPrezzo.required = true;
         } else {
           lblImporto.textContent = "Importo operazione (€)";
           inputImporto.min = "0";
@@ -245,6 +259,8 @@
           inputImporto.placeholder = "es. 25.5";
           inputImporto.required = false;
           hintImporto.textContent = "";
+          grpPrezzo.style.display = "none";
+          inputPrezzo.required = false;
         }
       }
       updateImportoLabel();

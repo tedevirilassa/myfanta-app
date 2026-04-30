@@ -34,6 +34,7 @@ model FantaTeam {
   contratti             Contratto[]
   user                  User?                    @relation(fields: [userId], references: [id])
   situazioniFinanziarie SituazioneFinanziaria[]
+  rosaGiocatori         RosaGiocatore[]
 
   @@map("fanta_teams")
 }
@@ -72,6 +73,7 @@ model Giocatore {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   contratti   Contratto[]
+  rosaGiocatori RosaGiocatore[]
 
   @@map("giocatori")
 }
@@ -86,6 +88,7 @@ model Contratto {
   giocatoreId       Int
   valoreGiocatore   Decimal?              @db.Decimal(10, 2)
   importoOperazione Decimal?              @db.Decimal(10, 2)
+  prezzoAcquisto    Decimal?              @db.Decimal(10, 2)
   provenienza       String?
   destinazione      String?
   valido            Boolean               @default(true)
@@ -139,4 +142,25 @@ model Parametro {
   updatedAt   DateTime @default(now()) @updatedAt
 
   @@map("parametri")
+}
+
+enum CategoriaRosa {
+  InRosa
+  FuoriRosa
+  U21
+}
+
+model RosaGiocatore {
+  id           Int            @id @default(autoincrement())
+  fantaTeamId  Int
+  giocatoreId  Int
+  stagione     String         // es. "2025-2026"
+  categoria    CategoriaRosa  @default(InRosa)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @default(now()) @updatedAt
+  fantaTeam    FantaTeam      @relation(fields: [fantaTeamId], references: [id])
+  giocatore    Giocatore      @relation(fields: [giocatoreId], references: [id])
+
+  @@unique([fantaTeamId, giocatoreId, stagione])
+  @@map("rosa_giocatori")
 }
