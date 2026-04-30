@@ -141,11 +141,12 @@
             <input type="hidden" id="dataFine" name="dataFine">
           </div>
 
-          <!-- ── IMPORTO OPERAZIONE ─────────────────────── -->
+          <!-- ── IMPORTO OPERAZIONE / STIPENDIO ─────────── -->
           <div class="form-group">
-            <label for="importoOperazione">Importo operazione (€)</label>
+            <label for="importoOperazione" id="lbl-importo">Importo operazione (€)</label>
             <input type="number" id="importoOperazione" name="importoOperazione"
-                   min="0" step="0.5" placeholder="es. 25.5">
+                   min="0" step="0.01" placeholder="es. 25.5">
+            <div class="select-hint" id="hint-importo"></div>
           </div>
 
           <!-- ── PROVENIENZA ────────────────────────────── -->
@@ -156,6 +157,7 @@
               <option value="Pubblico">Pubblico</option>
               <option value="Privato">Privato</option>
             </select>
+            <div class="select-hint" id="hint-mercato"></div>
           </div>
 
         </div><!-- /form-grid -->
@@ -175,10 +177,98 @@
       const selGiocatore = document.getElementById("giocatoreId");
       const valoreDisplay = document.getElementById("valore-display");
       const valoreInput = document.getElementById("valoreGiocatore");
+      const selTipo = document.getElementById("tipo");
+      const inputImporto = document.getElementById("importoOperazione");
+      const lblImporto = document.getElementById("lbl-importo");
+      const hintImporto = document.getElementById("hint-importo");
       const selDurata = document.getElementById("durataContratto");
       const inputStipula = document.getElementById("dataStipula");
       const dataFineDisplay = document.getElementById("dataFine-display");
       const dataFineInput = document.getElementById("dataFine");
+
+      // ── Parametri mercato invernale ────────────────────────
+      const STIPENDIO_PCT = parseFloat("<%= (parametri && parametri.stipendio_percentuale) || '0.10' %>");
+      const STIPENDIO_PCT_INV = parseFloat("<%= (parametri && parametri.stipendio_percentuale_invernale) || '0.05' %>");
+      const MERCATO_INV_INIZIO = "<%= (parametri && parametri.mercato_invernale_inizio) || '01-01' %>"; // GG-MM
+      const MERCATO_INV_FINE = "<%= (parametri && parametri.mercato_invernale_fine) || '15-02' %>"; // GG-MM
+
+      function isSessioneInvernale(stipula) {
+        if (!stipula || !/^\d{2}-\d{4}$/.test(stipula)) return false;
+        const mm = parseInt(stipula.split("-")[0], 10);
+        const invIzMM = parseInt(MERCATO_INV_INIZIO.split("-")[1], 10);
+        const invFinMM = parseInt(MERCATO_INV_FINE.split("-")[1], 10);
+        return mm >= invIzMM && mm <= invFinMM;
+      }
+
+      function calcStipendio() {
+        if (selTipo.value !== "Acquisto") return;
+        const valore = parseFloat(valoreInput.value);
+        const stipula = inputStipula.value.trim();
+        if (!valore || isNaN(valore)) {
+          hintImporto.textContent = "Seleziona un giocatore per calcolare lo stipendio";
+          return;
+        }
+        const invernale = isSessioneInvernale(stipula);
+        const pct = invernale ? STIPENDIO_PCT_INV : STIPENDIO_PCT;
+        const stip = Math.round(valore * pct * 100) / 100;
+        inputImporto.value = stip.toFixed(2);
+        hintImporto.textContent = invernale
+          ? "Sessione invernale: " + (pct * 100).toFixed(0) + "% di " + valore.toFixed(1) + " = " + stip.toFixed(2) + " M"
+          : "Sessione estiva: " + (pct * 100).toFixed(0) + "% di " + valore.toFixed(1) + " = " + stip.toFixed(2) + " M";
+      }
+
+      // ── Aggiorna label/range importo in base al tipo ───────
+      selTipo.addEventListener("change", updateImportoLabel);
+      function updateImportoLabel() {
+        if (selTipo.value === "Prestito") {
+          lblImporto.innerHTML = 'Corrispettivo prestito (M) <span class="required-mark">*</span>';
+          inputImporto.min = "0.1";
+          inputImporto.max = "5";
+          inputImporto.step = "0.1";
+          inputImporto.placeholder = "da 0.1 a 5";
+          inputImporto.required = true;
+          hintImporto.textContent = "Importo dal prestante al presidente che riceve il giocatore (0.1 – 5 M)";
+        } else if (selTipo.value === "Acquisto") {
+          lblImporto.innerHTML = 'Stipendio (M) <span class="required-mark">*</span>';
+          inputImporto.min = "0";
+          inputImporto.removeAttribute("max");
+          inputImporto.step = "0.01";
+          inputImporto.placeholder = "auto-calcolato";
+          inputImporto.required = true;
+          hintImporto.textContent = "Calcolato automaticamente in base alla sessione di mercato";
+          calcStipendio();
+        } else {
+          lblImporto.textContent = "Importo operazione (€)";
+          inputImporto.min = "0";
+          inputImporto.removeAttribute("max");
+          inputImporto.step = "0.01";
+          inputImporto.placeholder = "es. 25.5";
+          inputImporto.required = false;
+          hintImporto.textContent = "";
+        }
+      }
+      updateImportoLabel();
+
+      // Trigger calcStipendio on giocatore/data changes
+      selGiocatore.addEventListener("change", function () {
+        calcStipendio();
+      });
+      inputStipula.addEventListener("input", calcStipendio);
+
+      // ── Gestione Prestito: durata fissa 1 stagione ─────────
+      selTipo.addEventListener("change", updateDurataPrestito);
+      function updateDurataPrestito() {
+        if (selTipo.value === "Prestito") {
+          selDurata.value = "1";
+          selDurata.style.pointerEvents = "none";
+          selDurata.style.opacity = "0.6";
+        } else {
+          selDurata.style.pointerEvents = "";
+          selDurata.style.opacity = "";
+        }
+        calcDataFine();
+      }
+      updateDurataPrestito();
 
       // ── Aggiorna valore giocatore ──────────────────────────
       selGiocatore.addEventListener("change", function () {
@@ -197,14 +287,41 @@
       });
 
       const selProvenienza = document.getElementById("provenienza");
+      const hintMercato = document.getElementById("hint-mercato");
+
+      // ── Parametri finestre di mercato ──────────────────────
+      const MERCATO_ESTIVO_IZ = parseInt("<%= (parametri && parametri.mercato_estivo_inizio) || '01-07' %>".split("-")[1], 10);
+      const MERCATO_ESTIVO_FIN = parseInt("<%= (parametri && parametri.mercato_estivo_fine) || '15-09' %>".split("-")[1], 10);
+      const MERCATO_INV_IZ_M = parseInt(MERCATO_INV_INIZIO.split("-")[1], 10);
+      const MERCATO_INV_FIN_M = parseInt(MERCATO_INV_FINE.split("-")[1], 10);
+      const MERCATO_PRIV_IZ = parseInt("<%= (parametri && parametri.mercato_privato_inizio) || '01-07' %>".split("-")[1], 10);
+      const MERCATO_PRIV_FIN = parseInt("<%= (parametri && parametri.mercato_privato_fine) || '15-02' %>".split("-")[1], 10);
+
+      function checkMercato() {
+        const prov = selProvenienza.value;
+        if (prov === "Pubblico") {
+          hintMercato.textContent = "Acquisti dal pubblico: mesi " + MERCATO_ESTIVO_IZ + "–" + MERCATO_ESTIVO_FIN + " (estiva) e " + MERCATO_INV_IZ_M + "–" + MERCATO_INV_FIN_M + " (invernale)";
+        } else if (prov === "Privato") {
+          hintMercato.textContent = "Acquisti tra presidenti: mesi " + MERCATO_PRIV_IZ + "–" + MERCATO_PRIV_FIN + " (attraversa il capodanno)";
+        } else {
+          hintMercato.textContent = "";
+        }
+      }
+      selProvenienza.addEventListener("change", checkMercato);
+      checkMercato();
+
+      // ── Parametri stagione ─────────────────────────────────
+      const STAGIONE_INIZIO = "<%= (parametri && parametri.stagione_inizio) || '01-07' %>"; // GG-MM
+      const MESE_INIZIO_STAGIONE = parseInt(STAGIONE_INIZIO.split("-")[1], 10) || 7;
 
       // ── Calcola data fine ──────────────────────────────────
-      // Regole mercato PUBBLICO:
-      //   Sessione estiva  (stipula mese 07): fine = 07-(anno + durata)
-      //   Sessione invernale (stipula mese 01): fine = 07-(anno + durata - 1)
+      // Stagione parametrizzata
+      // Prestito: scade a inizio prossima stagione
+      // Acquisto/Cessione mercato PUBBLICO: fine = mese stagione
       // Mercato PRIVATO o non specificato: fine = stesso mese, anno + durata
       function calcDataFine() {
         const stipula     = inputStipula.value.trim();   // MM-YYYY
+        const tipo        = selTipo.value;
         const durata      = parseInt(selDurata.value, 10);
         const provenienza = selProvenienza.value;
 
@@ -221,15 +338,19 @@
         }
 
         let fineStr;
-        if (provenienza === "Pubblico") {
-          // La data fine è sempre in luglio (07)
-          const fineAnno = (mm === 7)
-            ? yyyy + durata          // sessione estiva
-            : yyyy + durata - 1;     // sessione invernale (gennaio)
-          fineStr = "07-" + fineAnno;
+        if (tipo === "Prestito") {
+          // Prestito: scade a inizio prossima stagione
+          const mesePad = String(MESE_INIZIO_STAGIONE).padStart(2, "0");
+          fineStr = mm >= MESE_INIZIO_STAGIONE ? mesePad + "-" + (yyyy + 1) : mesePad + "-" + yyyy;
+        } else if (provenienza === "Pubblico") {
+          const mesePad = String(MESE_INIZIO_STAGIONE).padStart(2, "0");
+          const fineAnno = (mm === MESE_INIZIO_STAGIONE)
+            ? yyyy + durata
+            : yyyy + durata - 1;
+          fineStr = mesePad + "-" + fineAnno;
         } else {
-          // Contratto privato: stesso mese, +durata anni
           fineStr = String(mm).padStart(2, "0") + "-" + (yyyy + durata);
+        }
         }
 
         dataFineDisplay.textContent = fineStr;
@@ -239,6 +360,7 @@
       inputStipula.addEventListener("input", calcDataFine);
       selDurata.addEventListener("change", calcDataFine);
       selProvenienza.addEventListener("change", calcDataFine);
+      selTipo.addEventListener("change", calcDataFine);
     })();
   </script>
 </body>

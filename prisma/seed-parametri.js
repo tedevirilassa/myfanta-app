@@ -26,10 +26,21 @@ const DEFAULTS = [
   // ── Contratti ──
   { chiave: "contratto_durata_min", valore: "1", descrizione: "Durata minima del contratto (anni)" },
   { chiave: "contratto_durata_max", valore: "3", descrizione: "Durata massima del contratto (anni)" },
-  { chiave: "stipendio_percentuale", valore: "0.05", descrizione: "Percentuale del valore giocatore per calcolo stipendio" },
+  { chiave: "stipendio_percentuale", valore: "0.10", descrizione: "Percentuale stipendio sessione estiva (es. 0.10 = 10%)" },
+  { chiave: "stipendio_percentuale_invernale", valore: "0.05", descrizione: "Percentuale stipendio sessione invernale (es. 0.05 = 5%)" },
+  { chiave: "mercato_invernale_inizio", valore: "01-01", descrizione: "Inizio sessione invernale (GG-MM)" },
+  { chiave: "mercato_invernale_fine", valore: "15-02", descrizione: "Fine sessione invernale (GG-MM)" },
+  { chiave: "mercato_estivo_inizio", valore: "01-07", descrizione: "Inizio sessione estiva (GG-MM)" },
+  { chiave: "mercato_estivo_fine", valore: "15-09", descrizione: "Fine sessione estiva (GG-MM)" },
+  { chiave: "mercato_privato_inizio", valore: "01-07", descrizione: "Inizio finestra acquisti tra presidenti (GG-MM)" },
+  { chiave: "mercato_privato_fine", valore: "15-02", descrizione: "Fine finestra acquisti tra presidenti (GG-MM)" },
 
   // ── Budget ──
   { chiave: "budget_iniziale", valore: "100", descrizione: "Budget iniziale per presidente (M)" },
+
+  // ── Stagione ──
+  { chiave: "stagione_inizio", valore: "01-07", descrizione: "Data inizio stagione (GG-MM)" },
+  { chiave: "stagione_fine",   valore: "15-06", descrizione: "Data fine stagione (GG-MM)" },
 ];
 
 async function main() {

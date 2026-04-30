@@ -592,6 +592,51 @@ async function saveNuovoContratto(req, res) {
   const durataMax = params.contratto_durata_max || 3;
   if (durata < durataMin || durata > durataMax) errors.push(`Durata deve essere tra ${durataMin} e ${durataMax}.`);
 
+  // Validazione corrispettivo prestito
+  if (tipo === "Prestito") {
+    const imp = parseFloat(importoOperazione);
+    if (!importoOperazione || isNaN(imp)) {
+      errors.push("Il corrispettivo del prestito è obbligatorio.");
+    } else if (imp < 0.1 || imp > 5) {
+      errors.push("Il corrispettivo del prestito deve essere tra 0.1 e 5 M.");
+    }
+    if (durata !== 1) {
+      errors.push("Il prestito non può durare più di una stagione (durata = 1).");
+    }
+  }
+
+  // Validazione finestre di mercato per Acquisto
+  if (tipo === "Acquisto" && dataStipula && /^\d{2}-\d{4}$/.test(dataStipula.trim())) {
+    const meseStip = parseInt(dataStipula.trim().split("-")[0], 10);
+
+    // Helper: parse GG-MM → mese
+    const parseMese = (ggmm) => parseInt((ggmm || "").split("-")[1], 10);
+
+    if (provenienza === "Pubblico") {
+      // Pubblico: estiva (lug–set) OR invernale (gen–feb)
+      const estIz = parseMese(params.mercato_estivo_inizio || "01-07");
+      const estFin = parseMese(params.mercato_estivo_fine || "15-09");
+      const invIz = parseMese(params.mercato_invernale_inizio || "01-01");
+      const invFin = parseMese(params.mercato_invernale_fine || "15-02");
+      const inEstiva = meseStip >= estIz && meseStip <= estFin;
+      const inInvernale = meseStip >= invIz && meseStip <= invFin;
+      if (!inEstiva && !inInvernale) {
+        errors.push(`Mercato pubblico: acquisti consentiti solo nei mesi ${estIz}–${estFin} (estiva) o ${invIz}–${invFin} (invernale).`);
+      }
+    } else if (provenienza === "Privato") {
+      // Privato: da luglio a febbraio (attraversa il capodanno)
+      const privIz = parseMese(params.mercato_privato_inizio || "01-07");
+      const privFin = parseMese(params.mercato_privato_fine || "15-02");
+      // Finestra che attraversa l'anno: valido se mese >= inizio OR mese <= fine
+      const inFinestra = privIz > privFin
+        ? (meseStip >= privIz || meseStip <= privFin)
+        : (meseStip >= privIz && meseStip <= privFin);
+      if (!inFinestra) {
+        errors.push(`Acquisti tra presidenti: consentiti solo nei mesi ${privIz}–${privFin}.`);
+      }
+    }
+  }
+
   if (errors.length > 0) {
     const [giocatori, presidenti] = await Promise.all([
       prisma.giocatore.findMany({ where: { active: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true, ruolo: true, squadra: true, valore: true } }),
@@ -608,20 +653,45 @@ async function saveNuovoContratto(req, res) {
     select: { valore: true },
   });
 
-  const importo = importoOperazione ? parseFloat(importoOperazione) : null;
+  // Calcola stipendio server-side per Acquisto (non fidarsi del client)
+  let importo = importoOperazione ? parseFloat(importoOperazione) : null;
+  if (tipo === "Acquisto" && giocatore && giocatore.valore) {
+    const mercatoInvInizio = params.mercato_invernale_inizio || "01-01"; // GG-MM
+    const mercatoInvFine = params.mercato_invernale_fine || "15-02";     // GG-MM
+    const meseStipula = parseInt((dataStipula || "").split("-")[0], 10);
+    const invIzMM = parseInt(mercatoInvInizio.split("-")[1], 10);
+    const invFinMM = parseInt(mercatoInvFine.split("-")[1], 10);
+    const isInvernale = meseStipula >= invIzMM && meseStipula <= invFinMM;
+    const pct = isInvernale
+      ? parseFloat(params.stipendio_percentuale_invernale || "0.05")
+      : parseFloat(params.stipendio_percentuale || "0.10");
+    importo = Math.round(parseFloat(giocatore.valore) * pct * 100) / 100;
+  }
 
   // Ricalcola data fine server-side (non fidarsi solo del client)
-  function calcDataFineServer(stipula, durata, prov) {
+  // Stagione parametrizzata: inizio GG-MM, fine GG-MM
+  const stagioneInizio = params.stagione_inizio || "01-07"; // GG-MM
+  const meseInizioStagione = parseInt(stagioneInizio.split("-")[1], 10) || 7;
+
+  function calcDataFineServer(stipula, durata, prov, tipoContratto) {
     if (!stipula || !/^\d{2}-\d{4}$/.test(stipula)) return null;
     const [mm, yyyy] = stipula.split("-").map(Number);
     if (!mm || !yyyy) return null;
+
+    // Prestito: scade a fine stagione corrente
+    if (tipoContratto === "Prestito") {
+      return mm >= meseInizioStagione
+        ? String(meseInizioStagione).padStart(2, "0") + "-" + (yyyy + 1)
+        : String(meseInizioStagione).padStart(2, "0") + "-" + yyyy;
+    }
+
     if (prov === "Pubblico") {
-      const fineAnno = (mm === 7) ? yyyy + durata : yyyy + durata - 1;
-      return "07-" + fineAnno;
+      const fineAnno = (mm === meseInizioStagione) ? yyyy + durata : yyyy + durata - 1;
+      return String(meseInizioStagione).padStart(2, "0") + "-" + fineAnno;
     }
     return String(mm).padStart(2, "0") + "-" + (yyyy + durata);
   }
-  const dataFineCalcolata = calcDataFineServer(dataStipula.trim(), durata, provenienza || null);
+  const dataFineCalcolata = calcDataFineServer(dataStipula.trim(), durata, provenienza || null, tipo);
 
   // Marca come scaduti i contratti precedenti dello stesso giocatore
   // - Acquisto/Cessione nuovo → invalida tutti i precedenti (Acquisto + Prestito)
