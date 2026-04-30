@@ -3,6 +3,24 @@
 <head>
   <%- include('../partials/head', { title: 'Gestione utenti' }) %>
   <style>
+    .user-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .user-card {
+      background: #fff; border: 1.5px solid var(--gray-200); border-radius: 12px;
+      padding: 16px 20px; position: relative;
+      transition: box-shadow .15s;
+    }
+    .user-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+    .user-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .user-card-email { font-weight: 700; font-size: .9rem; color: var(--green-dark); word-break: break-all; }
+    .user-card-meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: .82rem; }
+    .user-card-meta dt { color: var(--gray-400); font-weight: 600; }
+    .user-card-meta dd { margin: 0; color: var(--gray-700); }
+    .user-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+
+    details.edit-user { margin-top: 12px; }
     details.edit-user summary {
       cursor: pointer; font-size: .78rem; font-weight: 700;
       color: var(--green-dark); list-style: none; padding: 3px 8px;
@@ -14,7 +32,7 @@
     .edit-user-form {
       margin-top: 10px; padding: 12px 14px; background: #f0fdf4;
       border: 1px solid var(--green-light); border-radius: 8px;
-      display: flex; flex-direction: column; gap: 8px; min-width: 220px;
+      display: flex; flex-direction: column; gap: 8px;
     }
     .edit-user-form label { font-size: .75rem; font-weight: 700; color: var(--gray-500); }
     .edit-user-form input, .edit-user-form select {
@@ -51,123 +69,88 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
-    <div class="card" style="padding:0; overflow:hidden;">
-      <div style="overflow-x:auto;">
-      <table style="min-width:900px;">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Nickname</th>
-            <th>FantaTeam</th>
-            <th>Ruolo</th>
-            <th>Stato</th>
-            <th>Cambio pwd</th>
-            <th>Creato il</th>
-            <th>Azioni</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% users.forEach(function(u) { %>
-          <tr>
-            <td>
-              <details class="edit-user">
-                <summary>✏️ <%= u.email %></summary>
-                <form action="/admin/users/<%= u.id %>/save-fields" method="POST" class="edit-user-form">
-                  <div>
-                    <label>Email</label>
-                    <input type="email" name="email" value="<%= u.email %>" required>
-                  </div>
-                  <div>
-                    <label>Nickname</label>
-                    <input type="text" name="nickname" value="<%= u.nickname || '' %>" maxlength="40" placeholder="—">
-                  </div>
-                  <div>
-                    <label>FantaTeam</label>
-                    <select name="fantaTeamId">
-                      <option value="">— nessuno —</option>
-                      <% tuttiTeam.forEach(function(ft) { %>
-                        <option value="<%= ft.id %>"
-                          <%= u.fantaTeam && u.fantaTeam.id === ft.id ? 'selected' : '' %>
-                          <%= !ft.userId || ft.userId === u.id ? '' : 'style="color:#b91c1c;"' %>>
-                          <%= ft.nome %><%= ft.userId && ft.userId !== u.id ? ' (occupato)' : '' %>
-                        </option>
-                      <% }) %>
-                    </select>
-                  </div>
-                  <button type="submit" class="btn-save">💾 Salva</button>
-                </form>
-              </details>
-            </td>
-            <td style="font-size:.85rem;">
-              <%= u.nickname || '<span style="color:#cbd5e1;font-style:italic;">—</span>' %>
-            </td>
-            <td style="font-size:.85rem;">
-              <% if (u.fantaTeam) { %>
-                <span style="font-weight:700; color:var(--green-dark);"><%= u.fantaTeam.nome %></span>
-              <% } else { %>
-                <span style="color:#cbd5e1; font-style:italic;">—</span>
-              <% } %>
-            </td>
-            <td>
-              <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : u.role === 'POWER_USER' ? 'badge-poweruser' : 'badge-user' %>">
-                <%= u.role === 'POWER_USER' ? 'Power User' : u.role %>
-              </span>
-            </td>
-            <td>
-              <span class="badge <%= u.isActive ? 'badge-active' : 'badge-inactive' %>">
-                <%= u.isActive ? 'Attivo' : 'Disabilitato' %>
-              </span>
-            </td>
-            <td style="font-size:.82rem; color:<%= u.mustChangePassword ? '#b45309' : '#64748b' %>;">
-              <%= u.mustChangePassword ? 'Richiesto' : 'No' %>
-            </td>
-            <td style="font-size:.82rem; color:#64748b;">
-              <%= u.createdAt.toLocaleDateString('it-IT') %>
-            </td>
-            <td>
-              <div class="actions">
-                <% if (u.id !== currentUser.id) { %>
-                <!-- Reimposta password -->
-                <form action="/admin/users/<%= u.id %>/reset-password" method="POST"
-                      onsubmit="return confirm('Reimpostare la password di <%= u.email %>?')">
-                  <button type="submit" class="btn btn-warning btn-sm">Reset pwd</button>
-                </form>
+    <div class="user-grid">
+      <% users.forEach(function(u) { %>
+      <div class="user-card">
+        <div class="user-card-header">
+          <div class="user-card-email"><%= u.email %></div>
+          <span class="badge <%= u.role === 'ADMIN' ? 'badge-admin' : u.role === 'POWER_USER' ? 'badge-poweruser' : 'badge-user' %>" style="flex-shrink:0;">
+            <%= u.role === 'POWER_USER' ? 'Power User' : u.role %>
+          </span>
+        </div>
 
-                <!-- Cambio ruolo -->
-                <form action="/admin/users/<%= u.id %>/change-role" method="POST" style="display:flex; gap:4px; align-items:center;">
-                  <select name="role" style="font-size:.8rem; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1;">
-                    <option value="USER"       <%= u.role === 'USER'       ? 'selected' : '' %>>User</option>
-                    <option value="POWER_USER" <%= u.role === 'POWER_USER' ? 'selected' : '' %>>Power User</option>
-                    <option value="ADMIN"      <%= u.role === 'ADMIN'      ? 'selected' : '' %>>Admin</option>
-                  </select>
-                  <button type="submit" class="btn btn-sm btn-primary">Salva</button>
-                </form>
+        <dl class="user-card-meta">
+          <dt>Nickname</dt>
+          <dd><%= u.nickname || '—' %></dd>
+          <dt>FantaTeam</dt>
+          <dd><% if (u.fantaTeam) { %><strong><%= u.fantaTeam.nome %></strong><% } else { %>—<% } %></dd>
+          <dt>Stato</dt>
+          <dd>
+            <span class="badge <%= u.isActive ? 'badge-active' : 'badge-inactive' %>">
+              <%= u.isActive ? 'Attivo' : 'Disabilitato' %>
+            </span>
+          </dd>
+          <dt>Cambio pwd</dt>
+          <dd style="color:<%= u.mustChangePassword ? '#b45309' : '#64748b' %>;"><%= u.mustChangePassword ? 'Richiesto' : 'No' %></dd>
+          <dt>Creato il</dt>
+          <dd><%= u.createdAt.toLocaleDateString('it-IT') %></dd>
+        </dl>
 
-                <!-- Abilita / Disabilita -->
-                <form action="/admin/users/<%= u.id %>/toggle" method="POST"
-                      onsubmit="return confirm('<%= u.isActive ? 'Disabilitare' : 'Abilitare' %> <%= u.email %>?')">
-                  <button type="submit" class="btn btn-sm <%= u.isActive ? 'btn-danger' : 'btn-success' %>">
-                    <%= u.isActive ? 'Disabilita' : 'Abilita' %>
-                  </button>
-                </form>
-                <% } else { %>
-                  <span style="font-size:.8rem; color:#94a3b8;">(tu)</span>
-                <% } %>
-              </div>
-            </td>
-          </tr>
-          <% }); %>
-          <% if (users.length === 0) { %>
-          <tr>
-            <td colspan="8" style="text-align:center; color:#94a3b8; padding:32px;">
-              Nessun utente trovato.
-            </td>
-          </tr>
+        <div class="user-card-actions">
+          <% if (u.id !== currentUser.id) { %>
+          <form action="/admin/users/<%= u.id %>/reset-password" method="POST"
+                onsubmit="return confirm('Reimpostare la password di <%= u.email %>?')">
+            <button type="submit" class="btn btn-warning btn-sm">Reset pwd</button>
+          </form>
+          <form action="/admin/users/<%= u.id %>/change-role" method="POST" style="display:flex; gap:4px; align-items:center;">
+            <select name="role" style="font-size:.8rem; padding:2px 6px; border-radius:4px; border:1px solid #cbd5e1;">
+              <option value="USER"       <%= u.role === 'USER'       ? 'selected' : '' %>>User</option>
+              <option value="POWER_USER" <%= u.role === 'POWER_USER' ? 'selected' : '' %>>Power User</option>
+              <option value="ADMIN"      <%= u.role === 'ADMIN'      ? 'selected' : '' %>>Admin</option>
+            </select>
+            <button type="submit" class="btn btn-sm btn-primary">Salva</button>
+          </form>
+          <form action="/admin/users/<%= u.id %>/toggle" method="POST"
+                onsubmit="return confirm('<%= u.isActive ? 'Disabilitare' : 'Abilitare' %> <%= u.email %>?')">
+            <button type="submit" class="btn btn-sm <%= u.isActive ? 'btn-danger' : 'btn-success' %>">
+              <%= u.isActive ? 'Disabilita' : 'Abilita' %>
+            </button>
+          </form>
+          <% } else { %>
+            <span style="font-size:.8rem; color:#94a3b8;">(tu)</span>
           <% } %>
-        </tbody>
-      </table>
+        </div>
+
+        <details class="edit-user">
+          <summary>✏️ Modifica</summary>
+          <form action="/admin/users/<%= u.id %>/save-fields" method="POST" class="edit-user-form">
+            <div>
+              <label>Email</label>
+              <input type="email" name="email" value="<%= u.email %>" required>
+            </div>
+            <div>
+              <label>Nickname</label>
+              <input type="text" name="nickname" value="<%= u.nickname || '' %>" maxlength="40" placeholder="—">
+            </div>
+            <div>
+              <label>FantaTeam</label>
+              <select name="fantaTeamId">
+                <option value="">— nessuno —</option>
+                <% tuttiTeam.forEach(function(ft) { %>
+                  <option value="<%= ft.id %>"
+                    <%= u.fantaTeam && u.fantaTeam.id === ft.id ? 'selected' : '' %>
+                    <%= ft.userId && ft.userId !== u.id ? 'style="color:#b91c1c;"' : '' %>>
+                    <%= ft.nome %><%= ft.userId && ft.userId !== u.id ? ' (occupato)' : '' %>
+                  </option>
+                <% }) %>
+              </select>
+            </div>
+            <button type="submit" class="btn-save">💾 Salva</button>
+          </form>
+        </details>
       </div>
-    </div><!-- /card utenti -->
+      <% }); %>
+    </div><!-- /user-grid -->
 
     <% if (teamLiberi && teamLiberi.length > 0) { %>
     <div class="card" style="margin-top:28px;">

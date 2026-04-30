@@ -44,6 +44,15 @@
       background:var(--green-dark); color:#fff;
       padding:2px 6px; border-radius:4px; font-size:.68rem; white-space:nowrap;
     }
+    table td, table th { word-break: break-word; }
+    @media (max-width: 1024px) {
+      table { font-size: .74rem !important; }
+      table td, table th { padding: 5px 6px; }
+    }
+    @media (max-width: 768px) {
+      table { font-size: .65rem !important; }
+      table td, table th { padding: 3px 4px; }
+    }
   </style>
 </head>
 <body>
@@ -183,8 +192,8 @@
     <% if (pm && pm.values.length > 0) { %>
     <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px;">
       <div class="section-title">Storico Plus / Minus</div>
-      <div style="padding:20px; overflow-x:auto;">
-        <table style="font-size:.82rem; white-space:nowrap;">
+      <div style="padding:20px;">
+        <table style="font-size:.82rem;">
           <thead>
             <tr>
               <% pm.values.forEach(function(v){ %>

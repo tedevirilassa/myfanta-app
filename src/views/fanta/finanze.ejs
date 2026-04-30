@@ -12,6 +12,15 @@
       color:var(--gray-400); font-weight:700; padding:8px 14px;
       background:var(--gray-100); border-bottom:1px solid var(--gray-200);
     }
+    table td, table th { word-break: break-word; }
+    @media (max-width: 1024px) {
+      table { font-size: .72rem !important; }
+      table td, table th { padding: 5px 5px; }
+    }
+    @media (max-width: 768px) {
+      table { font-size: .63rem !important; }
+      table td, table th { padding: 3px 3px; }
+    }
   </style>
 </head>
 <body>
@@ -35,8 +44,8 @@
     <!-- tabella principale -->
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:24px;">
       <div class="section-title">Situazione finanziaria</div>
-      <div style="overflow-x:auto;">
-        <table style="font-size:.82rem;white-space:nowrap;">
+      <div>
+        <table style="font-size:.82rem;">
           <thead>
             <tr>
               <th>Presidente</th>

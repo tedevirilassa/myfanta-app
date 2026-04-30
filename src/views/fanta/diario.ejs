@@ -27,6 +27,15 @@
     }
     .filter-btn.active { background:var(--green-mid); color:#fff; border-color:var(--green-dark); }
     #diario-count { font-size:.78rem; color:var(--gray-400); }
+    #diario-table td, #diario-table th { padding: 6px 8px; word-break: break-word; }
+    @media (max-width: 1024px) {
+      #diario-table { font-size: .74rem !important; }
+      #diario-table td, #diario-table th { padding: 4px 5px; }
+    }
+    @media (max-width: 768px) {
+      #diario-table { font-size: .65rem !important; }
+      #diario-table td, #diario-table th { padding: 3px 3px; }
+    }
   </style>
 </head>
 <body>
@@ -88,8 +97,8 @@
         </span>
         <span id="diario-count"></span>
       </div>
-      <div style="overflow-x:auto;max-height:640px;overflow-y:auto;">
-        <table style="font-size:.82rem;white-space:nowrap;" id="diario-table">
+      <div style="max-height:640px;overflow-y:auto;">
+        <table style="font-size:.82rem;" id="diario-table">
           <thead style="position:sticky;top:0;background:#fff;z-index:1;">
             <tr>
               <th>Data</th>

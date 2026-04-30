@@ -3,12 +3,12 @@
 <head>
   <%- include('../partials/head', { title: 'Situazione Finanziaria' }) %>
   <style>
-    .sf-table-wrap { overflow-x: auto; }
+    .sf-table-wrap { }
 
-    .sf-table { min-width: 900px; border-collapse: collapse; width: 100%; }
+    .sf-table { border-collapse: collapse; width: 100%; }
     .sf-table th, .sf-table td {
       padding: 9px 12px; text-align: right; font-size: .85rem;
-      border-bottom: 1px solid var(--gray-200);
+      border-bottom: 1px solid var(--gray-200); word-break: break-word;
     }
     .sf-table th { background: var(--gray-50); font-weight: 700; text-align: right; }
     .sf-table th:first-child, .sf-table td:first-child,
@@ -46,6 +46,15 @@
     }
 
     .num { font-variant-numeric: tabular-nums; }
+
+    @media (max-width: 1024px) {
+      .sf-table th, .sf-table td { font-size: .72rem; padding: 6px 6px; }
+    }
+    @media (max-width: 768px) {
+      .sf-table th, .sf-table td { font-size: .63rem; padding: 4px 3px; }
+      .inline-form select { font-size: .7rem; padding: 3px 5px; }
+      .inline-form .btn-xs { font-size: .68rem; padding: 3px 7px; }
+    }
   </style>
 </head>
 <body>

@@ -93,6 +93,17 @@
       border-color: var(--green-mid);
     }
     .pagination .disabled { color: var(--gray-300); pointer-events: none; }
+    table td, table th { word-break: break-word; }
+    @media (max-width: 1024px) {
+      table { font-size: .76rem; }
+      table td, table th { padding: 5px 6px; }
+    }
+    @media (max-width: 768px) {
+      table { font-size: .67rem; }
+      table td, table th { padding: 4px 4px; }
+      th[style*="width:160px"] { width: auto !important; }
+      th[style*="width:100px"] { width: auto !important; }
+    }
   </style>
 </head>
 <body>
@@ -143,7 +154,7 @@
     </form>
 
     <!-- ── Tabella ── -->
-    <div style="overflow-x:auto; border-radius:10px; box-shadow:0 2px 10px rgba(26,58,42,.07);">
+    <div style="border-radius:10px; box-shadow:0 2px 10px rgba(26,58,42,.07);">
       <table>
         <thead>
           <tr>
@@ -165,7 +176,7 @@
           <% } %>
           <% logs.forEach(function(l, idx) { %>
           <tr>
-            <td style="font-size:.78rem; color:var(--gray-700); white-space:nowrap;">
+            <td style="font-size:.78rem; color:var(--gray-700);">
               <%= l.createdAt.toLocaleString('it-IT', { dateStyle:'short', timeStyle:'short', timeZone:'Europe/Rome' }) %>
             </td>
             <td>

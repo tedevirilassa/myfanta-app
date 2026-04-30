@@ -48,6 +48,15 @@
     }
     .filter-btn.active { background: var(--green-mid); color: #fff; border-color: var(--green-dark); }
     #count-label { font-size: .78rem; color: var(--gray-400); }
+    table td, table th { word-break: break-word; }
+    @media (max-width: 1024px) {
+      table { font-size: .74rem !important; }
+      table td, table th { padding: 5px 6px; }
+    }
+    @media (max-width: 768px) {
+      table { font-size: .65rem !important; }
+      table td, table th { padding: 3px 4px; }
+    }
   </style>
 </head>
 <body>
@@ -131,8 +140,8 @@
           </div>
         </div>
       </div>
-      <div style="overflow-x: auto;">
-        <table style="font-size: .82rem; white-space: nowrap;">
+      <div>
+        <table style="font-size: .82rem;">
           <thead>
             <tr>
               <th>Giocatore</th>

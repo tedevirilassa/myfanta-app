@@ -64,11 +64,20 @@
     .active-no  { background:#fdecea; color:#7b1d1d; border:1px solid #e74c3c; }
 
     /* ── table wide ────────────────────────────────────────── */
-    .table-wrap { overflow-x: auto; border-radius: 10px; box-shadow: 0 2px 10px rgba(26,58,42,.08); }
-    .table-card table { font-size: .84rem; }
-    .table-card td { white-space: nowrap; }
-    td.nome-col { white-space: normal; font-weight: 600; min-width: 130px; }
+    .table-wrap { border-radius: 10px; box-shadow: 0 2px 10px rgba(26,58,42,.08); }
+    .table-card table { font-size: .84rem; width: 100%; }
+    .table-card td { word-break: break-word; }
+    td.nome-col { font-weight: 600; min-width: 100px; }
     td.num-col  { text-align: right; font-variant-numeric: tabular-nums; }
+    @media (max-width: 1024px) {
+      .table-card table { font-size: .74rem; }
+      .table-card td, .table-card th { padding: 5px 6px; }
+    }
+    @media (max-width: 768px) {
+      .table-card table { font-size: .65rem; }
+      .table-card td, .table-card th { padding: 3px 4px; }
+      td.nome-col { min-width: 70px; }
+    }
 
     /* ── row nascosta dal filtro ───────────────────────────── */
     tr.filtered-out { display: none; }
