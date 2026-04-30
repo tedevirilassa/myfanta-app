@@ -3,15 +3,36 @@ const sheets = require("../services/sheets.service");
 const prisma  = require("../lib/prisma");
 
 async function showClassifica(req, res) {
-  try {
-    const data = await sheets.getRiepilogo();
-    // ordina per patrimonio DESC
-    const classifica = [...data.presidenti].sort((a, b) => b.patrimonio - a.patrimonio);
-    res.render("fanta/classifica", { classifica, currentUser: req.user, error: null });
-  } catch (err) {
-    console.error("Sheets error:", err.message);
-    res.render("fanta/classifica", { classifica: [], currentUser: req.user, error: err.message });
-  }
+  // Legge la stagione più recente dalla tabella situazione_finanziaria
+  const ultimaStagione = await prisma.situazioneFinanziaria.findFirst({
+    orderBy: { stagione: "desc" },
+    select: { stagione: true },
+  });
+
+  const stagioneFiltro = req.query.stagione || ultimaStagione?.stagione || null;
+
+  const [tuttiRecord, stagioni] = await Promise.all([
+    stagioneFiltro
+      ? prisma.situazioneFinanziaria.findMany({
+          where: { stagione: stagioneFiltro },
+          orderBy: { patrimonio: "desc" },
+          include: { fantaTeam: true },
+        })
+      : Promise.resolve([]),
+    prisma.situazioneFinanziaria.findMany({
+      distinct: ["stagione"],
+      orderBy: { stagione: "desc" },
+      select: { stagione: true },
+    }),
+  ]);
+
+  res.render("fanta/classifica", {
+    classifica: tuttiRecord,
+    stagioneFiltro,
+    stagioni: stagioni.map((s) => s.stagione),
+    currentUser: req.user,
+    error: null,
+  });
 }
 
 async function showRiepilogo(req, res) {

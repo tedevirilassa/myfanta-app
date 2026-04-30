@@ -26,15 +26,36 @@ model User {
 }
 
 model FantaTeam {
-  id        Int         @id @default(autoincrement())
-  nome      String
-  userId    Int?        @unique
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @default(now()) @updatedAt
-  contratti Contratto[]
-  user      User?       @relation(fields: [userId], references: [id])
+  id                    Int                      @id @default(autoincrement())
+  nome                  String
+  userId                Int?                     @unique
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @default(now()) @updatedAt
+  contratti             Contratto[]
+  user                  User?                    @relation(fields: [userId], references: [id])
+  situazioniFinanziarie SituazioneFinanziaria[]
 
   @@map("fanta_teams")
+}
+
+model SituazioneFinanziaria {
+  id                 Int        @id @default(autoincrement())
+  nomePresidente     String
+  stagione           String     // es. "2025-2026"
+  valoreRose         Decimal    @db.Decimal(10, 2)
+  crediti            Decimal    @db.Decimal(10, 2)
+  patrimonio         Decimal    @db.Decimal(10, 2)
+  giocatoriTesserati Int
+  etaMedia           Decimal    @db.Decimal(5, 2)
+  stipendi           Decimal    @db.Decimal(10, 2)
+  montePrestiti      Decimal    @db.Decimal(10, 2)
+  ultimoPlusMinus    Decimal    @db.Decimal(10, 2)
+  fantaTeamId        Int?
+  fantaTeam          FantaTeam? @relation(fields: [fantaTeamId], references: [id])
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @default(now()) @updatedAt
+
+  @@map("situazione_finanziaria")
 }
 
 model Giocatore {

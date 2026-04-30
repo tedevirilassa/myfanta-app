@@ -28,5 +28,7 @@ router.post("/giocatori/:id", ctrl.updateGiocatore);
 router.post("/giocatori/:id/delete", ctrl.deleteGiocatore);
 router.post("/fanta-teams/:id/assign", ctrl.assignFantaTeam);
 router.post("/tools/seed-giocatori", ctrl.runSeedGiocatori);
+router.get("/situazione-finanziaria", ctrl.listSituazioneFinanziaria);
+router.post("/situazione-finanziaria/:id/assign", ctrl.assignFantaTeamToSituazione);
 
 module.exports = router;

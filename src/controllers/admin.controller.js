@@ -242,7 +242,65 @@ async function assignFantaTeam(req, res) {
   res.redirect("/admin/users?teamAssigned=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione };
+
+// ── GET /admin/situazione-finanziaria ────────────────────────────────────────
+async function listSituazioneFinanziaria(req, res) {
+  const [situazioni, fantaTeams] = await Promise.all([
+    prisma.situazioneFinanziaria.findMany({
+      orderBy: [{ stagione: "desc" }, { nomePresidente: "asc" }],
+      include: { fantaTeam: true },
+    }),
+    prisma.fantaTeam.findMany({ orderBy: { nome: "asc" } }),
+  ]);
+
+  const stagioni = [...new Set(situazioni.map((s) => s.stagione))].sort().reverse();
+
+  res.render("admin/situazione-finanziaria", {
+    situazioni,
+    fantaTeams,
+    stagioni,
+    currentUser: req.user,
+    message: req.query.saved   === "1" ? "Associazione salvata."       : null,
+    error:   req.query.error   ? decodeURIComponent(req.query.error) : null,
+  });
+}
+
+// ── POST /admin/situazione-finanziaria/:id/assign ─────────────────────────────
+async function assignFantaTeamToSituazione(req, res) {
+  const id = parseInt(req.params.id, 10);
+  const fantaTeamId = req.body.fantaTeamId ? parseInt(req.body.fantaTeamId, 10) : null;
+
+  const situazione = await prisma.situazioneFinanziaria.findUnique({ where: { id } });
+  if (!situazione) {
+    return res.redirect("/admin/situazione-finanziaria?error=" + encodeURIComponent("Record non trovato."));
+  }
+
+  if (fantaTeamId) {
+    const team = await prisma.fantaTeam.findUnique({ where: { id: fantaTeamId } });
+    if (!team) {
+      return res.redirect("/admin/situazione-finanziaria?error=" + encodeURIComponent("FantaTeam non trovato."));
+    }
+  }
+
+  await prisma.situazioneFinanziaria.update({
+    where: { id },
+    data: { fantaTeamId: fantaTeamId },
+  });
+
+  await logAction({
+    azione: "UPDATE",
+    entita: "situazione_finanziaria",
+    entitaId: id,
+    dettaglio: {
+      prima: { fantaTeamId: situazione.fantaTeamId },
+      dopo:  { fantaTeamId },
+    },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/admin/situazione-finanziaria?saved=1");
+}
 
 // ── POST /admin/giocatori (crea) ──────────────────────────────────────────────
 async function createGiocatore(req, res) {
