@@ -69,6 +69,23 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
+    <% if (giocatoriIncompleti && giocatoriIncompleti.length > 0) { %>
+    <div class="alert alert-info" style="border-color:#f59e0b; background:#fffbeb; color:#92400e;">
+      <strong>⚠️ <%= giocatoriIncompleti.length %> giocator<%= giocatoriIncompleti.length === 1 ? 'e' : 'i' %> con dati incompleti:</strong>
+      <ul style="margin:6px 0 0 16px; padding:0; font-size:.82rem;">
+        <% giocatoriIncompleti.forEach(function(g) { %>
+          <li>
+            [<%= g.ruolo %>] <strong><%= g.nome %></strong>
+            — squadra: <%= g.squadra || '<em>mancante</em>' %>
+            · età: <%= g.eta != null ? g.eta : '<em>mancante</em>' %>
+            · valore: <%= g.valore != null ? g.valore : '<em>mancante</em>' %>
+            <a href="/fanta/lista-giocatori?search=<%= encodeURIComponent(g.nome) %>" style="margin-left:6px; color:#2563eb; font-size:.78rem;">✏️ Modifica</a>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+    <% } %>
+
     <div class="user-grid">
       <% users.forEach(function(u) { %>
       <div class="user-card">

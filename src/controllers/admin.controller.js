@@ -10,9 +10,13 @@ const DEFAULT_PASSWORD = "primalogin2026";
 
 // GET /admin/users
 async function listUsers(req, res) {
-  const [users, tuttiTeam] = await Promise.all([
+  const [users, tuttiTeam, giocatoriIncompleti] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { fantaTeam: true } }),
     prisma.fantaTeam.findMany({ orderBy: { nome: "asc" } }),
+    prisma.giocatore.findMany({
+      where: { OR: [{ squadra: null }, { squadra: "" }, { eta: null }, { valore: null }] },
+      orderBy: { nome: "asc" },
+    }),
   ]);
   const teamLiberi = tuttiTeam.filter((t) => t.userId === null);
   const reset = req.query.reset === "1";
@@ -20,6 +24,7 @@ async function listUsers(req, res) {
     users,
     teamLiberi,
     tuttiTeam,
+    giocatoriIncompleti,
     currentUser: req.user,
     message: reset                  ? "Password reimpostata. L'utente dovrà cambiarla al prossimo accesso."
            : req.query.roleSaved    ? "Ruolo aggiornato con successo."
