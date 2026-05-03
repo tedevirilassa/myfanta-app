@@ -89,7 +89,20 @@
     <% if (giocatori.length === 0) { %>
       <p style="color:var(--gray-400); font-style:italic;">Nessun giocatore con contratto valido per questo team.</p>
     <% } else { %>
-    <form action="/admin/rosa/<%= fantaTeam.id %>" method="POST">
+    <form action="/admin/rosa/<%= fantaTeam.id %>" method="POST" id="form-rosa">
+      <div style="display:flex; justify-content:flex-end; margin-bottom:10px; gap:8px;">
+        <button type="button" id="btn-modifica" class="btn btn-sm" onclick="toggleEdit(true)"
+          style="border:1.5px solid var(--green-mid); background:#fff; color:var(--green-dark);">
+          ✏️ Modifica
+        </button>
+        <button type="submit" id="btn-salva" class="btn btn-primary btn-sm" style="display:none;">
+          💾 Salva Rosa
+        </button>
+        <button type="button" id="btn-annulla" class="btn btn-sm" onclick="toggleEdit(false)" style="display:none; background:var(--gray-200); color:var(--gray-700);">
+          Annulla
+        </button>
+      </div>
+
       <div class="card" style="padding:0; overflow:hidden;">
         <table class="rosa-table">
           <thead>
@@ -111,7 +124,10 @@
               <td><%= g.eta || '—' %></td>
               <td><%= g.valore ? g.valore.toFixed(2) : '—' %></td>
               <td>
-                <select name="categorie[<%= g.id %>]">
+                <span class="badge-cat badge-<%= g.categoria %> view-mode-cell">
+                  <%= g.categoria === 'InRosa' ? 'In Rosa' : g.categoria === 'FuoriRosa' ? 'Fuori Rosa' : 'U21' %>
+                </span>
+                <select name="categorie[<%= g.id %>]" class="edit-mode-cell" style="display:none;">
                   <option value="InRosa" <%= g.categoria === 'InRosa' ? 'selected' : '' %>>In Rosa</option>
                   <option value="FuoriRosa" <%= g.categoria === 'FuoriRosa' ? 'selected' : '' %>>Fuori Rosa</option>
                   <option value="U21" <%= g.categoria === 'U21' ? 'selected' : '' %>>U21</option>
@@ -122,11 +138,17 @@
           </tbody>
         </table>
       </div>
-
-      <div style="margin-top:16px;">
-        <button type="submit" class="btn btn-primary">💾 Salva Rosa</button>
-      </div>
     </form>
+
+    <script>
+      function toggleEdit(on) {
+        document.querySelectorAll('.view-mode-cell').forEach(el => el.style.display = on ? 'none' : '');
+        document.querySelectorAll('.edit-mode-cell').forEach(el => el.style.display = on ? '' : 'none');
+        document.getElementById('btn-modifica').style.display = on ? 'none' : '';
+        document.getElementById('btn-salva').style.display = on ? '' : 'none';
+        document.getElementById('btn-annulla').style.display = on ? '' : 'none';
+      }
+    </script>
     <% } %>
   </div>
 </body>
