@@ -1085,7 +1085,10 @@ async function showRosa(req, res) {
     categoria: rosaMap[c.giocatore.id] || "InRosa",
   }));
 
-  const fantaTeams = await prisma.fantaTeam.findMany({ orderBy: { nome: "asc" } });
+  const fantaTeams = await prisma.fantaTeam.findMany({
+    where: { OR: [{ userId: null }, { user: { isActive: true } }] },
+    orderBy: { nome: "asc" },
+  });
 
   res.render("admin/rosa", {
     fantaTeam,

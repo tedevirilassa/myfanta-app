@@ -187,8 +187,9 @@ async function showRose(req, res) {
     const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
     const stagione = `${annoInizio}-${annoInizio + 1}`;
 
-    // Tutti i team con contratti validi e rosa assignments
+    // Tutti i team con contratti validi e rosa assignments (solo utenti attivi)
     const teams = await prisma.fantaTeam.findMany({
+      where: { OR: [{ userId: null }, { user: { isActive: true } }] },
       orderBy: { nome: "asc" },
       include: {
         user: { select: { nickname: true, email: true } },
