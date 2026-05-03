@@ -233,4 +233,25 @@
   .card, .table-wrap, .contratti-table-wrap, .users-table-wrap, .sf-table-wrap {
     overflow-x: auto;
   }
+
+  /* ── AUTO-SHRINK: riduce il font della tabella se serve scroll orizzontale ── */
+  .table-shrink table,
+  .table-shrink td,
+  .table-shrink th { font-size: .68rem; padding: 5px 6px; }
 </style>
+<script>
+(function(){
+  function autoShrinkTables(){
+    var wraps = document.querySelectorAll('.card, .table-wrap, .contratti-table-wrap, .users-table-wrap, .sf-table-wrap');
+    wraps.forEach(function(w){
+      w.classList.remove('table-shrink');
+      if(w.scrollWidth > w.clientWidth + 2){
+        w.classList.add('table-shrink');
+      }
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', autoShrinkTables);
+  else autoShrinkTables();
+  window.addEventListener('resize', autoShrinkTables);
+})();
+</script>
