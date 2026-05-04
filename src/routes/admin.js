@@ -36,5 +36,9 @@ router.get("/parametri", ctrl.listParametri);
 router.post("/parametri/:id", ctrl.saveParametro);
 router.get("/rosa/:fantaTeamId", ctrl.showRosa);
 router.post("/rosa/:fantaTeamId", ctrl.saveRosa);
+router.post("/sync-quotazioni", ctrl.syncQuotazioni);
+router.get("/sync-transfermarkt", ctrl.showSyncTransfermarkt);
+router.post("/sync-transfermarkt/scrape", ctrl.runScrapeTransfermarkt);
+router.post("/sync-transfermarkt/import", ctrl.importTransfermarkt);
 
 module.exports = router;

@@ -31,6 +31,11 @@
       padding-top: 20px; margin-top: 8px;
       border-top: 1px solid var(--gray-200);
     }
+
+    .filtro-btn.active {
+      outline: 2px solid var(--gray-600);
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -78,18 +83,31 @@
           <!-- ── GIOCATORE ──────────────────────────────── -->
           <div class="form-group span-2">
             <label for="giocatoreId">Giocatore <span class="required-mark">*</span></label>
+
+            <!-- Filtro disponibilità -->
+            <div style="display:flex; gap:8px; margin-bottom:8px;" id="filtro-giocatore-wrap">
+              <button type="button" class="btn btn-sm filtro-btn active" data-filtro="tutti"
+                style="background:var(--gray-200);color:var(--gray-700);">Tutti</button>
+              <button type="button" class="btn btn-sm filtro-btn" data-filtro="liberi"
+                style="background:#e8f5e9;color:#2e7d32;">🟢 Liberi</button>
+              <button type="button" class="btn btn-sm filtro-btn" data-filtro="contratto"
+                style="background:#fff3e0;color:#e65100;">🟠 Con contratto</button>
+            </div>
+
             <select id="giocatoreId" name="giocatoreId" required>
               <option value="">— Seleziona giocatore —</option>
               <% giocatori.forEach(function(g) { %>
                 <option
                   value="<%= g.id %>"
                   data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
+                  data-has-contratto="<%= g.hasContratto ? '1' : '0' %>"
+                  data-titolare="<%= g.titolareContratto || '' %>"
                 >
-                  [<%= g.ruolo %>] <%= g.nome %><%= g.squadra ? ' – ' + g.squadra : '' %>
+                  [<%= g.ruolo %>] <%= g.nome %><%= g.squadra ? ' – ' + g.squadra : '' %><%= g.hasContratto ? ' ⚠️' : '' %>
                 </option>
               <% }); %>
             </select>
-            <div class="select-hint">Mostra solo giocatori attivi</div>
+            <div class="select-hint" id="hint-giocatore-count"></div>
           </div>
 
           <!-- ── VALORE GIOCATORE (auto-fill) ──────────── -->
@@ -160,11 +178,8 @@
           <!-- ── PROVENIENZA ────────────────────────────── -->
           <div class="form-group span-2">
             <label for="provenienza">Provenienza</label>
-            <select id="provenienza" name="provenienza">
-              <option value="">— Nessuna —</option>
-              <option value="Pubblico">Pubblico</option>
-              <option value="Privato">Privato</option>
-            </select>
+            <input type="text" id="provenienza" name="provenienza"
+                   placeholder="es. Pubblico, Privato, nome presidente…">
             <div class="select-hint" id="hint-mercato"></div>
           </div>
 
@@ -186,6 +201,44 @@
       const valoreDisplay = document.getElementById("valore-display");
       const valoreInput = document.getElementById("valoreGiocatore");
       const selTipo = document.getElementById("tipo");
+
+      // ── Filtro giocatori ───────────────────────────────────
+      const allOptions = Array.from(selGiocatore.options).filter(o => o.value !== "");
+      const hintCount = document.getElementById("hint-giocatore-count");
+
+      function applyFiltroGiocatori(filtro) {
+        const currentVal = selGiocatore.value;
+        selGiocatore.innerHTML = '<option value="">— Seleziona giocatore —</option>';
+        let count = 0;
+        allOptions.forEach(function(opt) {
+          const hasC = opt.dataset.hasContratto === "1";
+          if (filtro === "liberi" && hasC) return;
+          if (filtro === "contratto" && !hasC) return;
+          selGiocatore.appendChild(opt);
+          count++;
+        });
+        // Ripristina selezione se ancora visibile
+        if (currentVal && selGiocatore.querySelector('option[value="' + currentVal + '"]')) {
+          selGiocatore.value = currentVal;
+        } else {
+          selGiocatore.value = "";
+          valoreDisplay.textContent = "— seleziona prima un giocatore —";
+          valoreInput.value = "";
+        }
+        const label = filtro === "liberi" ? "liberi" : filtro === "contratto" ? "con contratto attivo" : "totali";
+        hintCount.textContent = count + " giocatori " + label;
+      }
+
+      document.querySelectorAll(".filtro-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          document.querySelectorAll(".filtro-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          applyFiltroGiocatori(btn.dataset.filtro);
+        });
+      });
+
+      // Inizializza contatore
+      applyFiltroGiocatori("tutti");
       const inputImporto = document.getElementById("importoOperazione");
       const lblImporto = document.getElementById("lbl-importo");
       const hintImporto = document.getElementById("hint-importo");
@@ -286,7 +339,9 @@
       }
       updateDurataPrestito();
 
-      // ── Aggiorna valore giocatore ──────────────────────────
+      const inputProvenienza = document.getElementById("provenienza");
+
+      // ── Aggiorna valore giocatore + auto-provenienza ───────
       selGiocatore.addEventListener("change", function () {
         const opt = selGiocatore.options[selGiocatore.selectedIndex];
         const val = opt ? opt.dataset.valore : "";
@@ -300,9 +355,17 @@
           valoreDisplay.textContent = "— seleziona prima un giocatore —";
           valoreInput.value = "";
         }
+        // Auto-popola provenienza col nome del titolare
+        const titolare = opt ? (opt.dataset.titolare || "") : "";
+        if (titolare) {
+          inputProvenienza.value = titolare;
+          inputProvenienza.style.background = "#fff8e1";
+        } else {
+          inputProvenienza.value = "";
+          inputProvenienza.style.background = "";
+        }
       });
 
-      const selProvenienza = document.getElementById("provenienza");
       const hintMercato = document.getElementById("hint-mercato");
 
       // ── Parametri finestre di mercato ──────────────────────
@@ -312,19 +375,6 @@
       const MERCATO_INV_FIN_M = parseInt(MERCATO_INV_FINE.split("-")[1], 10);
       const MERCATO_PRIV_IZ = parseInt("<%= (parametri && parametri.mercato_privato_inizio) || '01-07' %>".split("-")[1], 10);
       const MERCATO_PRIV_FIN = parseInt("<%= (parametri && parametri.mercato_privato_fine) || '15-02' %>".split("-")[1], 10);
-
-      function checkMercato() {
-        const prov = selProvenienza.value;
-        if (prov === "Pubblico") {
-          hintMercato.textContent = "Acquisti dal pubblico: mesi " + MERCATO_ESTIVO_IZ + "–" + MERCATO_ESTIVO_FIN + " (estiva) e " + MERCATO_INV_IZ_M + "–" + MERCATO_INV_FIN_M + " (invernale)";
-        } else if (prov === "Privato") {
-          hintMercato.textContent = "Acquisti tra presidenti: mesi " + MERCATO_PRIV_IZ + "–" + MERCATO_PRIV_FIN + " (attraversa il capodanno)";
-        } else {
-          hintMercato.textContent = "";
-        }
-      }
-      selProvenienza.addEventListener("change", checkMercato);
-      checkMercato();
 
       // ── Parametri stagione ─────────────────────────────────
       const STAGIONE_INIZIO = "<%= (parametri && parametri.stagione_inizio) || '01-07' %>"; // GG-MM
@@ -339,7 +389,7 @@
         const stipula     = inputStipula.value.trim();   // MM-YYYY
         const tipo        = selTipo.value;
         const durata      = parseInt(selDurata.value, 10);
-        const provenienza = selProvenienza.value;
+        const provenienza = inputProvenienza.value.trim();
 
         if (!stipula || !/^\d{2}-\d{4}$/.test(stipula) || !durata) {
           dataFineDisplay.textContent = "— si calcola automaticamente —";
@@ -375,7 +425,7 @@
 
       inputStipula.addEventListener("input", calcDataFine);
       selDurata.addEventListener("change", calcDataFine);
-      selProvenienza.addEventListener("change", calcDataFine);
+      inputProvenienza.addEventListener("input", calcDataFine);
       selTipo.addEventListener("change", calcDataFine);
     })();
   </script>

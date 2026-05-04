@@ -124,6 +124,33 @@
       </div>
     </div>
 
+    <!-- ══ SYNC QUOTAZIONI ───────────────────────────────────── -->
+    <div class="tool-card">
+      <div class="tool-info">
+        <h3>📈 Sync Quotazioni Transfermarkt</h3>
+        <p>
+          Scrapa tutte le 20 squadre di Serie A da Transfermarkt e aggiorna le quotazioni.<br>
+          I nuovi giocatori vengono creati; quelli esistenti vengono aggiornati.<br>
+          I giocatori non trovati nella rosa odierna vengono impostati su <strong>inactive</strong>.<br>
+          <em style="font-size:.8rem;color:var(--gray-400);">⏱ Operazione lenta (~3–5 min). Non chiudere la pagina.</em>
+        </p>
+      </div>
+      <div class="tool-actions" style="flex-direction:column; align-items:flex-end; gap:10px;">
+        <button id="btn-sync-tm" class="btn btn-primary">
+          ▶ Avvia sync quotazioni
+        </button>
+        <span id="sync-tm-spinner" style="display:none;"><span class="spinner"></span> Scraping in corso…</span>
+      </div>
+      <div id="sync-tm-output-wrap" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:.78rem; font-weight:700; color:var(--gray-700);">Log</span>
+          <button onclick="document.getElementById('sync-tm-output-wrap').style.display='none'"
+                  style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--gray-400);">✕ Chiudi</button>
+        </div>
+        <pre id="sync-tm-output" style="max-height:320px;overflow-y:auto;"></pre>
+      </div>
+    </div>
+
     <!-- ══ UTENTI ════════════════════════════════════════════════ -->
     <div class="section-title">👥 Utenti</div>
 
@@ -229,6 +256,67 @@
           outWrap.style.display = "block";
         } finally {
           btn.disabled         = false;
+          spinner.style.display = "none";
+        }
+      });
+    })();
+
+    // ── Sync Quotazioni (SSE streaming) ──────────────────────────
+    (function () {
+      const btn     = document.getElementById("btn-sync-tm");
+      const spinner = document.getElementById("sync-tm-spinner");
+      const outWrap = document.getElementById("sync-tm-output-wrap");
+      const outPre  = document.getElementById("sync-tm-output");
+
+      const COLOR = { info: "#a7d7b8", warn: "#fbbf24", error: "#f97066", success: "#4ade80", log: "#94a3b8", done: "#a7d7b8" };
+
+      function appendLine(text, color) {
+        const line = document.createElement("span");
+        line.style.color  = color || "#e2e8f0";
+        line.style.display = "block";
+        line.textContent  = text;
+        outPre.appendChild(line);
+        outPre.scrollTop = outPre.scrollHeight;
+      }
+
+      btn.addEventListener("click", async function () {
+        btn.disabled          = true;
+        spinner.style.display = "inline";
+        outPre.innerHTML      = "";
+        outWrap.style.display = "block";
+
+        try {
+          const response = await fetch("/admin/sync-quotazioni", { method: "POST" });
+          if (!response.ok) { throw new Error("HTTP " + response.status); }
+
+          const reader  = response.body.getReader();
+          const decoder = new TextDecoder();
+          let   buffer  = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop(); // riga incompleta
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              try {
+                const evt = JSON.parse(line.slice(6));
+                if (evt.type === "done") {
+                  const s = evt.stats;
+                  appendLine(`\n✅ COMPLETATO — squadreOk:${s.squadreOk} squadreKo:${s.squadreKo} aggiornati:${s.aggiornati} nuovi:${s.nuovi} inattivi:${s.inattivi}`, COLOR.done);
+                } else {
+                  appendLine(evt.msg || JSON.stringify(evt), COLOR[evt.type] || "#e2e8f0");
+                }
+              } catch { /* JSON parse error */ }
+            }
+          }
+        } catch (err) {
+          appendLine("Errore: " + err.message, COLOR.error);
+        } finally {
+          btn.disabled          = false;
           spinner.style.display = "none";
         }
       });

@@ -17,6 +17,7 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   nickname           String?
+  teamName           String?
   fantaTeam          FantaTeam?
   invitedBy          User?      @relation("UserInvites", fields: [invitedById], references: [id])
   invitees           User[]     @relation("UserInvites")
@@ -61,21 +62,37 @@ model SituazioneFinanziaria {
 }
 
 model Giocatore {
-  id          Int         @id @default(autoincrement())
-  nome        String
-  ruoloEsteso String?
-  ruolo       String      @db.Char(1)
-  squadra     String?
-  eta            Int?
-  anniContratto  Int?
-  valore         Decimal?    @db.Decimal(10, 2)
-  active      Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  contratti   Contratto[]
-  rosaGiocatori RosaGiocatore[]
+  id              Int         @id @default(autoincrement())
+  nome            String
+  ruoloEsteso     String?
+  ruolo           String      @db.Char(1)
+  squadra         String?
+  eta             Int?
+  anniContratto   Int?
+  valore          Decimal?    @db.Decimal(10, 2)
+  dataNascita     String?
+  nazionalita     String?
+  transfermarktId String?     @unique
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  contratti       Contratto[]
+  rosaGiocatori   RosaGiocatore[]
+  quotazioni      Quotazione[]
 
   @@map("giocatori")
+}
+
+model Quotazione {
+  id          Int       @id @default(autoincrement())
+  giocatoreId Int
+  valore      Decimal?  @db.Decimal(10, 2)
+  fonte       String?   @default("transfermarkt")
+  stagione    String?
+  createdAt   DateTime  @default(now())
+  giocatore   Giocatore @relation(fields: [giocatoreId], references: [id])
+
+  @@map("quotazioni")
 }
 
 model Contratto {

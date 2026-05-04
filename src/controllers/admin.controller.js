@@ -3,6 +3,8 @@ const prisma = require("../lib/prisma");
 const authService = require("../services/auth.service");
 const { logAction } = require("../services/log.service");
 const parametriService = require("../services/parametri.service");
+const { syncQuotazioni: runSyncQuotazioni } = require("../services/sync-quotazioni.service");
+const { scrapeSerieA, SERIE_A_TEAMS, scrapeSquadFromBrowser, createBrowser } = require("../services/transfermarkt.service");
 const { spawn } = require("child_process");
 const path = require("path");
 
@@ -298,7 +300,210 @@ async function adjustCrediti(req, res) {
   res.redirect("/admin/situazione-finanziaria?saved=1&adj=" + importo);
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, showRosa, saveRosa };
+// ── POST /admin/sync-quotazioni (SSE streaming — vecchio endpoint) ─────────────
+async function syncQuotazioni(req, res) {
+  res.setHeader("Content-Type",  "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection",    "keep-alive");
+  res.flushHeaders();
+
+  const send = (data) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
+  };
+
+  try {
+    const stats = await runSyncQuotazioni(send);
+    send({ type: "done", stats });
+  } catch (err) {
+    send({ type: "error", msg: err.message });
+  } finally {
+    res.end();
+  }
+}
+
+// ── GET /admin/sync-transfermarkt ────────────────────────────────────────────
+function showSyncTransfermarkt(req, res) {
+  res.render("admin/sync-transfermarkt", { currentUser: req.user });
+}
+
+// ── POST /admin/sync-transfermarkt/scrape (SSE) ──────────────────────────────
+// Esegue solo lo scraping + diff con DB; NON scrive nel DB.
+// Emette eventi SSE e alla fine un evento "done" con l'array preview.
+async function runScrapeTransfermarkt(req, res) {
+  res.setHeader("Content-Type",  "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection",    "keep-alive");
+  res.flushHeaders();
+
+  const send = (data) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
+  };
+
+  const { squadra } = req.body; // null = tutte
+
+  try {
+    // Filtra squadre se richiesto
+    const teamsFiltrati = squadra
+      ? SERIE_A_TEAMS.filter(t => t.nome === squadra)
+      : SERIE_A_TEAMS;
+
+    if (teamsFiltrati.length === 0) {
+      send({ type: "error", msg: `Squadra "${squadra}" non trovata nella lista.` });
+      return res.end();
+    }
+
+    send({ type: "log", msg: `🚀 Scraping ${teamsFiltrati.length} squadra/e…` });
+
+    const browser = await createBrowser();
+
+    // Raccoglie tutti i giocatori scrapati con il team associato
+    const allScraped = [];
+    const errori = [];
+
+    for (const team of teamsFiltrati) {
+      send({ type: "log", msg: `[TM] Scraping ${team.nome}…` });
+      try {
+        const players = await scrapeSquadFromBrowser(browser, team, (msg) => send({ type: "log", msg }));
+        if (players === null) {
+          errori.push(team.nome);
+          send({ type: "warn", msg: `  ✗ ${team.nome}: errore scraping` });
+        } else {
+          allScraped.push(...players);
+          send({ type: "scraped", team: team.nome, players });
+          const delay = 2000 + Math.floor(Math.random() * 2000);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      } catch (err) {
+        errori.push(team.nome);
+        send({ type: "warn", msg: `  ✗ ${team.nome}: ${err.message}` });
+      }
+    }
+
+    await browser.close();
+    send({ type: "log", msg: `[TM] Browser chiuso.` });
+
+    // ── Diff con DB ──────────────────────────────────────────────────────
+    send({ type: "log", msg: `🔍 Confronto con il database…` });
+
+    const preview = [];
+    const STAGIONE_CORRENTE = "2025-2026";
+
+    // Normalizza nome per matching
+    function normName(s) {
+      return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
+    }
+
+    // Giocatori DB per squadre coinvolte
+    const squadreCoinvolte = [...new Set(allScraped.map(p => p.squadra))];
+    const dbGiocatori = await prisma.giocatore.findMany({
+      where: { squadra: { in: squadreCoinvolte } },
+      select: { id: true, nome: true, squadra: true, valore: true, active: true, transfermarktId: true },
+    });
+
+    const dbByTmId   = new Map(dbGiocatori.filter(g => g.transfermarktId).map(g => [g.transfermarktId, g]));
+    const dbByNomeSq = new Map(dbGiocatori.map(g => [`${normName(g.nome)}|${g.squadra}`, g]));
+    const scrapatiIds = new Set();
+
+    for (const p of allScraped) {
+      let existing = p.transfermarktId ? dbByTmId.get(p.transfermarktId) : null;
+      if (!existing) existing = dbByNomeSq.get(`${normName(p.nome)}|${p.squadra}`);
+
+      if (existing) {
+        scrapatiIds.add(existing.id);
+        preview.push({ tipo: "update", dbId: existing.id, ...p, stagione: STAGIONE_CORRENTE });
+      } else {
+        preview.push({ tipo: "nuovo", dbId: null, ...p, stagione: STAGIONE_CORRENTE });
+      }
+    }
+
+    // Inattivi: in DB attivi per questa squadra ma non trovati oggi
+    for (const team of teamsFiltrati) {
+      const attivi = dbGiocatori.filter(g => g.squadra === team.nome && g.active && !scrapatiIds.has(g.id));
+      for (const g of attivi) {
+        preview.push({ tipo: "inattivo", dbId: g.id, nome: g.nome, squadra: g.squadra, valore: g.valore ? Number(g.valore) : null, stagione: STAGIONE_CORRENTE });
+      }
+    }
+
+    send({ type: "done", preview });
+
+  } catch (err) {
+    send({ type: "error", msg: err.message });
+  } finally {
+    res.end();
+  }
+}
+
+// ── POST /admin/sync-transfermarkt/import ────────────────────────────────────
+// Riceve l'array players confermato dall'utente e lo persiste nel DB.
+async function importTransfermarkt(req, res) {
+  const { players } = req.body;
+
+  if (!Array.isArray(players) || players.length === 0) {
+    return res.status(400).json({ error: "Nessun giocatore da importare." });
+  }
+
+  const stats = { nuovi: 0, aggiornati: 0, inattivi: 0, quotazioni: 0, errori: 0 };
+  const STAGIONE_CORRENTE = "2025-2026";
+
+  for (const p of players) {
+    try {
+      if (p.tipo === "inattivo") {
+        if (p.dbId) {
+          await prisma.giocatore.update({ where: { id: p.dbId }, data: { active: false } });
+          stats.inattivi++;
+        }
+        continue;
+      }
+
+      if (p.tipo === "update" && p.dbId) {
+        await prisma.giocatore.update({
+          where: { id: p.dbId },
+          data: {
+            squadra:         p.squadra,
+            valore:          p.valore,
+            active:          true,
+            ...(p.ruolo          && { ruolo: p.ruolo }),
+            ...(p.ruoloEsteso    && { ruoloEsteso: p.ruoloEsteso }),
+            ...(p.dataNascita    && { dataNascita: p.dataNascita }),
+            ...(p.nazionalita    && { nazionalita: p.nazionalita }),
+            ...(p.transfermarktId && { transfermarktId: p.transfermarktId }),
+          },
+        });
+        await prisma.quotazione.create({
+          data: { giocatoreId: p.dbId, valore: p.valore, fonte: "transfermarkt", stagione: STAGIONE_CORRENTE },
+        });
+        stats.aggiornati++;
+        stats.quotazioni++;
+
+      } else if (p.tipo === "nuovo") {
+        const g = await prisma.giocatore.create({
+          data: {
+            nome:            p.nome,
+            ruolo:           p.ruolo || "C",
+            ruoloEsteso:     p.ruoloEsteso   || null,
+            squadra:         p.squadra,
+            valore:          p.valore,
+            dataNascita:     p.dataNascita   || null,
+            nazionalita:     p.nazionalita   || null,
+            transfermarktId: p.transfermarktId || null,
+            active:          true,
+          },
+        });
+        await prisma.quotazione.create({
+          data: { giocatoreId: g.id, valore: p.valore, fonte: "transfermarkt", stagione: STAGIONE_CORRENTE },
+        });
+        stats.nuovi++;
+        stats.quotazioni++;
+      }
+    } catch (err) {
+      stats.errori++;
+    }
+  }
+
+  res.json(stats);
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -587,7 +792,7 @@ function runSeedGiocatori(req, res) {
 
 // ── GET /admin/contratti/nuovo ────────────────────────────────────────────────
 async function showNuovoContratto(req, res) {
-  const [giocatori, presidenti] = await Promise.all([
+  const [giocatori, presidenti, contrattiAttivi] = await Promise.all([
     prisma.giocatore.findMany({
       where:   { active: true },
       orderBy: { nome: "asc" },
@@ -598,10 +803,36 @@ async function showNuovoContratto(req, res) {
       orderBy: { email: "asc" },
       select:  { id: true, email: true, nickname: true, teamName: true },
     }),
+    prisma.contratto.findMany({
+      where:  { valido: true },
+      select: {
+        giocatoreId: true,
+        fantaTeam: {
+          select: {
+            nome: true,
+            user: { select: { nickname: true, email: true } },
+          },
+        },
+      },
+    }),
   ]);
 
+  // mappa giocatoreId → nome titolare (nickname o email del presidente)
+  const titolareMap = {};
+  contrattiAttivi.forEach(c => {
+    const presidente = c.fantaTeam?.user;
+    const nome = (presidente?.nickname || presidente?.email || c.fantaTeam?.nome || "N.A.");
+    titolareMap[c.giocatoreId] = nome;
+  });
+
+  const giocatoriAnnotati = giocatori.map(g => ({
+    ...g,
+    hasContratto: g.id in titolareMap,
+    titolareContratto: titolareMap[g.id] || null,
+  }));
+
   res.render("admin/nuovo-contratto", {
-    giocatori,
+    giocatori: giocatoriAnnotati,
     presidenti,
     currentUser: req.user,
     error: null,
