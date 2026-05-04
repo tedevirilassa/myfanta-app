@@ -129,13 +129,22 @@
       <div class="tool-info">
         <h3>📈 Sync Quotazioni Transfermarkt</h3>
         <p>
-          Scrapa tutte le 20 squadre di Serie A da Transfermarkt e aggiorna le quotazioni.<br>
+          Scrapa le squadre di Serie A da Transfermarkt e aggiorna le quotazioni.<br>
           I nuovi giocatori vengono creati; quelli esistenti vengono aggiornati.<br>
           I giocatori non trovati nella rosa odierna vengono impostati su <strong>inactive</strong>.<br>
-          <em style="font-size:.8rem;color:var(--gray-400);">⏱ Operazione lenta (~3–5 min). Non chiudere la pagina.</em>
+          <em style="font-size:.8rem;color:var(--gray-400);">⏱ Operazione lenta (~3–5 min per tutte le squadre). Non chiudere la pagina.</em>
         </p>
       </div>
       <div class="tool-actions" style="flex-direction:column; align-items:flex-end; gap:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label for="sel-sync-tm-squadra" style="font-size:.82rem;color:var(--gray-600);white-space:nowrap;">Squadra:</label>
+          <select id="sel-sync-tm-squadra" class="form-control" style="min-width:170px;">
+            <option value="">— Tutte le squadre —</option>
+            <% serieATeams.forEach(function(nome) { %>
+            <option value="<%= nome %>"><%= nome %></option>
+            <% }); %>
+          </select>
+        </div>
         <button id="btn-sync-tm" class="btn btn-primary">
           ▶ Avvia sync quotazioni
         </button>
@@ -285,8 +294,17 @@
         outPre.innerHTML      = "";
         outWrap.style.display = "block";
 
+        const squadra = document.getElementById("sel-sync-tm-squadra").value;
+
         try {
-          const response = await fetch("/admin/sync-quotazioni", { method: "POST" });
+          const body = new URLSearchParams();
+          if (squadra) body.append("squadra", squadra);
+
+          const response = await fetch("/admin/sync-quotazioni", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+          });
           if (!response.ok) { throw new Error("HTTP " + response.status); }
 
           const reader  = response.body.getReader();

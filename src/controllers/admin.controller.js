@@ -311,8 +311,10 @@ async function syncQuotazioni(req, res) {
     try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client disconnected */ }
   };
 
+  const squadraFiltro = (req.body && req.body.squadra) || null;
+
   try {
-    const stats = await runSyncQuotazioni(send);
+    const stats = await runSyncQuotazioni(send, squadraFiltro);
     send({ type: "done", stats });
   } catch (err) {
     send({ type: "error", msg: err.message });
@@ -360,22 +362,38 @@ async function runScrapeTransfermarkt(req, res) {
     const allScraped = [];
     const errori = [];
 
+    const RETRY_MAX   = 3;
+    const RETRY_DELAY = 10_000;
+
     for (const team of teamsFiltrati) {
       send({ type: "log", msg: `[TM] Scraping ${team.nome}…` });
-      try {
-        const players = await scrapeSquadFromBrowser(browser, team, (msg) => send({ type: "log", msg }));
-        if (players === null) {
-          errori.push(team.nome);
-          send({ type: "warn", msg: `  ✗ ${team.nome}: errore scraping` });
-        } else {
-          allScraped.push(...players);
-          send({ type: "scraped", team: team.nome, players });
-          const delay = 2000 + Math.floor(Math.random() * 2000);
-          await new Promise(r => setTimeout(r, delay));
+
+      let players = null;
+      let lastErr = null;
+
+      for (let attempt = 1; attempt <= RETRY_MAX; attempt++) {
+        try {
+          players = await scrapeSquadFromBrowser(browser, team, (msg) => send({ type: "log", msg }));
+          lastErr = null;
+          break; // successo
+        } catch (err) {
+          lastErr = err;
+          if (attempt < RETRY_MAX) {
+            send({ type: "warn", msg: `  ↺ ${team.nome}: tentativo ${attempt}/${RETRY_MAX} fallito (${err.message}). Nuovo tentativo in ${RETRY_DELAY / 1000}s…` });
+            await new Promise(r => setTimeout(r, RETRY_DELAY));
+          }
         }
-      } catch (err) {
+      }
+
+      if (players === null || lastErr) {
         errori.push(team.nome);
-        send({ type: "warn", msg: `  ✗ ${team.nome}: ${err.message}` });
+        const errMsg = lastErr ? lastErr.message : "errore scraping";
+        send({ type: "warn", msg: `  ✗ ${team.nome}: tutti i ${RETRY_MAX} tentativi falliti. Ultimo errore: ${errMsg}` });
+      } else {
+        allScraped.push(...players);
+        send({ type: "scraped", team: team.nome, players });
+        const delay = 2000 + Math.floor(Math.random() * 2000);
+        await new Promise(r => setTimeout(r, delay));
       }
     }
 
@@ -736,6 +754,7 @@ async function showPannello(req, res) {
   res.render("admin/pannello", {
     users,
     currentUser: req.user,
+    serieATeams: SERIE_A_TEAMS.map(t => t.nome),
     message: req.query.saved ? "Profilo aggiornato." : null,
     error: null,
   });

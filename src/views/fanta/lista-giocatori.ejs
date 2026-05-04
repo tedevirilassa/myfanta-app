@@ -126,6 +126,16 @@
       <div class="alert alert-error">❌ <%= error %></div>
     <% } %>
 
+    <% if (dataFiltro) { %>
+    <div class="alert" style="background:#fff8e1;border-left:4px solid #f59e0b;color:#92400e;padding:10px 18px;border-radius:8px;margin-bottom:18px;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:1.2rem;">📅</span>
+      <span>Stai visualizzando le <strong>quotazioni del <%= dataFiltro %></strong>.
+        I valori mostrati si riferiscono a quella data di scraping.
+        <a href="/fanta/lista-giocatori" style="margin-left:12px;font-size:.85rem;color:#b45309;">✕ Torna ai valori attuali</a>
+      </span>
+    </div>
+    <% } %>
+
     <!-- ── FILTRI ─────────────────────────────────────────────── -->
     <div class="filters-card">
       <div class="filters-grid">
@@ -198,6 +208,17 @@
           </select>
         </div>
 
+        <!-- Data scraping -->
+        <div class="form-group">
+          <label for="f-data-scraping">Data scraping</label>
+          <select id="f-data-scraping" onchange="window.location.href='/fanta/lista-giocatori' + (this.value ? '?dataQuotazione=' + this.value : '')">
+            <option value="">— Valori attuali —</option>
+            <% dateDisponibili.forEach(function(d) { %>
+              <option value="<%= d %>" <%= dataFiltro === d ? 'selected' : '' %>><%= d %></option>
+            <% }); %>
+          </select>
+        </div>
+
       </div>
 
       <div class="filters-footer">
@@ -242,7 +263,7 @@
                 data-ruolo-esteso="<%= g.ruoloEsteso || '' %>"
                 data-squadra="<%= g.squadra || '' %>"
                 data-eta="<%= g.eta !== null ? g.eta : '' %>"
-                data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
+                data-valore="<%= valoriStorici ? (valoriStorici[g.id] !== undefined ? (valoriStorici[g.id] !== null ? valoriStorici[g.id] : '') : '') : (g.valore !== null ? Number(g.valore) : '') %>"
                 data-nome="<%= g.nome.toLowerCase() %>"
                 data-avail="<%= g.contratti && g.contratti.length > 0 ? '0' : '1' %>"
               >
@@ -255,8 +276,14 @@
                 <td><%= g.squadra || '—' %></td>
                 <td class="num-col"><%= g.eta !== null ? g.eta : '—' %></td>
                 <td class="num-col">
-                  <% if (g.valore !== null) { %>
-                    <%= Number(g.valore).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>
+                  <% 
+                    const valoreRiga = valoriStorici
+                      ? (valoriStorici[g.id] !== undefined ? valoriStorici[g.id] : null)
+                      : (g.valore !== null ? Number(g.valore) : null);
+                  %>
+                  <% if (valoreRiga !== null) { %>
+                    <%= Number(valoreRiga).toLocaleString('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) %>
+                    <% if (valoriStorici) { %><span style="font-size:.68rem;color:#f59e0b;margin-left:2px;">📅</span><% } %>
                   <% } else { %>—<% } %>
                 </td>
                 <td>
@@ -412,6 +439,11 @@
       });
 
       document.getElementById("btn-reset").addEventListener("click", function () {
+        // Se c'è un filtro data attivo, ricarica la pagina senza di esso
+        if (document.getElementById("f-data-scraping").value) {
+          window.location.href = "/fanta/lista-giocatori";
+          return;
+        }
         ["f-ruolo","f-ruolo-esteso","f-squadra","f-avail"].forEach(function(id) {
           document.getElementById(id).value = "";
         });

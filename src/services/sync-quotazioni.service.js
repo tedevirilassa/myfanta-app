@@ -29,10 +29,11 @@ function normalizeName(str) {
  * Esegue il ciclo completo: scraping → upsert giocatori → storico quotazioni
  * → marcatura inattivi.
  *
- * @param {Function} onEvent - callback per eventi SSE { type, msg, stats? }
+ * @param {Function} onEvent  - callback per eventi SSE { type, msg, stats? }
+ * @param {string|null} squadraFiltro - se valorizzato, scrapa solo questa squadra
  * @returns {Promise<object>} statistiche finali
  */
-async function syncQuotazioni(onEvent = console.log) {
+async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
   const stats = {
     squadreOk:  0,
     squadreKo:  0,
@@ -43,9 +44,11 @@ async function syncQuotazioni(onEvent = console.log) {
   };
 
   // ── 1. Scraping ─────────────────────────────────────────────────────────
-  onEvent({ type: 'info', msg: '🚀 Avvio scraping Transfermarkt…' });
+  const label = squadraFiltro ? squadraFiltro : 'tutte le squadre';
+  onEvent({ type: 'info', msg: `🚀 Avvio scraping Transfermarkt (${label})…` });
 
-  const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }));
+  const teamNames = squadraFiltro ? [squadraFiltro] : null;
+  const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }), teamNames);
 
   // ── 2. Elaborazione per squadra ─────────────────────────────────────────
   for (const [teamNome, giocatori] of risultati.entries()) {

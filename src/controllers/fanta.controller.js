@@ -149,10 +149,39 @@ async function showGiocatori(req, res) {
 
 async function showListaGiocatori(req, res) {
   try {
+    const dataFiltro = req.query.dataQuotazione || null;
+
     const giocatori = await prisma.giocatore.findMany({
       orderBy: [{ ruolo: "asc" }, { nome: "asc" }],
       include: { contratti: { select: { id: true } } },
     });
+
+    // Date distinte disponibili nella tabella quotazioni
+    const rawDates = await prisma.$queryRaw`
+      SELECT DISTINCT DATE("createdAt") AS data
+      FROM quotazioni
+      ORDER BY data DESC
+    `;
+    const dateDisponibili = rawDates.map(r => {
+      const d = r.data;
+      if (d instanceof Date) return d.toISOString().split("T")[0];
+      return String(r.data).split("T")[0];
+    });
+
+    // Se è selezionata una data specifica, carica i valori storici di quel giorno
+    let valoriStorici = null;
+    if (dataFiltro) {
+      const qstorico = await prisma.$queryRaw`
+        SELECT DISTINCT ON ("giocatoreId") "giocatoreId", valore
+        FROM quotazioni
+        WHERE DATE("createdAt") = ${dataFiltro}::date
+        ORDER BY "giocatoreId", "createdAt" DESC
+      `;
+      valoriStorici = {};
+      qstorico.forEach(q => {
+        valoriStorici[q.giocatoreId] = q.valore !== null ? Number(q.valore) : null;
+      });
+    }
 
     const ruoliEstesi = [...new Set(giocatori.map(g => g.ruoloEsteso).filter(Boolean))].sort();
     const squadre     = [...new Set(giocatori.map(g => g.squadra).filter(Boolean))].sort();
@@ -164,6 +193,9 @@ async function showListaGiocatori(req, res) {
       gDeleted: req.query.gDeleted === "1",
       gError:   req.query.gError || null,
       error: null,
+      dateDisponibili,
+      dataFiltro,
+      valoriStorici,
     });
   } catch (err) {
     console.error("DB error:", err.message);
@@ -172,6 +204,7 @@ async function showListaGiocatori(req, res) {
       currentUser: req.user,
       gSaved: false, gDeleted: false, gError: null,
       error: err.message,
+      dateDisponibili: [], dataFiltro: null, valoriStorici: null,
     });
   }
 }

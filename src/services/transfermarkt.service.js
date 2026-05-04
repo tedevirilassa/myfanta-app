@@ -50,9 +50,11 @@ function parseValore(str) {
   const cleaned = str.replace(/[€\s\u00a0]/g, '').replace(',', '.');
   const num = parseFloat(cleaned);
   if (isNaN(num)) return null;
-  if (/Mrd/i.test(str)) return Math.round(num * 1000 * 100) / 100;
+  if (/Mrd/i.test(str))           return Math.round(num * 1000 * 100) / 100;
   if (/Mln|Mio|Mil\./i.test(str)) return Math.round(num * 100) / 100;
-  if (/Tsd\./i.test(str)) return Math.round((num / 1000) * 100) / 100;
+  if (/Tsd\.|tsd|Tsd\b/i.test(str) || /\bK\b/i.test(str) || /mila/i.test(str)) return Math.round((num / 1000) * 100) / 100;
+  // Valore numerico puro senza unità: se >= 100000 assume sia in euro, converti in milioni
+  if (!isNaN(num) && num >= 100000) return Math.round((num / 1_000_000) * 100) / 100;
   return null;
 }
 
@@ -62,17 +64,31 @@ function parseValore(str) {
  */
 function normalizeDate(str) {
   if (!str) return null;
-  // Rimuovi età tra parentesi
+  // Rimuovi età tra parentesi: "11/12/2003 (22)" → "11/12/2003"
   const cleaned = str.replace(/\s*\(\d+\)\s*$/, '').trim();
-  // Sostituisci abbreviazioni italiane con inglesi per parsing
+
+  // Formato dd/mm/yyyy (italiano con slash)
+  const slashMatch = cleaned.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, dd, mm, yyyy] = slashMatch;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Formato dd.mm.yyyy (con punto)
+  const dotMatch = cleaned.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotMatch) {
+    const [, dd, mm, yyyy] = dotMatch;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Formato testuale con mesi abbreviati (es. "Dec 11, 2003" o "11 dic 2003")
   const mapped = cleaned
     .replace(/\bgen\b/i, 'Jan').replace(/\bfeb\b/i, 'Feb')
     .replace(/\bmar\b/i, 'Mar').replace(/\bapr\b/i, 'Apr')
     .replace(/\bmag\b/i, 'May').replace(/\bgiu\b/i, 'Jun')
     .replace(/\blug\b/i, 'Jul').replace(/\bago\b/i, 'Aug')
     .replace(/\bset\b/i, 'Sep').replace(/\bott\b/i, 'Oct')
-    .replace(/\bnov\b/i, 'Nov').replace(/\bdic\b/i, 'Dec')
-    .replace(/\./g, ' ');
+    .replace(/\bnov\b/i, 'Nov').replace(/\bdic\b/i, 'Dec');
   try {
     const d = new Date(mapped);
     if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
@@ -98,7 +114,7 @@ function mapRuolo(ruoloEsteso) {
  * @param {import('playwright').Browser} browser
  * @param {{ nome: string, slug: string }} team
  * @param {Function} onLog
- * @returns {Promise<Array|null>} array giocatori o null se errore
+ * @returns {Promise<Array>} array giocatori — lancia eccezione su errore (gestita dal retry wrapper)
  */
 async function scrapSquad(browser, team, onLog) {
   const url  = `${BASE_URL}${team.slug}/saison_id/${STAGIONE_ID}`;
@@ -159,7 +175,8 @@ async function scrapSquad(browser, team, onLog) {
             /\b\d{4}\b/.test(t) &&
             (
               /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic)/i.test(t) ||
-              /\d{2}\.\d{2}\.\d{4}/.test(t)
+              /\d{2}\.\d{2}\.\d{4}/.test(t) ||
+              /\d{2}\/\d{2}\/\d{4}/.test(t)
             )
           ) {
             dataNasRaw = t;
@@ -198,22 +215,50 @@ async function scrapSquad(browser, team, onLog) {
     onLog(`  ✓ ${team.nome}: ${players.length} giocatori trovati`);
     return players;
 
-  } catch (err) {
-    onLog(`  ✗ ${team.nome}: errore – ${err.message}`);
-    return null; // null segnala errore su questa squadra
   } finally {
     await page.close();
   }
 }
 
+// ── Retry wrapper ────────────────────────────────────────────────────────────
+
+const RETRY_MAX   = 3;
+const RETRY_DELAY = 10_000; // ms
+
+/**
+ * Esegue fn() con retry automatico fino a RETRY_MAX tentativi.
+ * Attende RETRY_DELAY ms tra un tentativo e l'altro.
+ * @param {Function} fn       - funzione asincrona da eseguire
+ * @param {string}   label    - nome per i log
+ * @param {Function} onLog    - callback log
+ * @returns {Promise<*>}      - risultato di fn(), o null se tutti i tentativi falliscono
+ */
+async function withRetry(fn, label, onLog) {
+  let lastErr;
+  for (let attempt = 1; attempt <= RETRY_MAX; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < RETRY_MAX) {
+        onLog(`  ↺ ${label}: tentativo ${attempt}/${RETRY_MAX} fallito (${err.message}). Nuovo tentativo in ${RETRY_DELAY / 1000}s…`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+      }
+    }
+  }
+  onLog(`  ✗ ${label}: tutti i ${RETRY_MAX} tentativi falliti. Ultimo errore: ${lastErr.message}`);
+  return null;
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
- * Scrapa tutte le squadre di Serie A in sequenza.
+ * Scrapa le squadre di Serie A in sequenza.
  * @param {Function} onLog - callback per i log progressivi
- * @returns {Promise<Map<string, Array|null>>} mappa teamNome → giocatori (null = errore)
+ * @param {string[]|null} teamNames - se valorizzato, scrapa solo queste squadre
+ * @returns {Promise<Map<string, Array|null>>}
  */
-async function scrapeSerieA(onLog = console.log) {
+async function scrapeSerieA(onLog = console.log, teamNames = null) {
   onLog('[TM] Avvio browser stealth…');
 
   const browser   = await chromium.launch({
@@ -222,10 +267,18 @@ async function scrapeSerieA(onLog = console.log) {
   });
   const risultati = new Map();
 
+  const lista = teamNames && teamNames.length > 0
+    ? SERIE_A_TEAMS.filter(t => teamNames.includes(t.nome))
+    : SERIE_A_TEAMS;
+
   try {
-    for (const team of SERIE_A_TEAMS) {
+    for (const team of lista) {
       onLog(`[TM] Scraping ${team.nome}…`);
-      const players = await scrapSquad(browser, team, onLog);
+      const players = await withRetry(
+        () => scrapSquad(browser, team, onLog),
+        team.nome,
+        onLog,
+      );
       risultati.set(team.nome, players);
       // Delay anti-bot: 2–4 secondi random
       const delay = 2000 + Math.floor(Math.random() * 2000);
@@ -239,7 +292,7 @@ async function scrapeSerieA(onLog = console.log) {
   return risultati;
 }
 
-module.exports = { scrapeSerieA, scrapeSquadFromBrowser: scrapSquad, createBrowser, SERIE_A_TEAMS, parseValore, normalizeDate, mapRuolo };
+module.exports = { scrapeSerieA, scrapeSquadFromBrowser: scrapSquad, createBrowser, withRetry, SERIE_A_TEAMS, parseValore, normalizeDate, mapRuolo };
 
 async function createBrowser() {
   return chromium.launch({
