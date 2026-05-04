@@ -155,7 +155,7 @@
               <th>Squadra</th>
               <th>Ruolo</th>
               <th>Data nasc.</th>
-              <th>Naz.</th>
+              <th>Età</th>
               <th>Valore (M€)</th>
               <th>TM-ID</th>
             </tr>
@@ -339,7 +339,7 @@
           <td>${escHtml(p.squadra || '—')}</td>
           <td>${escHtml(p.ruolo || '—')}</td>
           <td style="white-space:nowrap;">${escHtml(p.dataNascita || '—')}</td>
-          <td>${escHtml(p.nazionalita || '—')}</td>
+          <td style="text-align:center;">${p.eta != null ? p.eta : '—'}</td>
           <td style="text-align:right;">${p.valore != null ? Number(p.valore).toFixed(1) : '—'}</td>
           <td style="font-size:.72rem;color:var(--gray-400);">${escHtml(p.transfermarktId || '—')}</td>
         `;

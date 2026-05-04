@@ -1,4 +1,5 @@
 'use strict';
+require('dotenv').config();
 const prisma = require('../src/lib/prisma');
 
 async function main() {

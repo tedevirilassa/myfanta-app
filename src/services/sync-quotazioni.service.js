@@ -96,7 +96,7 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
               ...(g.ruoloEsteso    && { ruoloEsteso: g.ruoloEsteso }),
               ...(g.ruolo         && { ruolo: g.ruolo }),
               ...(g.dataNascita   && { dataNascita: g.dataNascita }),
-              ...(g.nazionalita   && { nazionalita: g.nazionalita }),
+              ...(g.eta != null    && { eta: g.eta }),
               ...(g.transfermarktId && { transfermarktId: g.transfermarktId }),
             },
           });
@@ -124,7 +124,7 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
               squadra:         g.squadra,
               valore:          g.valore,
               dataNascita:     g.dataNascita   || null,
-              nazionalita:     g.nazionalita   || null,
+              eta:             g.eta           ?? null,
               transfermarktId: g.transfermarktId || null,
               active:          true,
             },

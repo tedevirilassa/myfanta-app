@@ -483,7 +483,7 @@ async function importTransfermarkt(req, res) {
             ...(p.ruolo          && { ruolo: p.ruolo }),
             ...(p.ruoloEsteso    && { ruoloEsteso: p.ruoloEsteso }),
             ...(p.dataNascita    && { dataNascita: p.dataNascita }),
-            ...(p.nazionalita    && { nazionalita: p.nazionalita }),
+            ...(p.eta != null     && { eta: p.eta }),
             ...(p.transfermarktId && { transfermarktId: p.transfermarktId }),
           },
         });
@@ -502,7 +502,7 @@ async function importTransfermarkt(req, res) {
             squadra:         p.squadra,
             valore:          p.valore,
             dataNascita:     p.dataNascita   || null,
-            nazionalita:     p.nazionalita   || null,
+            eta:             p.eta           ?? null,
             transfermarktId: p.transfermarktId || null,
             active:          true,
           },

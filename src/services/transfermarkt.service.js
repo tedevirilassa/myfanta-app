@@ -62,6 +62,12 @@ function parseValore(str) {
  * Normalizza la stringa data di nascita in formato YYYY-MM-DD.
  * Gestisce "Jun 15, 2000 (25)", "15.06.2000 (25)", "15 giu. 2000 (25)".
  */
+function parseEta(str) {
+  if (!str) return null;
+  const m = str.match(/\((\d+)\)/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
 function normalizeDate(str) {
   if (!str) return null;
   // Rimuovi età tra parentesi: "11/12/2003 (22)" → "11/12/2003"
@@ -101,9 +107,9 @@ function normalizeDate(str) {
  */
 function mapRuolo(ruoloEsteso) {
   const r = (ruoloEsteso || '').toLowerCase();
-  if (/portier|goalkeeper|keeper/.test(r))                    return 'P';
-  if (/difensor|defender|back|stopper|libero/.test(r))        return 'D';
-  if (/attacc|forward|striker|punta|ala|winger|seconda/.test(r)) return 'A';
+  if (/portier|goalkeeper|keeper/.test(r))                                             return 'P';
+  if (/difensor|defender|back|stopper|libero|terzino/.test(r))                        return 'D';
+  if (/attacc|forward|striker|punta|ala|winger|seconda|esterno/.test(r))     return 'A';
   return 'C';
 }
 
@@ -117,7 +123,7 @@ function mapRuolo(ruoloEsteso) {
  * @returns {Promise<Array>} array giocatori — lancia eccezione su errore (gestita dal retry wrapper)
  */
 async function scrapSquad(browser, team, onLog) {
-  const url  = `${BASE_URL}${team.slug}/saison_id/${STAGIONE_ID}`;
+  const url  = `${BASE_URL}${team.slug}/saison_id/${STAGIONE_ID}/plus/1`;
   const page = await browser.newPage();
 
   try {
@@ -159,58 +165,100 @@ async function scrapSquad(browser, team, onLog) {
         const nomeCompleto    = (profileLink.textContent || '').trim();
         if (!nomeCompleto) return;
 
-        // Ruolo: seconda riga nell'inline-table della cella nome
+        // Ruolo esteso: seconda riga dell'inline-table nella cella nome
         let ruoloEsteso = '';
-        const inlineRows = row.querySelectorAll('.inline-table tr');
-        if (inlineRows.length >= 2) {
-          ruoloEsteso = (inlineRows[1].textContent || '').trim();
-        }
-
-        // Data di nascita: cerca td con anno a 4 cifre + nome mese
-        let dataNasRaw = null;
-        const tds = Array.from(row.querySelectorAll('td'));
-        for (const td of tds) {
-          const t = td.textContent.trim();
-          if (
-            /\b\d{4}\b/.test(t) &&
-            (
-              /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic)/i.test(t) ||
-              /\d{2}\.\d{2}\.\d{4}/.test(t) ||
-              /\d{2}\/\d{2}\/\d{4}/.test(t)
-            )
-          ) {
-            dataNasRaw = t;
-            break;
+        const nameCell = row.querySelector('td.posrela') || row.querySelector('td.hauptlink');
+        if (nameCell) {
+          const inlineRows = nameCell.querySelectorAll('.inline-table tr');
+          if (inlineRows.length >= 2) {
+            ruoloEsteso = (inlineRows[1].textContent || '').trim();
+          }
+          // Fallback: ruolo come ultimo "token" nel testo della cella, dopo il nome
+          if (!ruoloEsteso) {
+            const cellText = (nameCell.textContent || '').trim();
+            // Il nome appare due volte, poi il ruolo: "Nome Cognome Nome Cognome Ruolo"
+            const lines = cellText.split(/\n/).map(s => s.trim()).filter(Boolean);
+            if (lines.length >= 2) {
+              ruoloEsteso = lines[lines.length - 1];
+            }
           }
         }
 
-        // Nazionalità: prima flag con titolo
-        let nazionalita = null;
-        const flagImgs  = row.querySelectorAll('td.zentriert img[title]');
-        if (flagImgs.length > 0) {
-          nazionalita = flagImgs[0].getAttribute('title');
+        // Data di nascita + età: cerca td con una data il cui anno sia ≤ anno corrente
+        // (esclude date future come scadenze contratto es. 30/06/2028)
+        let dataNasRaw = null;
+        let etaRaw     = null;
+        const currentYear = new Date().getFullYear();
+        const tds = Array.from(row.querySelectorAll('td'));
+        for (let i = 0; i < tds.length; i++) {
+          const t = tds[i].textContent.trim();
+
+          // Formato dd/mm/yyyy o dd.mm.yyyy — estrai l'anno e validalo
+          const numericMatch = t.match(/\b(\d{2})[\/\.](\d{2})[\/\.](\d{4})\b/);
+          if (numericMatch) {
+            const yr = parseInt(numericMatch[3], 10);
+            if (yr >= 1950 && yr <= currentYear) {
+              dataNasRaw = t;
+              const inlineAge = t.match(/\((\d+)\)/);
+              if (inlineAge) {
+                etaRaw = inlineAge[1];
+              } else if (tds[i + 1]) {
+                const nextText = tds[i + 1].textContent.trim();
+                const nextAge  = nextText.match(/^\(?(\d{1,2})\)?$/);
+                if (nextAge) etaRaw = nextAge[1];
+              }
+              break;
+            }
+            continue; // anno fuori range, salta
+          }
+
+          // Formato testuale con mese abbreviato + anno 4 cifre
+          const textualYearM = t.match(/\b(\d{4})\b/);
+          if (
+            textualYearM &&
+            /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic)/i.test(t)
+          ) {
+            const yr = parseInt(textualYearM[1], 10);
+            if (yr >= 1950 && yr <= currentYear) {
+              dataNasRaw = t;
+              const inlineAge = t.match(/\((\d+)\)/);
+              if (inlineAge) etaRaw = inlineAge[1];
+              break;
+            }
+          }
         }
 
         // Valore di mercato
         const valoreEl  = row.querySelector('td.rechts.hauptlink');
         const valoreStr = valoreEl ? valoreEl.textContent.trim() : null;
 
-        results.push({ transfermarktId, nomeCompleto, ruoloEsteso, dataNasRaw, nazionalita, valoreStr });
+        results.push({ transfermarktId, nomeCompleto, ruoloEsteso, dataNasRaw, etaRaw, valoreStr });
       });
 
       return results;
     });
 
-    const players = rawPlayers.map(p => ({
-      transfermarktId: p.transfermarktId,
-      nome:            p.nomeCompleto,
-      ruoloEsteso:     p.ruoloEsteso || null,
-      ruolo:           mapRuolo(p.ruoloEsteso),
-      dataNascita:     normalizeDate(p.dataNasRaw),
-      nazionalita:     p.nazionalita || null,
-      squadra:         team.nome,
-      valore:          parseValore(p.valoreStr),
-    }));
+    const today = new Date();
+    const players = rawPlayers.map(p => {
+      const dataNascita = normalizeDate(p.dataNasRaw);
+      let eta = null;
+      if (dataNascita) {
+        const nascita = new Date(dataNascita);
+        eta = today.getFullYear() - nascita.getFullYear();
+        const mDiff = today.getMonth() - nascita.getMonth();
+        if (mDiff < 0 || (mDiff === 0 && today.getDate() < nascita.getDate())) eta--;
+      }
+      return {
+        transfermarktId: p.transfermarktId,
+        nome:            p.nomeCompleto,
+        ruoloEsteso:     p.ruoloEsteso || null,
+        ruolo:           mapRuolo(p.ruoloEsteso),
+        dataNascita,
+        eta,
+        squadra:         team.nome,
+        valore:          parseValore(p.valoreStr),
+      };
+    });
 
     onLog(`  ✓ ${team.nome}: ${players.length} giocatori trovati`);
     return players;
@@ -292,7 +340,7 @@ async function scrapeSerieA(onLog = console.log, teamNames = null) {
   return risultati;
 }
 
-module.exports = { scrapeSerieA, scrapeSquadFromBrowser: scrapSquad, createBrowser, withRetry, SERIE_A_TEAMS, parseValore, normalizeDate, mapRuolo };
+module.exports = { scrapeSerieA, scrapeSquadFromBrowser: scrapSquad, createBrowser, withRetry, SERIE_A_TEAMS, parseValore, normalizeDate, parseEta, mapRuolo };
 
 async function createBrowser() {
   return chromium.launch({
