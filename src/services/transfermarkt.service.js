@@ -167,8 +167,14 @@ async function scrapSquad(browser, team, onLog, ruoliMap = null) {
       await page.waitForTimeout(900);
     } catch { /* banner assente */ }
 
-    // Attendi la tabella dei giocatori
-    await page.waitForSelector('table.items', { timeout: 20000 });
+    // Attendi la tabella dei giocatori — se dopo 30s non compare, logga l'URL e lancia errore
+    try {
+      await page.waitForSelector('table.items', { timeout: 30000 });
+    } catch (waitErr) {
+      const pageUrl = page.url();
+      const bodySnippet = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '');
+      throw new Error(`table.items non trovata (url: ${pageUrl}). Body: ${bodySnippet}`);
+    }
 
     // Estrai tutti i dati in un unico evaluate per efficienza
     const rawPlayers = await page.evaluate(() => {
