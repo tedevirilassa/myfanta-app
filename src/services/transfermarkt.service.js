@@ -6,6 +6,11 @@
 // Installazione: npm install playwright-extra puppeteer-extra-plugin-stealth
 //                npx playwright install chromium
 
+// Forza Playwright a cercare i browser in node_modules (compatibile con Render)
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+}
+
 const { chromium } = require('playwright-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
