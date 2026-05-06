@@ -264,7 +264,7 @@ async function showListaGiocatori(req, res) {
   }
 }
 
-module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose };
+module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio };
 
 // ── GET /fanta/rose ───────────────────────────────────────────────────────────
 async function showRose(req, res) {
@@ -343,5 +343,65 @@ async function showRose(req, res) {
       currentUser: req.user,
       error: "Errore nel caricamento: " + err.message,
     });
+  }
+}
+
+// ── GET /fanta/rose/:fantaTeamId ──────────────────────────────────────────────
+async function showRosaDettaglio(req, res) {
+  try {
+    const fantaTeamId = parseInt(req.params.fantaTeamId, 10);
+    if (isNaN(fantaTeamId)) return res.redirect("/fanta/rose");
+
+    const params = await parametriService.getAll();
+    const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+    const now = new Date();
+    const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
+    const stagione = `${annoInizio}-${annoInizio + 1}`;
+
+    const fantaTeam = await prisma.fantaTeam.findUnique({
+      where: { id: fantaTeamId },
+      include: {
+        user: { select: { nickname: true, email: true } },
+        contratti: {
+          where: { valido: true },
+          include: { giocatore: true },
+        },
+        rosaGiocatori: {
+          where: { stagione },
+          select: { giocatoreId: true, categoria: true },
+        },
+      },
+    });
+
+    if (!fantaTeam) return res.redirect("/fanta/rose");
+
+    const rosaMap = {};
+    fantaTeam.rosaGiocatori.forEach((r) => { rosaMap[r.giocatoreId] = r.categoria; });
+
+    const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
+
+    const giocatori = fantaTeam.contratti.map((c) => ({
+      id: c.giocatore.id,
+      nome: c.giocatore.nome,
+      ruolo: c.giocatore.ruolo,
+      squadra: c.giocatore.squadra,
+      eta: c.giocatore.eta,
+      valore: c.giocatore.valore ? +c.giocatore.valore : null,
+      anniContratto: c.durataContratto,
+      tipo: c.tipo,
+      categoria: rosaMap[c.giocatore.id] || "InRosa",
+    })).sort((a, b) => (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) || a.nome.localeCompare(b.nome));
+
+    res.render("fanta/rosa-dettaglio", {
+      fantaTeam,
+      presidente: fantaTeam.user?.nickname || fantaTeam.user?.email || "—",
+      giocatori,
+      stagione,
+      currentUser: req.user,
+      error: null,
+    });
+  } catch (err) {
+    console.error("showRosaDettaglio error:", err.message);
+    res.redirect("/fanta/rose");
   }
 }

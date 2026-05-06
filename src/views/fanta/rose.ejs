@@ -76,7 +76,7 @@
       <% roseData.forEach(function(team) { %>
       <div class="team-card">
         <div class="team-card-header">
-          <h3>🏟 <%= team.nome %></h3>
+          <h3><a href="/fanta/rose/<%= team.id %>" style="color:#fff; text-decoration:none;">🏟 <%= team.nome %></a></h3>
           <span class="team-meta"><%= team.presidente %></span>
         </div>
 
