@@ -58,6 +58,48 @@
     <% } %>
 
     <%
+      // Separa i parametri ruolo_tm_* dagli altri
+      const ruoliTM  = parametri.filter(p => p.chiave.startsWith('ruolo_tm_'));
+      const altriPar = parametri.filter(p => !p.chiave.startsWith('ruolo_tm_'));
+    %>
+
+    <!-- ══ SEZIONE RUOLI TRANSFERMARKT ══════════════════════════════════ -->
+    <div style="margin-bottom:36px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h2 style="font-size:1rem;font-weight:800;color:var(--green-dark);display:flex;align-items:center;gap:8px;margin:0;">
+          <span>⚽</span> Ruoli Transfermarkt
+        </h2>
+        <form action="/admin/parametri/init-ruoli-tm" method="POST" style="margin:0;">
+          <button type="submit" class="btn btn-sm" style="background:var(--green-mid);color:#fff;font-size:.78rem;">
+            ↺ Inizializza predefiniti
+          </button>
+        </form>
+      </div>
+      <% if (ruoliTM.length === 0) { %>
+        <p style="font-size:.85rem;color:var(--gray-400);">
+          Nessun ruolo configurato. Clicca <strong>Inizializza predefiniti</strong> per caricare i mapping standard.
+        </p>
+      <% } else { %>
+      <div class="param-grid">
+        <% ruoliTM.forEach(function(p) { %>
+        <div class="param-card" style="border-left-color:#3b82f6;">
+          <div class="param-key"><%= p.descrizione || p.chiave.replace('ruolo_tm_', '') %></div>
+          <div class="param-desc" style="font-size:.75rem;color:var(--gray-400);"><%= p.chiave %></div>
+          <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
+            <select name="valore" style="flex:1;padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:7px;font-size:.88rem;background:#fafdfa;outline:none;">
+              <% ['P','D','C','A'].forEach(function(r) { %>
+              <option value="<%= r %>" <%= p.valore === r ? 'selected' : '' %>><%= r === 'P' ? 'P — Portiere' : r === 'D' ? 'D — Difensore' : r === 'C' ? 'C — Centrocampista' : 'A — Attaccante' %></option>
+              <% }); %>
+            </select>
+            <button type="submit">💾</button>
+          </form>
+        </div>
+        <% }); %>
+      </div>
+      <% } %>
+    </div>
+
+    <%
       // Raggruppa parametri per sezione in base al prefisso della chiave
       const sezioni = {
         'Rosa':      { icon: '👥', params: [] },
@@ -69,7 +111,7 @@
         'Budget':    { icon: '💵', params: [] },
         'Altro':     { icon: '⚙️', params: [] },
       };
-      parametri.forEach(function(p) {
+      altriPar.forEach(function(p) {
         const k = p.chiave;
         if (k.startsWith('rosa_'))        sezioni['Rosa'].params.push(p);
         else if (k.startsWith('prestiti_'))  sezioni['Prestiti'].params.push(p);

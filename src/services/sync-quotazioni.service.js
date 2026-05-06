@@ -5,6 +5,7 @@
 
 const prisma               = require('../lib/prisma');
 const { scrapeSerieA }     = require('./transfermarkt.service');
+const parametriService     = require('./parametri.service');
 
 const STAGIONE_CORRENTE = '2025-2026';
 
@@ -48,7 +49,8 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
   onEvent({ type: 'info', msg: `🚀 Avvio scraping Transfermarkt (${label})…` });
 
   const teamNames = squadraFiltro ? [squadraFiltro] : null;
-  const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }), teamNames);
+  const ruoliMap  = await parametriService.getRuoliTM();
+  const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }), teamNames, ruoliMap);
 
   // ── 2. Elaborazione per squadra ─────────────────────────────────────────
   for (const [teamNome, giocatori] of risultati.entries()) {

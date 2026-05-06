@@ -4,7 +4,7 @@ const authService = require("../services/auth.service");
 const { logAction } = require("../services/log.service");
 const parametriService = require("../services/parametri.service");
 const { syncQuotazioni: runSyncQuotazioni } = require("../services/sync-quotazioni.service");
-const { scrapeSerieA, SERIE_A_TEAMS, scrapeSquadFromBrowser, createBrowser } = require("../services/transfermarkt.service");
+const { scrapeSerieA, SERIE_A_TEAMS, scrapeSquadFromBrowser, createBrowser, slugifyRuolo } = require("../services/transfermarkt.service");
 const { spawn } = require("child_process");
 const path = require("path");
 
@@ -356,7 +356,8 @@ async function runScrapeTransfermarkt(req, res) {
 
     send({ type: "log", msg: `🚀 Scraping ${teamsFiltrati.length} squadra/e…` });
 
-    const browser = await createBrowser();
+    const ruoliMap = await parametriService.getRuoliTM();
+    const browser  = await createBrowser();
 
     // Raccoglie tutti i giocatori scrapati con il team associato
     const allScraped = [];
@@ -373,7 +374,7 @@ async function runScrapeTransfermarkt(req, res) {
 
       for (let attempt = 1; attempt <= RETRY_MAX; attempt++) {
         try {
-          players = await scrapeSquadFromBrowser(browser, team, (msg) => send({ type: "log", msg }));
+          players = await scrapeSquadFromBrowser(browser, team, (msg) => send({ type: "log", msg }), ruoliMap);
           lastErr = null;
           break; // successo
         } catch (err) {
@@ -399,6 +400,17 @@ async function runScrapeTransfermarkt(req, res) {
 
     await browser.close();
     send({ type: "log", msg: `[TM] Browser chiuso.` });
+
+    // Auto-registra ruoli sconosciuti nel DB (l'admin potrà configurarli)
+    for (const p of allScraped) {
+      if (p.ruoloEsteso) {
+        const slug = slugifyRuolo(p.ruoloEsteso);
+        if (!ruoliMap[slug]) {
+          await parametriService.upsertRuoloTM(slug, p.ruoloEsteso);
+          ruoliMap[slug] = 'C'; // evita doppie scritture nel loop
+        }
+      }
+    }
 
     // ── Diff con DB ──────────────────────────────────────────────────────
     send({ type: "log", msg: `🔍 Confronto con il database…` });
@@ -449,6 +461,12 @@ async function runScrapeTransfermarkt(req, res) {
   } finally {
     res.end();
   }
+}
+
+// ── POST /admin/parametri/init-ruoli-tm ──────────────────────────────────────
+async function initRuoliTM(req, res) {
+  await parametriService.initRuoliTM();
+  res.redirect("/admin/parametri?saved=1");
 }
 
 // ── POST /admin/sync-transfermarkt/import ────────────────────────────────────
@@ -521,7 +539,7 @@ async function importTransfermarkt(req, res) {
   res.json(stats);
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, initRuoliTM, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {

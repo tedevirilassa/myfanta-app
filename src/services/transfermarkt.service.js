@@ -103,13 +103,33 @@ function normalizeDate(str) {
 }
 
 /**
- * Mappa il ruolo esteso (IT/EN) al codice a 1 carattere.
+ * Normalizza un ruolo esteso in uno slug (es. "Difensore centrale" → "difensore_centrale").
  */
-function mapRuolo(ruoloEsteso) {
+function slugifyRuolo(r) {
+  return (r || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
+ * Mappa il ruolo esteso al codice a 1 carattere.
+ * Usa prima la mappa DB (ruoliMap), poi fallback regex.
+ * @param {string} ruoloEsteso
+ * @param {Object|null} ruoliMap - { slug: 'P'|'D'|'C'|'A' }
+ */
+function mapRuolo(ruoloEsteso, ruoliMap) {
+  if (ruoliMap) {
+    const slug = slugifyRuolo(ruoloEsteso);
+    if (ruoliMap[slug]) return ruoliMap[slug];
+  }
+  // Fallback regex
   const r = (ruoloEsteso || '').toLowerCase();
-  if (/portier|goalkeeper|keeper/.test(r))                                             return 'P';
-  if (/difensor|defender|back|stopper|libero|terzino/.test(r))                        return 'D';
-  if (/attacc|forward|striker|punta|ala|winger|seconda|esterno/.test(r))     return 'A';
+  if (/portier|goalkeeper|keeper/.test(r))                             return 'P';
+  if (/difensor|defender|back|stopper|libero|terzino/.test(r))        return 'D';
+  if (/attacc|forward|striker|punta|ala|winger|seconda|esterno/.test(r)) return 'A';
   return 'C';
 }
 
@@ -120,9 +140,10 @@ function mapRuolo(ruoloEsteso) {
  * @param {import('playwright').Browser} browser
  * @param {{ nome: string, slug: string }} team
  * @param {Function} onLog
+ * @param {Object|null} ruoliMap - mappa { slug → ruolo } da DB
  * @returns {Promise<Array>} array giocatori — lancia eccezione su errore (gestita dal retry wrapper)
  */
-async function scrapSquad(browser, team, onLog) {
+async function scrapSquad(browser, team, onLog, ruoliMap = null) {
   const url  = `${BASE_URL}${team.slug}/saison_id/${STAGIONE_ID}/plus/1`;
   const page = await browser.newPage();
 
@@ -252,7 +273,7 @@ async function scrapSquad(browser, team, onLog) {
         transfermarktId: p.transfermarktId,
         nome:            p.nomeCompleto,
         ruoloEsteso:     p.ruoloEsteso || null,
-        ruolo:           mapRuolo(p.ruoloEsteso),
+        ruolo:           mapRuolo(p.ruoloEsteso, ruoliMap),
         dataNascita,
         eta,
         squadra:         team.nome,
@@ -304,9 +325,10 @@ async function withRetry(fn, label, onLog) {
  * Scrapa le squadre di Serie A in sequenza.
  * @param {Function} onLog - callback per i log progressivi
  * @param {string[]|null} teamNames - se valorizzato, scrapa solo queste squadre
+ * @param {Object|null} ruoliMap - mappa { slug → ruolo } da DB
  * @returns {Promise<Map<string, Array|null>>}
  */
-async function scrapeSerieA(onLog = console.log, teamNames = null) {
+async function scrapeSerieA(onLog = console.log, teamNames = null, ruoliMap = null) {
   onLog('[TM] Avvio browser stealth…');
 
   const browser   = await chromium.launch({
@@ -323,7 +345,7 @@ async function scrapeSerieA(onLog = console.log, teamNames = null) {
     for (const team of lista) {
       onLog(`[TM] Scraping ${team.nome}…`);
       const players = await withRetry(
-        () => scrapSquad(browser, team, onLog),
+        () => scrapSquad(browser, team, onLog, ruoliMap),
         team.nome,
         onLog,
       );
@@ -340,7 +362,7 @@ async function scrapeSerieA(onLog = console.log, teamNames = null) {
   return risultati;
 }
 
-module.exports = { scrapeSerieA, scrapeSquadFromBrowser: scrapSquad, createBrowser, withRetry, SERIE_A_TEAMS, parseValore, normalizeDate, parseEta, mapRuolo };
+module.exports = { scrapeSerieA, scrapeSquadFromBrowser: scrapSquad, createBrowser, withRetry, SERIE_A_TEAMS, parseValore, normalizeDate, parseEta, mapRuolo, slugifyRuolo };
 
 async function createBrowser() {
   return chromium.launch({
