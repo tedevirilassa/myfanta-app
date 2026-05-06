@@ -1417,9 +1417,23 @@ async function saveRosa(req, res) {
   const categorie = req.body.categorie || {};
   const validCategorie = ["InRosa", "FuoriRosa", "U21"];
 
+  // Carica stato precedente per confronto
+  const rosaPrec = await prisma.rosaGiocatore.findMany({
+    where: { fantaTeamId, stagione },
+  });
+  const precMap = {};
+  rosaPrec.forEach((r) => { precMap[r.giocatoreId] = r.categoria; });
+
+  const movimenti = [];
+
   for (const [gId, cat] of Object.entries(categorie)) {
     const giocatoreId = parseInt(gId, 10);
     if (isNaN(giocatoreId) || !validCategorie.includes(cat)) continue;
+
+    const catPrecedente = precMap[giocatoreId] || "InRosa";
+    if (catPrecedente !== cat) {
+      movimenti.push({ giocatoreId, da: catPrecedente, a: cat });
+    }
 
     await prisma.rosaGiocatore.upsert({
       where: { fantaTeamId_giocatoreId_stagione: { fantaTeamId, giocatoreId, stagione } },
@@ -1428,13 +1442,31 @@ async function saveRosa(req, res) {
     });
   }
 
-  await logAction({
-    azione: "UPDATE",
-    entita: "rosa",
-    entitaId: fantaTeamId,
-    dettaglio: { stagione, categorie },
-    adminId: req.user.id,
-  });
+  // Log solo se ci sono movimenti effettivi
+  if (movimenti.length > 0) {
+    // Recupera nomi giocatori per il dettaglio
+    const giocatoriIds = movimenti.map((m) => m.giocatoreId);
+    const giocatori = await prisma.giocatore.findMany({
+      where: { id: { in: giocatoriIds } },
+      select: { id: true, nome: true },
+    });
+    const nomiMap = {};
+    giocatori.forEach((g) => { nomiMap[g.id] = g.nome; });
+
+    const dettaglioMovimenti = movimenti.map((m) => ({
+      giocatore: nomiMap[m.giocatoreId] || `#${m.giocatoreId}`,
+      da: m.da,
+      a: m.a,
+    }));
+
+    await logAction({
+      azione: "UPDATE",
+      entita: "rosa",
+      entitaId: fantaTeamId,
+      dettaglio: { stagione, movimenti: dettaglioMovimenti },
+      adminId: req.user.id,
+    });
+  }
 
   res.redirect(`/admin/rosa/${fantaTeamId}?saved=1`);
 }
