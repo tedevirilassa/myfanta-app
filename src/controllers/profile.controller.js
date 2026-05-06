@@ -22,12 +22,22 @@ async function saveProfile(req, res) {
   try {
     const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data:  { nickname: nick || null, teamName: team || null },
+      data:  { nickname: nick || null },
+      include: { fantaTeam: true },
     });
+
+    // Aggiorna il nome del fantaTeam se esiste
+    if (updated.fantaTeam && team) {
+      await prisma.fantaTeam.update({
+        where: { id: updated.fantaTeam.id },
+        data: { nome: team },
+      });
+      updated.fantaTeam.nome = team;
+    }
 
     // aggiorna req.user in-place così le view riflettono subito il cambiamento
     req.user.nickname = updated.nickname;
-    req.user.teamName = updated.teamName;
+    req.user.fantaTeam = updated.fantaTeam;
 
     logAction({
       azione: "UPDATE",

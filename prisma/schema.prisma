@@ -17,7 +17,6 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   nickname           String?
-  teamName           String?
   fantaTeam          FantaTeam?
   invitedBy          User?      @relation("UserInvites", fields: [invitedById], references: [id])
   invitees           User[]     @relation("UserInvites")

@@ -18,7 +18,10 @@ async function requireAuth(req, res, next) {
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      include: { fantaTeam: true },
+    });
 
     if (!user || !user.isActive) {
       res.clearCookie(COOKIE_NAME);
