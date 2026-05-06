@@ -550,7 +550,7 @@ async function importTransfermarkt(req, res) {
   res.json(stats);
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, initRuoliTM, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -1332,6 +1332,13 @@ async function saveParametro(req, res) {
   await logAction({ azione: "UPDATE", entita: "parametro", entitaId: id,
     dettaglio: { valore: valore.trim() }, adminId: req.user.id });
   res.redirect("/admin/parametri?saved=1");
+}
+
+// ── GET /admin/rosa (redirect al primo team) ─────────────────────────────────
+async function listRosa(req, res) {
+  const firstTeam = await prisma.fantaTeam.findFirst({ orderBy: { nome: "asc" } });
+  if (!firstTeam) return res.redirect("/admin/pannello");
+  res.redirect(`/admin/rosa/${firstTeam.id}`);
 }
 
 // ── GET /admin/rosa/:fantaTeamId ──────────────────────────────────────────────

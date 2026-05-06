@@ -35,6 +35,7 @@ router.post("/situazione-finanziaria/:id/crediti", ctrl.adjustCrediti);
 router.get("/parametri", ctrl.listParametri);
 router.post("/parametri/init-ruoli-tm", ctrl.initRuoliTM);
 router.post("/parametri/:id", ctrl.saveParametro);
+router.get("/rosa", ctrl.listRosa);
 router.get("/rosa/:fantaTeamId", ctrl.showRosa);
 router.post("/rosa/:fantaTeamId", ctrl.saveRosa);
 router.post("/sync-quotazioni", ctrl.syncQuotazioni);
