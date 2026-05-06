@@ -7,7 +7,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "build": "prisma generate && npx playwright install --with-deps chromium",
-    "postinstall": "prisma generate",
+    "postinstall": "prisma generate && npx playwright install chromium",
     "prisma:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
