@@ -192,7 +192,7 @@
                 <input class="inline-input" type="text" name="nickname"
                        value="<%= u.nickname || '' %>" placeholder="Nickname" maxlength="40">
                 <input class="inline-input" type="text" name="teamName"
-                       value="<%= u.teamName || '' %>" placeholder="Nome squadra" maxlength="60">
+                       value="<%= (u.fantaTeam && u.fantaTeam.nome) || '' %>" placeholder="Nome squadra" maxlength="60">
                 <button type="submit" class="btn btn-primary btn-sm" title="Salva">💾</button>
               </form>
             </td>

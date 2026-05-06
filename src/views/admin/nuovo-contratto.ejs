@@ -125,7 +125,7 @@
               <% presidenti.forEach(function(p) { %>
                 <option value="<%= p.id %>">
                   <%= p.nickname ? p.nickname + ' (' + p.email + ')' : p.email %>
-                  <% if (p.teamName) { %> – <%= p.teamName %><% } %>
+                  <% if (p.fantaTeam && p.fantaTeam.nome) { %> – <%= p.fantaTeam.nome %><% } %>
                 </option>
               <% }); %>
             </select>

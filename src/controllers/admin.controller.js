@@ -149,7 +149,7 @@ async function inviteUser(req, res) {
 // GET /admin/users/:id/edit-profile
 async function showEditProfile(req, res) {
   const id = parseInt(req.params.id, 10);
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findUnique({ where: { id }, include: { fantaTeam: true } });
   if (!user) return res.redirect("/admin/users");
   res.render("admin/edit-profile", {
     editUser: user,
@@ -162,7 +162,7 @@ async function showEditProfile(req, res) {
 // POST /admin/users/:id/edit-profile
 async function saveEditProfile(req, res) {
   const id = parseInt(req.params.id, 10);
-  const user = await prisma.user.findUnique({ where: { id } });
+  const user = await prisma.user.findUnique({ where: { id }, include: { fantaTeam: true } });
   if (!user) return res.redirect("/admin/users");
 
   const nick = (req.body.nickname || "").trim().slice(0, 40);
@@ -171,8 +171,19 @@ async function saveEditProfile(req, res) {
   try {
     const updated = await prisma.user.update({
       where: { id },
-      data: { nickname: nick || null, teamName: team || null },
+      data: { nickname: nick || null },
+      include: { fantaTeam: true },
     });
+
+    // Aggiorna il nome del fantaTeam se esiste
+    if (updated.fantaTeam && team) {
+      await prisma.fantaTeam.update({
+        where: { id: updated.fantaTeam.id },
+        data: { nome: team },
+      });
+      updated.fantaTeam.nome = team;
+    }
+
     res.render("admin/edit-profile", {
       editUser: updated,
       currentUser: req.user,
@@ -768,7 +779,7 @@ async function listContrattiRiepilogo(req, res) {
 
 // ── GET /admin/pannello ───────────────────────────────────────────────────────
 async function showPannello(req, res) {
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { fantaTeam: true } });
   res.render("admin/pannello", {
     users,
     currentUser: req.user,
@@ -785,10 +796,20 @@ async function inlineEditUser(req, res) {
   const team = (req.body.teamName  || "").trim().slice(0, 60);
   try {
     const userPre = await prisma.user.findUnique({ where: { id }, select: { nickname: true } });
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id },
-      data: { nickname: nick || null, teamName: team || null },
+      data: { nickname: nick || null },
+      include: { fantaTeam: true },
     });
+
+    // Aggiorna il nome del fantaTeam se esiste
+    if (updated.fantaTeam && team) {
+      await prisma.fantaTeam.update({
+        where: { id: updated.fantaTeam.id },
+        data: { nome: team },
+      });
+    }
+
     await logAction({ azione: "UPDATE", entita: "utente", entitaId: id,
       dettaglio: {
         prima: { nickname: userPre?.nickname ?? null },
@@ -838,7 +859,7 @@ async function showNuovoContratto(req, res) {
     prisma.user.findMany({
       where:   { isActive: true },
       orderBy: { email: "asc" },
-      select:  { id: true, email: true, nickname: true, teamName: true },
+      select:  { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } },
     }),
     prisma.contratto.findMany({
       where:  { valido: true },
@@ -955,7 +976,7 @@ async function saveNuovoContratto(req, res) {
   if (errors.length > 0) {
     const [giocatori, presidenti] = await Promise.all([
       prisma.giocatore.findMany({ where: { active: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true, ruolo: true, squadra: true, valore: true } }),
-      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, teamName: true } }),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } } }),
     ]);
     return res.render("admin/nuovo-contratto", {
       giocatori, presidenti, currentUser: req.user, error: errors.join(" "), parametri: params,
@@ -1030,7 +1051,7 @@ async function saveNuovoContratto(req, res) {
   if (!fantaTeam) {
     const [giocatoriList, presidentiList] = await Promise.all([
       prisma.giocatore.findMany({ where: { active: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true, ruolo: true, squadra: true, valore: true } }),
-      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, teamName: true } }),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } } }),
     ]);
     return res.render("admin/nuovo-contratto", {
       giocatori: giocatoriList, presidenti: presidentiList, currentUser: req.user,

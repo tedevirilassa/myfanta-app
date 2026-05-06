@@ -62,11 +62,11 @@
           <div style="font-weight: 900; font-size: .95rem; color: var(--green-dark);">
             <%= editUser.email %>
           </div>
-          <% if (editUser.nickname || editUser.teamName) { %>
+          <% if (editUser.nickname || (editUser.fantaTeam && editUser.fantaTeam.nome)) { %>
           <div style="font-size: .82rem; color: var(--gray-500); margin-top: 2px;">
             <% if (editUser.nickname) { %>👤 <em><%= editUser.nickname %></em><% } %>
-            <% if (editUser.nickname && editUser.teamName) { %>&nbsp;·&nbsp;<% } %>
-            <% if (editUser.teamName) { %>🏟️ <em><%= editUser.teamName %></em><% } %>
+            <% if (editUser.nickname && editUser.fantaTeam && editUser.fantaTeam.nome) { %>&nbsp;·&nbsp;<% } %>
+            <% if (editUser.fantaTeam && editUser.fantaTeam.nome) { %>🏟️ <em><%= editUser.fantaTeam.nome %></em><% } %>
           </div>
           <% } %>
         </div>
@@ -102,7 +102,7 @@
             name="teamName"
             maxlength="60"
             placeholder="Es. Aquile del Nord FC"
-            value="<%= editUser.teamName || '' %>"
+            value="<%= (editUser.fantaTeam && editUser.fantaTeam.nome) || '' %>"
           >
           <div class="form-hint">Max 60 caratteri.</div>
         </div>

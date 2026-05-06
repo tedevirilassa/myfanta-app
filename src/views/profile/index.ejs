@@ -60,9 +60,9 @@
       <div style="font-size: 1.1rem; font-weight: 900; color: var(--green-dark); margin-bottom: 4px;">
         <%= currentUser.nickname || currentUser.email %>
       </div>
-      <% if (currentUser.teamName) { %>
+      <% if (currentUser.fantaTeam && currentUser.fantaTeam.nome) { %>
       <div style="font-size: .9rem; color: var(--gray-500); margin-bottom: 10px;">
-        🏟️ <em><%= currentUser.teamName %></em>
+        🏟️ <em><%= currentUser.fantaTeam.nome %></em>
       </div>
       <% } %>
       <div>
@@ -101,7 +101,7 @@
             name="teamName"
             maxlength="60"
             placeholder="Es. Aquile del Nord FC"
-            value="<%= currentUser.teamName || '' %>"
+            value="<%= (currentUser.fantaTeam && currentUser.fantaTeam.nome) || '' %>"
           >
           <div class="form-hint">Max 60 caratteri. Il nome della tua rosa.</div>
         </div>

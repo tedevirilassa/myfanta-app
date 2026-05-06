@@ -187,7 +187,7 @@
             <% users.forEach(function(u) { %>
               <% if (!u.fantaTeam) { %>
               <option value="<%= u.id %>">
-                <%= u.nickname || u.email %><% if (u.teamName) { %> (<%= u.teamName %>)<% } %>
+                <%= u.nickname || u.email %><% if (u.fantaTeam && u.fantaTeam.nome) { %> (<%= u.fantaTeam.nome %>)<% } %>
               </option>
               <% } %>
             <% }); %>
