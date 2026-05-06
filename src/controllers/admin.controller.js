@@ -370,6 +370,19 @@ async function runScrapeTransfermarkt(req, res) {
     const ruoliMap = await parametriService.getRuoliTM();
     const browser  = await createBrowser();
 
+    // Se scraping "tutte", identifica le squadre già scrapate oggi e saltale
+    const oggi = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+    let squadreGiaScrape = new Set();
+    if (!squadra) {
+      const quotazioniOggi = await prisma.quotazione.findMany({
+        where: { createdAt: { gte: new Date(oggi + "T00:00:00Z") } },
+        select: { giocatore: { select: { squadra: true } } },
+      });
+      quotazioniOggi.forEach(q => {
+        if (q.giocatore?.squadra) squadreGiaScrape.add(q.giocatore.squadra);
+      });
+    }
+
     // Raccoglie tutti i giocatori scrapati con il team associato
     const allScraped = [];
     const errori = [];
@@ -378,6 +391,12 @@ async function runScrapeTransfermarkt(req, res) {
     const RETRY_DELAY = 10_000;
 
     for (const team of teamsFiltrati) {
+      // Salta squadre già scrapate oggi (solo in modalità "tutte")
+      if (!squadra && squadreGiaScrape.has(team.nome)) {
+        send({ type: "log", msg: `⏭ ${team.nome}: già scrapata oggi, salto.` });
+        continue;
+      }
+
       send({ type: "log", msg: `[TM] Scraping ${team.nome}…` });
 
       let players = null;

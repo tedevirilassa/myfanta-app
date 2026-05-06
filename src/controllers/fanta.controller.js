@@ -21,17 +21,72 @@ async function showClassifica(req, res) {
         })
       : [];
 
-    // Converte Decimal → Number una sola volta
-    const classifica = rawRecords.map((p) => ({
-      ...p,
-      valoreRose:      +p.valoreRose,
-      crediti:         +p.crediti,
-      patrimonio:      +p.patrimonio,
-      etaMedia:        +p.etaMedia,
-      stipendi:        +p.stipendi,
-      montePrestiti:   +p.montePrestiti,
-      ultimoPlusMinus: +p.ultimoPlusMinus,
-    }));
+    // Calcola valori dinamicamente dai contratti validi e giocatori attivi
+    const teamIds = rawRecords.filter(r => r.fantaTeamId).map(r => r.fantaTeamId);
+    const contrattiValidi = teamIds.length > 0
+      ? await prisma.contratto.findMany({
+          where: {
+            fantaTeamId: { in: teamIds },
+            valido: true,
+          },
+          include: { giocatore: { select: { id: true, valore: true, eta: true, active: true } } },
+        })
+      : [];
+
+    // Mappa fantaTeamId → statistiche calcolate
+    const statsMap = {};
+    for (const c of contrattiValidi) {
+      if (!c.giocatore.active) continue;
+      if (!statsMap[c.fantaTeamId]) {
+        statsMap[c.fantaTeamId] = {
+          valoreRose: 0, giocatoriIds: new Set(), etaSomma: 0, etaCount: 0,
+          stipendi: 0, montePrestiti: 0,
+        };
+      }
+      const s = statsMap[c.fantaTeamId];
+
+      // Evita duplicati per giocatore (prende solo il primo contratto valido trovato)
+      if (s.giocatoriIds.has(c.giocatore.id)) continue;
+      s.giocatoriIds.add(c.giocatore.id);
+
+      if (c.tipo === "Acquisto") {
+        s.valoreRose += c.giocatore.valore ? +c.giocatore.valore : 0;
+        s.stipendi += c.importoOperazione ? +c.importoOperazione : 0;
+      } else if (c.tipo === "Prestito") {
+        s.montePrestiti += c.importoOperazione ? +c.importoOperazione : 0;
+      }
+
+      if (c.giocatore.eta != null) {
+        s.etaSomma += c.giocatore.eta;
+        s.etaCount++;
+      }
+    }
+
+    // Converte Decimal → Number e sovrascrive con valori calcolati
+    const classifica = rawRecords.map((p) => {
+      const s = p.fantaTeamId && statsMap[p.fantaTeamId] ? statsMap[p.fantaTeamId] : null;
+      const valoreRoseCalcolato = s ? Math.round(s.valoreRose * 100) / 100 : +p.valoreRose;
+      const crediti = +p.crediti;
+      const giocatoriTesserati = s ? s.giocatoriIds.size : p.giocatoriTesserati;
+      const etaMedia = s && s.etaCount > 0 ? Math.round((s.etaSomma / s.etaCount) * 100) / 100 : +p.etaMedia;
+      const stipendi = s ? Math.round(s.stipendi * 100) / 100 : +p.stipendi;
+      const montePrestiti = s ? Math.round(s.montePrestiti * 100) / 100 : +p.montePrestiti;
+
+      return {
+        ...p,
+        valoreRose:      valoreRoseCalcolato,
+        crediti,
+        patrimonio:      Math.round((valoreRoseCalcolato + crediti) * 100) / 100,
+        giocatoriTesserati,
+        etaMedia,
+        stipendi,
+        montePrestiti,
+        ultimoPlusMinus: +p.ultimoPlusMinus,
+      };
+    });
+
+    // Riordina per patrimonio (ora ricalcolato)
+    classifica.sort((a, b) => b.patrimonio - a.patrimonio);
 
     res.render("fanta/classifica", {
       classifica,
