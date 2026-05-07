@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Rose FantaTeam' }) %>
+  <style>
+    .rose-section {
+      margin-bottom: 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .rose-section summary {
+      cursor: pointer;
+      padding: 14px 20px;
+      font-size: .95rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #f8fafc;
+      list-style: none;
+    }
+    .rose-section summary::-webkit-details-marker { display: none; }
+    .rose-section summary::marker { display: none; content: ''; }
+    .rose-section summary::before {
+      content: '▶'; font-size: .7rem;
+      transition: transform .2s; display: inline-block;
+    }
+    .rose-section[open] summary::before { transform: rotate(90deg); }
+
+    .rose-stats-inline {
+      display: flex; gap: 10px; margin-left: auto; font-size: .75rem; font-weight: 600; color: var(--gray-400);
+    }
+    .rose-stats-inline span { background: var(--gray-50); padding: 2px 8px; border-radius: 4px; }
+
+    .rose-body { padding: 16px 20px; }
+
+    .rosa-mini-table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
+    .rosa-mini-table th, .rosa-mini-table td {
+      padding: 6px 10px; font-size: .8rem;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .rosa-mini-table th {
+      background: var(--gray-50); font-weight: 700; text-align: left;
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .3px; color: var(--gray-500);
+    }
+    .rosa-mini-table tbody tr:hover { background: #f0fdf4; }
+
+    .badge-cat {
+      display: inline-block; padding: 2px 8px; border-radius: 20px;
+      font-size: .7rem; font-weight: 700;
+    }
+    .badge-InRosa { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-FuoriRosa { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+    .badge-U21 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>📋 Rose FantaTeam</h1>
+      <span style="font-size:.85rem;color:var(--gray-500);">Stagione: <strong><%= stagione %></strong></span>
+    </div>
+
+    <% if (teamsData.length === 0) { %>
+      <p style="color:var(--gray-400);font-style:italic;">Nessun FantaTeam configurato.</p>
+    <% } else { %>
+      <% teamsData.forEach(function(team) { %>
+      <details class="rose-section">
+        <summary>
+          <span><%= team.nome %></span>
+          <% if (team.presidente) { %>
+            <span style="font-size:.78rem;font-weight:500;color:var(--gray-400);">(<%= team.presidente %>)</span>
+          <% } %>
+          <div class="rose-stats-inline">
+            <span title="In Rosa"><%= team.countInRosa %> IR</span>
+            <span title="Fuori Rosa"><%= team.countFuoriRosa %> FR</span>
+            <span title="U21"><%= team.countU21 %> U21</span>
+            <span title="Totale giocatori"><strong><%= team.giocatori.length %></strong> tot</span>
+          </div>
+        </summary>
+        <div class="rose-body">
+          <% if (team.giocatori.length === 0) { %>
+            <p style="color:var(--gray-400);font-size:.82rem;font-style:italic;">Nessun giocatore con contratto valido.</p>
+          <% } else { %>
+          <table class="rosa-mini-table">
+            <thead>
+              <tr>
+                <th>Giocatore</th>
+                <th>Ruolo</th>
+                <th>Squadra</th>
+                <th>Categoria</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% team.giocatori.forEach(function(g) { %>
+              <tr>
+                <td><strong><%= g.nome %></strong></td>
+                <td><%= g.ruolo %></td>
+                <td><%= g.squadra || '—' %></td>
+                <td>
+                  <span class="badge-cat badge-<%= g.categoria %>">
+                    <%= g.categoria === 'InRosa' ? 'In Rosa' : g.categoria === 'FuoriRosa' ? 'Fuori Rosa' : 'U21' %>
+                  </span>
+                </td>
+              </tr>
+              <% }); %>
+            </tbody>
+          </table>
+          <% } %>
+          <a href="/admin/rosa/<%= team.id %>" class="btn btn-primary btn-sm" style="margin-top:4px;">
+            📊 Dettaglio
+          </a>
+        </div>
+      </details>
+      <% }); %>
+    <% } %>
+  </div>
+</body>
+</html>

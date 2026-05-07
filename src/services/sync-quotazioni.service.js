@@ -48,9 +48,11 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
   const label = squadraFiltro ? squadraFiltro : 'tutte le squadre';
   onEvent({ type: 'info', msg: `🚀 Avvio scraping Transfermarkt (${label})…` });
 
-  const teamNames = squadraFiltro ? [squadraFiltro] : null;
+  // Usa le squadre attive configurate nei parametri (se non c'è filtro specifico)
+  let teamNames = squadraFiltro ? [squadraFiltro] : await parametriService.getSerieATeamNames();
+  const catalogo = await parametriService.getSerieACatalogo();
   const ruoliMap  = await parametriService.getRuoliTM();
-  const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }), teamNames, ruoliMap);
+  const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }), teamNames, ruoliMap, catalogo);
 
   // ── 2. Elaborazione per squadra ─────────────────────────────────────────
   for (const [teamNome, giocatori] of risultati.entries()) {

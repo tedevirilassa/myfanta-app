@@ -26,7 +26,7 @@ const SERIE_A_TEAMS = [
   { nome: 'Bologna',    slug: '/fc-bologna/kader/verein/1025'          },
   { nome: 'Cagliari',   slug: '/cagliari-calcio/kader/verein/1390'     },
   { nome: 'Como',       slug: '/como-1907/kader/verein/1047'           },
-  { nome: 'Empoli',     slug: '/fc-empoli/kader/verein/749'            },
+  { nome: 'Cremonese',  slug: '/us-cremonese/kader/verein/3898'        },
   { nome: 'Fiorentina', slug: '/acf-fiorentina/kader/verein/430'       },
   { nome: 'Genoa',      slug: '/genua-cfc/kader/verein/252'            },
   { nome: 'Inter',      slug: '/inter-mailand/kader/verein/46'         },
@@ -34,13 +34,13 @@ const SERIE_A_TEAMS = [
   { nome: 'Lazio',      slug: '/lazio-rom/kader/verein/398'            },
   { nome: 'Lecce',      slug: '/us-lecce/kader/verein/1005'            },
   { nome: 'Milan',      slug: '/ac-mailand/kader/verein/5'             },
-  { nome: 'Monza',      slug: '/ac-monza/kader/verein/2919'            },
   { nome: 'Napoli',     slug: '/ssc-napoli/kader/verein/6195'          },
   { nome: 'Parma',      slug: '/parma-calcio-1913/kader/verein/130'    },
+  { nome: 'Pisa',       slug: '/ac-pisa-1909/kader/verein/3446'        },
   { nome: 'Roma',       slug: '/as-rom/kader/verein/12'                },
+  { nome: 'Sassuolo',   slug: '/us-sassuolo/kader/verein/6574'         },
   { nome: 'Torino',     slug: '/fc-turin/kader/verein/416'             },
   { nome: 'Udinese',    slug: '/udinese-calcio/kader/verein/410'       },
-  { nome: 'Venezia',    slug: '/fc-venezia/kader/verein/496'           },
   { nome: 'Verona',     slug: '/hellas-verona/kader/verein/276'        },
 ];
 
@@ -339,7 +339,7 @@ async function withRetry(fn, label, onLog) {
  * @param {Object|null} ruoliMap - mappa { slug → ruolo } da DB
  * @returns {Promise<Map<string, Array|null>>}
  */
-async function scrapeSerieA(onLog = console.log, teamNames = null, ruoliMap = null) {
+async function scrapeSerieA(onLog = console.log, teamNames = null, ruoliMap = null, teamsCatalog = null) {
   onLog('[TM] Avvio browser stealth…');
 
   const browser   = await chromium.launch({
@@ -348,9 +348,10 @@ async function scrapeSerieA(onLog = console.log, teamNames = null, ruoliMap = nu
   });
   const risultati = new Map();
 
+  const catalog = teamsCatalog || SERIE_A_TEAMS;
   const lista = teamNames && teamNames.length > 0
-    ? SERIE_A_TEAMS.filter(t => teamNames.includes(t.nome))
-    : SERIE_A_TEAMS;
+    ? catalog.filter(t => teamNames.includes(t.nome))
+    : catalog;
 
   try {
     for (const team of lista) {

@@ -103,4 +103,63 @@ async function upsertRuoloTM(slug, nome) {
   invalidateCache();
 }
 
-module.exports = { getAll, get, invalidateCache, getRuoliTM, initRuoliTM, upsertRuoloTM, DEFAULT_RUOLI_TM };
+// ── Serie A Teams ────────────────────────────────────────────────────────────
+
+const PARAM_KEY_SERIE_A = 'serie_a_teams';
+const PARAM_KEY_CATALOGO = 'serie_a_catalogo';
+
+/**
+ * Ritorna l'array di nomi squadre attualmente in Serie A (dal parametro DB).
+ * Se non configurato, ritorna null (= usare la lista hardcoded completa).
+ */
+async function getSerieATeamNames() {
+  const row = await prisma.parametro.findUnique({ where: { chiave: PARAM_KEY_SERIE_A } });
+  if (!row) return null;
+  try {
+    return JSON.parse(row.valore);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Salva l'elenco delle squadre di Serie A nel parametro DB.
+ */
+async function saveSerieATeamNames(teamNames) {
+  const valore = JSON.stringify(teamNames);
+  await prisma.parametro.upsert({
+    where:  { chiave: PARAM_KEY_SERIE_A },
+    update: { valore },
+    create: { chiave: PARAM_KEY_SERIE_A, valore, descrizione: 'Squadre attualmente in Serie A' },
+  });
+  invalidateCache();
+}
+
+/**
+ * Ritorna il catalogo completo delle squadre [{nome, slug}] dal DB.
+ * Se non configurato, ritorna null (= usare SERIE_A_TEAMS hardcoded).
+ */
+async function getSerieACatalogo() {
+  const row = await prisma.parametro.findUnique({ where: { chiave: PARAM_KEY_CATALOGO } });
+  if (!row) return null;
+  try {
+    return JSON.parse(row.valore);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Salva il catalogo completo delle squadre nel parametro DB.
+ */
+async function saveSerieACatalogo(teams) {
+  const valore = JSON.stringify(teams);
+  await prisma.parametro.upsert({
+    where:  { chiave: PARAM_KEY_CATALOGO },
+    update: { valore },
+    create: { chiave: PARAM_KEY_CATALOGO, valore, descrizione: 'Catalogo completo squadre con slug Transfermarkt' },
+  });
+  invalidateCache();
+}
+
+module.exports = { getAll, get, invalidateCache, getRuoliTM, initRuoliTM, upsertRuoloTM, DEFAULT_RUOLI_TM, getSerieATeamNames, saveSerieATeamNames, getSerieACatalogo, saveSerieACatalogo };

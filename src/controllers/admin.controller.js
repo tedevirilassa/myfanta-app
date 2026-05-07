@@ -32,10 +32,12 @@ async function listUsers(req, res) {
            : req.query.roleSaved    ? "Ruolo aggiornato con successo."
            : req.query.teamAssigned ? "FantaTeam assegnato con successo."
            : req.query.fieldSaved   ? "Dati utente aggiornati con successo."
+           : req.query.userDeleted  ? "Utente eliminato con successo."
            : null,
     roleError: req.query.roleError || null,
-    error: req.query.teamError  ? decodeURIComponent(req.query.teamError)
-         : req.query.fieldError ? decodeURIComponent(req.query.fieldError)
+    error: req.query.teamError   ? decodeURIComponent(req.query.teamError)
+         : req.query.fieldError  ? decodeURIComponent(req.query.fieldError)
+         : req.query.deleteError ? decodeURIComponent(req.query.deleteError)
          : null,
   });
 }
@@ -65,6 +67,37 @@ async function toggleActive(req, res) {
     },
     adminId: req.user.id });
   res.redirect("/admin/users");
+}
+
+// POST /admin/users/:id/delete
+async function deleteUser(req, res) {
+  const id = parseInt(req.params.id, 10);
+
+  if (id === req.user.id) {
+    return res.redirect("/admin/users?deleteError=" + encodeURIComponent("Non puoi eliminare il tuo account."));
+  }
+
+  const user = await prisma.user.findUnique({ where: { id }, include: { fantaTeam: true } });
+  if (!user) return res.redirect("/admin/users");
+
+  await prisma.$transaction(async (tx) => {
+    // Disconnect FantaTeam
+    if (user.fantaTeam) {
+      await tx.fantaTeam.update({ where: { id: user.fantaTeam.id }, data: { userId: null } });
+    }
+    // Nullify invitedById for users invited by this user
+    await tx.user.updateMany({ where: { invitedById: id }, data: { invitedById: null } });
+    // Delete logs authored by this user
+    await tx.log.deleteMany({ where: { adminId: id } });
+    // Delete the user
+    await tx.user.delete({ where: { id } });
+  });
+
+  await logAction({ azione: "DELETE", entita: "utente", entitaId: id,
+    dettaglio: { prima: { email: user.email, nickname: user.nickname, role: user.role }, dopo: null },
+    adminId: req.user.id });
+
+  res.redirect("/admin/users?userDeleted=1");
 }
 
 // POST /admin/users/:id/reset-password
@@ -355,10 +388,17 @@ async function runScrapeTransfermarkt(req, res) {
   const { squadra } = req.body; // null = tutte
 
   try {
+    // Determina catalogo squadre (DB o hardcoded) e filtra per quelle attive
+    const catalogo = await parametriService.getSerieACatalogo() || SERIE_A_TEAMS;
+    const activeTeamNames = await parametriService.getSerieATeamNames();
+    const baseTeams = activeTeamNames
+      ? catalogo.filter(t => activeTeamNames.includes(t.nome))
+      : catalogo;
+
     // Filtra squadre se richiesto
     const teamsFiltrati = squadra
-      ? SERIE_A_TEAMS.filter(t => t.nome === squadra)
-      : SERIE_A_TEAMS;
+      ? baseTeams.filter(t => t.nome === squadra)
+      : baseTeams;
 
     if (teamsFiltrati.length === 0) {
       send({ type: "error", msg: `Squadra "${squadra}" non trovata nella lista.` });
@@ -569,7 +609,7 @@ async function importTransfermarkt(req, res) {
   res.json(stats);
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -799,10 +839,13 @@ async function listContrattiRiepilogo(req, res) {
 // ── GET /admin/pannello ───────────────────────────────────────────────────────
 async function showPannello(req, res) {
   const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" }, include: { fantaTeam: true } });
+  const catalogo = await parametriService.getSerieACatalogo() || SERIE_A_TEAMS;
+  const activeTeamNames = await parametriService.getSerieATeamNames();
+  const serieATeams = activeTeamNames || catalogo.map(t => t.nome);
   res.render("admin/pannello", {
     users,
     currentUser: req.user,
-    serieATeams: SERIE_A_TEAMS.map(t => t.nome),
+    serieATeams,
     message: req.query.saved ? "Profilo aggiornato." : null,
     error: null,
   });
@@ -1335,8 +1378,63 @@ async function listLog(req, res) {
 // ── GET /admin/parametri ─────────────────────────────────────────────────────
 async function listParametri(req, res) {
   const parametri = await prisma.parametro.findMany({ orderBy: { chiave: "asc" } });
-  const message = req.query.saved ? "Parametro aggiornato." : null;
-  res.render("admin/parametri", { parametri, currentUser: req.user, message });
+  const catalogo = await parametriService.getSerieACatalogo() || SERIE_A_TEAMS;
+  const serieATeamNames = await parametriService.getSerieATeamNames();
+  const allTeams = catalogo.map(t => t.nome);
+  const activeTeams = serieATeamNames || allTeams;
+  const message = req.query.saved ? "Parametro aggiornato."
+                : req.query.teamsSaved ? "Squadre Serie A aggiornate."
+                : req.query.teamAdded ? "Squadra aggiunta al catalogo."
+                : req.query.teamRemoved ? "Squadra rimossa dal catalogo."
+                : null;
+  const error = req.query.error ? decodeURIComponent(req.query.error) : null;
+  res.render("admin/parametri", { parametri, currentUser: req.user, message, error, allTeams, activeTeams, catalogo });
+}
+
+// ── POST /admin/parametri/serie-a-teams ──────────────────────────────────────
+async function saveSerieATeams(req, res) {
+  const teams = req.body.teams || [];
+  const teamNames = Array.isArray(teams) ? teams : [teams];
+  await parametriService.saveSerieATeamNames(teamNames);
+  await logAction({ azione: "UPDATE", entita: "parametro", entitaId: null,
+    dettaglio: { chiave: "serie_a_teams", squadre: teamNames }, adminId: req.user.id });
+  res.redirect("/admin/parametri?teamsSaved=1");
+}
+
+// ── POST /admin/parametri/serie-a-catalogo/add ───────────────────────────────
+async function addSerieATeam(req, res) {
+  const nome = (req.body.nome || "").trim();
+  const slug = (req.body.slug || "").trim();
+  if (!nome || !slug) {
+    return res.redirect("/admin/parametri?error=" + encodeURIComponent("Nome e slug sono obbligatori."));
+  }
+  const catalogo = await parametriService.getSerieACatalogo() || [...SERIE_A_TEAMS];
+  if (catalogo.some(t => t.nome.toLowerCase() === nome.toLowerCase())) {
+    return res.redirect("/admin/parametri?error=" + encodeURIComponent(`La squadra "${nome}" esiste già nel catalogo.`));
+  }
+  catalogo.push({ nome, slug });
+  catalogo.sort((a, b) => a.nome.localeCompare(b.nome));
+  await parametriService.saveSerieACatalogo(catalogo);
+  await logAction({ azione: "CREATE", entita: "parametro", entitaId: null,
+    dettaglio: { chiave: "serie_a_catalogo", aggiunta: { nome, slug } }, adminId: req.user.id });
+  res.redirect("/admin/parametri?teamAdded=1");
+}
+
+// ── POST /admin/parametri/serie-a-catalogo/remove ────────────────────────────
+async function removeSerieATeam(req, res) {
+  const nome = (req.body.nome || "").trim();
+  if (!nome) return res.redirect("/admin/parametri");
+  const catalogo = await parametriService.getSerieACatalogo() || [...SERIE_A_TEAMS];
+  const filtered = catalogo.filter(t => t.nome !== nome);
+  await parametriService.saveSerieACatalogo(filtered);
+  // Rimuovi anche dalla lista attiva se presente
+  const activeNames = await parametriService.getSerieATeamNames();
+  if (activeNames && activeNames.includes(nome)) {
+    await parametriService.saveSerieATeamNames(activeNames.filter(n => n !== nome));
+  }
+  await logAction({ azione: "DELETE", entita: "parametro", entitaId: null,
+    dettaglio: { chiave: "serie_a_catalogo", rimossa: nome }, adminId: req.user.id });
+  res.redirect("/admin/parametri?teamRemoved=1");
 }
 
 // ── POST /admin/parametri/:id ────────────────────────────────────────────────
@@ -1355,9 +1453,60 @@ async function saveParametro(req, res) {
 
 // ── GET /admin/rosa (redirect al primo team) ─────────────────────────────────
 async function listRosa(req, res) {
-  const firstTeam = await prisma.fantaTeam.findFirst({ orderBy: { nome: "asc" } });
-  if (!firstTeam) return res.redirect("/admin/pannello");
-  res.redirect(`/admin/rosa/${firstTeam.id}`);
+  const params = await parametriService.getAll();
+  const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+  const now = new Date();
+  const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
+  const stagione = `${annoInizio}-${annoInizio + 1}`;
+
+  const fantaTeams = await prisma.fantaTeam.findMany({
+    where: { OR: [{ userId: null }, { user: { isActive: true } }] },
+    orderBy: { nome: "asc" },
+    include: { user: { select: { nickname: true, email: true } } },
+  });
+
+  // Per ogni team, carica contratti validi e rosa
+  const teamsData = await Promise.all(fantaTeams.map(async (ft) => {
+    const contratti = await prisma.contratto.findMany({
+      where: { fantaTeamId: ft.id, valido: true },
+      include: { giocatore: true },
+      orderBy: { giocatore: { nome: "asc" } },
+    });
+    const rosaRecords = await prisma.rosaGiocatore.findMany({
+      where: { fantaTeamId: ft.id, stagione },
+    });
+    const rosaMap = {};
+    rosaRecords.forEach((r) => { rosaMap[r.giocatoreId] = r.categoria; });
+
+    const giocatori = contratti.map((c) => ({
+      id: c.giocatore.id,
+      nome: c.giocatore.nome,
+      ruolo: c.giocatore.ruolo,
+      squadra: c.giocatore.squadra,
+      categoria: rosaMap[c.giocatore.id] || "InRosa",
+    }));
+
+    return {
+      id: ft.id,
+      nome: ft.nome,
+      presidente: ft.user ? (ft.user.nickname || ft.user.email) : null,
+      giocatori,
+      countInRosa: giocatori.filter(g => g.categoria === "InRosa").length,
+      countFuoriRosa: giocatori.filter(g => g.categoria === "FuoriRosa").length,
+      countU21: giocatori.filter(g => g.categoria === "U21").length,
+    };
+  }));
+
+  res.render("admin/rose", {
+    teamsData,
+    stagione,
+    params: {
+      maxGiocatori: params.rosa_max_giocatori || 30,
+      maxFuoriRosa: params.rosa_max_fuorirosa || 5,
+      maxU21: params.rosa_max_under21 || 2,
+    },
+    currentUser: req.user,
+  });
 }
 
 // ── GET /admin/rosa/:fantaTeamId ──────────────────────────────────────────────

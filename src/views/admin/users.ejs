@@ -133,6 +133,10 @@
               <%= u.isActive ? 'Disabilita' : 'Abilita' %>
             </button>
           </form>
+          <form action="/admin/users/<%= u.id %>/delete" method="POST"
+                onsubmit="return confirm('Sei sicuro di voler ELIMINARE definitivamente l\'utente <%= u.email %>?') && confirm('ATTENZIONE: questa operazione è irreversibile. Confermi?')">
+            <button type="submit" class="btn btn-sm btn-danger">🗑️ Elimina</button>
+          </form>
           <% } else { %>
             <span style="font-size:.8rem; color:#94a3b8;">(tu)</span>
           <% } %>

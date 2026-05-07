@@ -40,6 +40,11 @@
       border: none; border-radius: 7px; cursor: pointer;
     }
     .param-form button:hover { background: var(--green-dark); }
+
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::marker { display: none; content: ''; }
+    details > summary::before { content: '▶'; font-size: .7rem; transition: transform .2s; display: inline-block; margin-right: 6px; }
+    details[open] > summary::before { transform: rotate(90deg); }
   </style>
 </head>
 <body>
@@ -56,6 +61,9 @@
     <% if (message) { %>
       <div class="alert alert-success">✔ <%= message %></div>
     <% } %>
+    <% if (typeof error !== 'undefined' && error) { %>
+      <div class="alert alert-error"><%= error %></div>
+    <% } %>
 
     <%
       // Separa i parametri ruolo_tm_* dagli altri
@@ -64,40 +72,118 @@
     %>
 
     <!-- ══ SEZIONE RUOLI TRANSFERMARKT ══════════════════════════════════ -->
-    <div style="margin-bottom:36px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h2 style="font-size:1rem;font-weight:800;color:var(--green-dark);display:flex;align-items:center;gap:8px;margin:0;">
-          <span>⚽</span> Ruoli Transfermarkt
-        </h2>
-        <form action="/admin/parametri/init-ruoli-tm" method="POST" style="margin:0;">
-          <button type="submit" class="btn btn-sm" style="background:var(--green-mid);color:#fff;font-size:.78rem;">
-            ↺ Inizializza predefiniti
-          </button>
-        </form>
-      </div>
-      <% if (ruoliTM.length === 0) { %>
-        <p style="font-size:.85rem;color:var(--gray-400);">
-          Nessun ruolo configurato. Clicca <strong>Inizializza predefiniti</strong> per caricare i mapping standard.
-        </p>
-      <% } else { %>
-      <div class="param-grid">
-        <% ruoliTM.forEach(function(p) { %>
-        <div class="param-card" style="border-left-color:#3b82f6;">
-          <div class="param-key"><%= p.descrizione || p.chiave.replace('ruolo_tm_', '') %></div>
-          <div class="param-desc" style="font-size:.75rem;color:var(--gray-400);"><%= p.chiave %></div>
-          <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
-            <select name="valore" style="flex:1;padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:7px;font-size:.88rem;background:#fafdfa;outline:none;">
-              <% ['P','D','C','A'].forEach(function(r) { %>
-              <option value="<%= r %>" <%= p.valore === r ? 'selected' : '' %>><%= r === 'P' ? 'P — Portiere' : r === 'D' ? 'D — Difensore' : r === 'C' ? 'C — Centrocampista' : 'A — Attaccante' %></option>
-              <% }); %>
-            </select>
-            <button type="submit">💾</button>
+    <details style="margin-bottom:16px; border:1.5px solid var(--gray-200); border-radius:10px; overflow:hidden;">
+      <summary style="cursor:pointer; padding:14px 20px; font-size:1rem; font-weight:800; color:var(--green-dark); display:flex; align-items:center; gap:8px; background:#f8fafc; list-style:none;">
+        <span>⚽</span> Ruoli Transfermarkt
+        <span style="margin-left:auto;font-size:.75rem;font-weight:600;color:var(--gray-400);"><%= ruoliTM.length %> ruol<%= ruoliTM.length === 1 ? 'o' : 'i' %></span>
+      </summary>
+      <div style="padding:16px 20px;">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+          <form action="/admin/parametri/init-ruoli-tm" method="POST" style="margin:0;">
+            <button type="submit" class="btn btn-sm" style="background:var(--green-mid);color:#fff;font-size:.78rem;">
+              ↺ Inizializza predefiniti
+            </button>
           </form>
         </div>
-        <% }); %>
+        <% if (ruoliTM.length === 0) { %>
+          <p style="font-size:.85rem;color:var(--gray-400);">
+            Nessun ruolo configurato. Clicca <strong>Inizializza predefiniti</strong> per caricare i mapping standard.
+          </p>
+        <% } else { %>
+        <div class="param-grid">
+          <% ruoliTM.forEach(function(p) { %>
+          <div class="param-card" style="border-left-color:#3b82f6;">
+            <div class="param-key"><%= p.descrizione || p.chiave.replace('ruolo_tm_', '') %></div>
+            <div class="param-desc" style="font-size:.75rem;color:var(--gray-400);"><%= p.chiave %></div>
+            <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
+              <select name="valore" style="flex:1;padding:7px 12px;border:1.5px solid var(--gray-200);border-radius:7px;font-size:.88rem;background:#fafdfa;outline:none;">
+                <% ['P','D','C','A'].forEach(function(r) { %>
+                <option value="<%= r %>" <%= p.valore === r ? 'selected' : '' %>><%= r === 'P' ? 'P — Portiere' : r === 'D' ? 'D — Difensore' : r === 'C' ? 'C — Centrocampista' : 'A — Attaccante' %></option>
+                <% }); %>
+              </select>
+              <button type="submit">💾</button>
+            </form>
+          </div>
+          <% }); %>
+        </div>
+        <% } %>
       </div>
-      <% } %>
-    </div>
+    </details>
+
+    <!-- ══ SEZIONE SQUADRE SERIE A ══════════════════════════════════════ -->
+    <details style="margin-bottom:16px; border:1.5px solid var(--gray-200); border-radius:10px; overflow:hidden;">
+      <summary style="cursor:pointer; padding:14px 20px; font-size:1rem; font-weight:800; color:var(--green-dark); display:flex; align-items:center; gap:8px; background:#f8fafc; list-style:none;">
+        <span>🏟️</span> Squadre Serie A
+        <span style="margin-left:auto;font-size:.75rem;font-weight:600;color:var(--gray-400);"><%= activeTeams.length %>/<%= allTeams.length %> attive</span>
+      </summary>
+      <div style="padding:16px 20px;">
+        <p style="font-size:.85rem;color:#64748b;margin-bottom:16px;">
+          Seleziona le squadre che fanno parte dell'attuale campionato di Serie A.
+        </p>
+        <form action="/admin/parametri/serie-a-teams" method="POST">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:8px;margin-bottom:16px;">
+            <% allTeams.forEach(function(team) { %>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8fafc;border:1.5px solid var(--gray-200);border-radius:8px;cursor:pointer;font-size:.85rem;font-weight:600;transition:all .15s;">
+              <input type="checkbox" name="teams" value="<%= team %>"
+                     <%= activeTeams.includes(team) ? 'checked' : '' %>
+                     style="accent-color:var(--green-mid);width:16px;height:16px;">
+              <%= team %>
+            </label>
+            <% }); %>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button type="submit" class="btn btn-primary btn-sm">💾 Salva squadre Serie A</button>
+            <span style="font-size:.78rem;color:var(--gray-400);"><%= activeTeams.length %> squadre selezionate</span>
+          </div>
+        </form>
+
+        <!-- ─── Gestione catalogo squadre ─── -->
+        <details style="margin-top:20px;">
+          <summary style="cursor:pointer;font-size:.85rem;font-weight:700;color:var(--green-dark);padding:6px 12px;border:1.5px solid var(--green-light);border-radius:6px;display:inline-block;">
+            📋 Gestisci catalogo squadre
+          </summary>
+          <div style="margin-top:14px;padding:16px;background:#f0fdf4;border:1px solid var(--green-light);border-radius:10px;">
+            <p style="font-size:.82rem;color:#64748b;margin-bottom:14px;">
+              Aggiungi o rimuovi squadre dal catalogo. Lo <strong>slug</strong> è il percorso Transfermarkt della rosa
+              (es. <code>/ac-pisa-1909/kader/verein/3446</code>).
+            </p>
+
+            <!-- Form aggiunta -->
+            <form action="/admin/parametri/serie-a-catalogo/add" method="POST"
+                  style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--gray-200);">
+              <div style="flex:1;min-width:140px;">
+                <label style="font-size:.72rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:3px;">Nome squadra</label>
+                <input type="text" name="nome" required placeholder="es. Bari"
+                       style="width:100%;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:.85rem;">
+              </div>
+              <div style="flex:2;min-width:250px;">
+                <label style="font-size:.72rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:3px;">Slug Transfermarkt</label>
+                <input type="text" name="slug" required placeholder="es. /ssc-bari-1908/kader/verein/8596"
+                       style="width:100%;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:.85rem;">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm" style="height:36px;">➕ Aggiungi</button>
+            </form>
+
+            <!-- Elenco squadre nel catalogo -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:6px;">
+              <% catalogo.forEach(function(team) { %>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fff;border:1px solid var(--gray-200);border-radius:6px;font-size:.82rem;">
+                <div>
+                  <strong><%= team.nome %></strong>
+                  <span style="color:var(--gray-400);font-size:.72rem;margin-left:6px;"><%= team.slug %></span>
+                </div>
+                <form action="/admin/parametri/serie-a-catalogo/remove" method="POST" style="margin:0;"
+                      onsubmit="return confirm('Rimuovere <%= team.nome %> dal catalogo?')">
+                  <input type="hidden" name="nome" value="<%= team.nome %>">
+                  <button type="submit" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:.9rem;padding:2px 6px;" title="Rimuovi">✕</button>
+                </form>
+              </div>
+              <% }); %>
+            </div>
+          </div>
+        </details>
+      </div>
+    </details>
 
     <%
       // Raggruppa parametri per sezione in base al prefisso della chiave
@@ -128,23 +214,26 @@
          const sez = sezioni[nome];
          if (sez.params.length === 0) return;
     %>
-    <div style="margin-bottom: 32px;">
-      <h2 style="font-size: 1rem; font-weight: 800; color: var(--green-dark); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+    <details style="margin-bottom: 16px; border: 1.5px solid var(--gray-200); border-radius: 10px; overflow: hidden;">
+      <summary style="cursor:pointer; padding: 14px 20px; font-size: 1rem; font-weight: 800; color: var(--green-dark); display: flex; align-items: center; gap: 8px; background: #f8fafc; list-style: none;">
         <span><%= sez.icon %></span> <%= nome %>
-      </h2>
-      <div class="param-grid">
-        <% sez.params.forEach(function(p) { %>
-        <div class="param-card">
-          <div class="param-key"><%= p.chiave %></div>
-          <div class="param-desc"><%= p.descrizione || '—' %></div>
-          <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
-            <input type="text" name="valore" value="<%= p.valore %>" required>
-            <button type="submit">💾</button>
-          </form>
+        <span style="margin-left:auto;font-size:.75rem;font-weight:600;color:var(--gray-400);"><%= sez.params.length %> parametr<%= sez.params.length === 1 ? 'o' : 'i' %></span>
+      </summary>
+      <div style="padding: 16px 20px;">
+        <div class="param-grid">
+          <% sez.params.forEach(function(p) { %>
+          <div class="param-card">
+            <div class="param-key"><%= p.chiave %></div>
+            <div class="param-desc"><%= p.descrizione || '—' %></div>
+            <form class="param-form" action="/admin/parametri/<%= p.id %>" method="POST">
+              <input type="text" name="valore" value="<%= p.valore %>" required>
+              <button type="submit">💾</button>
+            </form>
+          </div>
+          <% }); %>
         </div>
-        <% }); %>
       </div>
-    </div>
+    </details>
     <% }); %>
 
     <% if (parametri.length === 0) { %>
