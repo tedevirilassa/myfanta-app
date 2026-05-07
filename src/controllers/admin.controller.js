@@ -1483,6 +1483,7 @@ async function listRosa(req, res) {
       nome: c.giocatore.nome,
       ruolo: c.giocatore.ruolo,
       squadra: c.giocatore.squadra,
+      valore: c.giocatore.valore ? +c.giocatore.valore : null,
       categoria: rosaMap[c.giocatore.id] || "InRosa",
     }));
 

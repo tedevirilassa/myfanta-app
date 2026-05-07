@@ -3,21 +3,34 @@
 <head>
   <%- include('../partials/head', { title: 'Rose' }) %>
   <style>
-    .rose-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; }
-
-    .team-card {
-      background: var(--white); border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(26,58,42,.07);
+    .team-section {
+      margin-bottom: 8px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px;
       overflow: hidden;
     }
-    .team-card-header {
-      padding: 14px 18px; background: var(--green-dark); color: #fff;
-      display: flex; align-items: center; justify-content: space-between;
+    .team-section summary {
+      cursor: pointer;
+      padding: 14px 20px;
+      font-size: .95rem;
+      font-weight: 800;
+      color: var(--green-dark);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f8fafc;
+      list-style: none;
     }
-    .team-card-header h3 { margin: 0; font-size: .95rem; font-weight: 800; }
-    .team-card-header .team-meta { font-size: .75rem; opacity: .8; }
+    .team-section summary::-webkit-details-marker { display: none; }
+    .team-section summary::marker { display: none; content: ''; }
+    .team-section summary::before {
+      content: '▶'; font-size: .7rem;
+      transition: transform .2s; display: inline-block;
+    }
+    .team-section[open] summary::before { transform: rotate(90deg); }
 
-    .rosa-section { padding: 0 14px; }
+    .team-body { padding: 0 14px 14px; }
+
     .rosa-section-title {
       font-size: .72rem; font-weight: 800; text-transform: uppercase;
       letter-spacing: .7px; color: var(--gray-400);
@@ -49,9 +62,9 @@
     .g-nome { font-weight: 600; }
     .g-squadra { color: var(--gray-400); font-size: .75rem; margin-left: auto; }
 
-    .team-card-footer {
-      padding: 10px 18px; font-size: .75rem; color: var(--gray-400);
-      border-top: 1px solid var(--gray-100); text-align: right;
+    .team-footer {
+      padding: 8px 0; font-size: .75rem; color: var(--gray-400);
+      border-top: 1px solid var(--gray-100); text-align: right; margin-top: 8px;
     }
 
     .empty-section { padding: 8px 0; font-size: .78rem; color: var(--gray-300); font-style: italic; }
@@ -72,15 +85,19 @@
     <% if (roseData.length === 0) { %>
       <p style="color:var(--gray-400); font-style:italic;">Nessun team con giocatori trovato.</p>
     <% } else { %>
-    <div class="rose-grid">
       <% roseData.forEach(function(team) { %>
-      <div class="team-card">
-        <div class="team-card-header">
-          <h3><a href="/fanta/rose/<%= team.id %>" style="color:#fff; text-decoration:none;">🏟 <%= team.nome %></a></h3>
-          <span class="team-meta"><%= team.presidente %></span>
-        </div>
-
-        <div class="rosa-section">
+      <details class="team-section">
+        <summary>
+          <span>🏟 <%= team.nome %></span>
+          <% if (team.presidente) { %>
+            <span style="font-size:.78rem;font-weight:500;color:var(--gray-400);">(<%= team.presidente %>)</span>
+          <% } %>
+          <span style="margin-left:auto;font-size:.78rem;font-weight:600;color:var(--gray-400);"><%= team.totale %> giocatori</span>
+          <a href="/fanta/rose/<%= team.id %>" class="btn btn-primary btn-sm" style="font-size:.75rem;padding:4px 10px;margin-left:8px;" onclick="event.stopPropagation()">
+            📊 Dettaglio
+          </a>
+        </summary>
+        <div class="team-body">
           <div class="rosa-section-title">In Rosa (<%= team.inRosa.length %>)</div>
           <% if (team.inRosa.length === 0) { %>
             <div class="empty-section">Nessun giocatore</div>
@@ -96,10 +113,8 @@
           </ul>
           <% } %>
 
+          <% if (team.fuoriRosa.length > 0) { %>
           <div class="rosa-section-title fuorirosa">Fuori Rosa (<%= team.fuoriRosa.length %>)</div>
-          <% if (team.fuoriRosa.length === 0) { %>
-            <div class="empty-section">Nessun giocatore</div>
-          <% } else { %>
           <ul class="rosa-list">
             <% team.fuoriRosa.forEach(function(g) { %>
             <li>
@@ -111,10 +126,8 @@
           </ul>
           <% } %>
 
+          <% if (team.u21.length > 0) { %>
           <div class="rosa-section-title u21">U21 (<%= team.u21.length %>)</div>
-          <% if (team.u21.length === 0) { %>
-            <div class="empty-section">Nessun giocatore</div>
-          <% } else { %>
           <ul class="rosa-list">
             <% team.u21.forEach(function(g) { %>
             <li>
@@ -125,14 +138,13 @@
             <% }) %>
           </ul>
           <% } %>
-        </div>
 
-        <div class="team-card-footer">
-          Totale: <%= team.totale %> giocatori
+          <div class="team-footer">
+            Totale: <%= team.totale %> giocatori
+          </div>
         </div>
-      </div>
+      </details>
       <% }) %>
-    </div>
     <% } %>
   </div>
 </body>
