@@ -389,17 +389,31 @@ async function showRosaDettaglio(req, res) {
 
     const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
 
-    const giocatori = fantaTeam.contratti.map((c) => ({
-      id: c.giocatore.id,
-      nome: c.giocatore.nome,
-      ruolo: c.giocatore.ruolo,
-      squadra: c.giocatore.squadra,
-      eta: c.giocatore.eta,
-      valore: c.giocatore.valore ? +c.giocatore.valore : null,
-      anniContratto: c.durataContratto,
-      tipo: c.tipo,
-      categoria: rosaMap[c.giocatore.id] || "InRosa",
-    })).sort((a, b) => (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) || a.nome.localeCompare(b.nome));
+    // Calcola anni rimanenti dalla dataFine del contratto
+    const meseCorrente = now.getMonth() + 1;
+    const annoCorrente = now.getFullYear();
+
+    const giocatori = fantaTeam.contratti.map((c) => {
+      let anniRimanenti = c.durataContratto;
+      if (c.dataFine && /^\d{2}-\d{4}$/.test(c.dataFine)) {
+        const [mmFine, yyyyFine] = c.dataFine.split("-").map(Number);
+        // Differenza in anni arrotondata per eccesso
+        const diffMesi = (yyyyFine - annoCorrente) * 12 + (mmFine - meseCorrente);
+        anniRimanenti = Math.max(0, Math.ceil(diffMesi / 12));
+      }
+      return {
+        id: c.giocatore.id,
+        nome: c.giocatore.nome,
+        ruolo: c.giocatore.ruolo,
+        squadra: c.giocatore.squadra,
+        eta: c.giocatore.eta,
+        valore: c.giocatore.valore ? +c.giocatore.valore : null,
+        anniContratto: anniRimanenti,
+        tipo: c.tipo,
+        dataFine: c.dataFine || null,
+        categoria: rosaMap[c.giocatore.id] || "InRosa",
+      };
+    }).sort((a, b) => (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) || a.nome.localeCompare(b.nome));
 
     res.render("fanta/rosa-dettaglio", {
       fantaTeam,

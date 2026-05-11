@@ -101,7 +101,8 @@
             <th>Squadra</th>
             <th>Età</th>
             <th>Valore</th>
-            <th>Anni Contratto</th>
+            <th>Scadenza</th>
+            <th>Anni Rim.</th>
             <th>Formula</th>
           </tr>
         </thead>
@@ -118,13 +119,14 @@
             <td><%= g.squadra || '—' %></td>
             <td style="text-align:center;"><%= g.eta || '—' %></td>
             <td><%= g.valore ? g.valore.toFixed(2) : '—' %></td>
-            <td style="text-align:center;"><%= g.anniContratto %></td>
+            <td style="text-align:center;"><%= g.dataFine || '—' %></td>
+            <td style="text-align:center;<%= g.anniContratto <= 1 ? 'color:#dc2626;font-weight:700;' : '' %>"><%= g.anniContratto %></td>
             <td><span class="badge-tipo badge-<%= g.tipo %>"><%= g.tipo %></span></td>
           </tr>
           <% }) %>
           <% if (fuoriRosa.length > 0) { %>
           <tr class="section-separator">
-            <td colspan="7" style="background:#fef9c3; font-weight:800; font-size:.78rem; color:#854d0e; padding:8px 12px; border-top:2px solid #fde68a;">
+            <td colspan="8" style="background:#fef9c3; font-weight:800; font-size:.78rem; color:#854d0e; padding:8px 12px; border-top:2px solid #fde68a;">
               Fuori Rosa (<%= fuoriRosa.length %>)
             </td>
           </tr>
@@ -135,14 +137,15 @@
             <td><%= g.squadra || '—' %></td>
             <td style="text-align:center;"><%= g.eta || '—' %></td>
             <td><%= g.valore ? g.valore.toFixed(2) : '—' %></td>
-            <td style="text-align:center;"><%= g.anniContratto %></td>
+            <td style="text-align:center;"><%= g.dataFine || '—' %></td>
+            <td style="text-align:center;<%= g.anniContratto <= 1 ? 'color:#dc2626;font-weight:700;' : '' %>"><%= g.anniContratto %></td>
             <td><span class="badge-tipo badge-<%= g.tipo %>"><%= g.tipo %></span></td>
           </tr>
           <% }) %>
           <% } %>
           <% if (u21.length > 0) { %>
           <tr class="section-separator">
-            <td colspan="7" style="background:#dbeafe; font-weight:800; font-size:.78rem; color:#1e40af; padding:8px 12px; border-top:2px solid #bfdbfe;">
+            <td colspan="8" style="background:#dbeafe; font-weight:800; font-size:.78rem; color:#1e40af; padding:8px 12px; border-top:2px solid #bfdbfe;">
               U21 (<%= u21.length %>)
             </td>
           </tr>
@@ -153,7 +156,8 @@
             <td><%= g.squadra || '—' %></td>
             <td style="text-align:center;"><%= g.eta || '—' %></td>
             <td><%= g.valore ? g.valore.toFixed(2) : '—' %></td>
-            <td style="text-align:center;"><%= g.anniContratto %></td>
+            <td style="text-align:center;"><%= g.dataFine || '—' %></td>
+            <td style="text-align:center;<%= g.anniContratto <= 1 ? 'color:#dc2626;font-weight:700;' : '' %>"><%= g.anniContratto %></td>
             <td><span class="badge-tipo badge-<%= g.tipo %>"><%= g.tipo %></span></td>
           </tr>
           <% }) %>

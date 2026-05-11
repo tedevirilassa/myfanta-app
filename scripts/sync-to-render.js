@@ -6,7 +6,9 @@
  * Cosa fa:
  *   1. Applica le migration Prisma al DB remoto (prisma migrate deploy)
  *   2. Copia tutti i dati dal DB locale al DB remoto tabella per tabella
- *      (fantapresidenti → giocatori → contratti)
+ *      (fanta_teams → giocatori → contratti)
+ *      NOTA: la tabella fantapresidenti NON viene sincronizzata
+ *      per preservare utenti e password sul DB remoto.
  *   3. Riallinea le sequenze degli ID
  *
  * Prerequisiti:
@@ -209,92 +211,8 @@ async function main() {
   }
 
   try {
-    // ── fantapresidenti (self-ref: invitedById) ──
-    logSection("Sync tabella: fantapresidenti");
-
-    // 1. Inserisci tutti gli utenti senza la FK circolare
-    const usersColumns = [
-      "id",
-      "email",
-      "\"passwordHash\"",
-      "role",
-      "\"isActive\"",
-      "\"mustChangePassword\"",
-      "nickname",
-      "\"createdAt\"",
-      "\"updatedAt\"",
-    ];
-
-    log("Lettura fantapresidenti dal locale...");
-    const { rows: users } = await localPool.query(
-      `SELECT id, email, "passwordHash", role, "isActive", "mustChangePassword",
-              nickname, "invitedById", "createdAt", "updatedAt"
-       FROM fantapresidenti ORDER BY id`
-    );
-    log(`  Trovate ${users.length} righe`);
-
-    const remoteClient = await remotePool.connect();
-    try {
-      await remoteClient.query("BEGIN");
-
-      // Salva i log remoti prima del TRUNCATE CASCADE
-      const { rows: savedLogs } = await remoteClient.query(
-        `SELECT * FROM log_azioni ORDER BY id`
-      );
-      if (savedLogs.length > 0) {
-        log(`  💾 Salvati ${savedLogs.length} record di log_azioni (verranno ripristinati)`);
-      }
-
-      await remoteClient.query(`TRUNCATE TABLE fantapresidenti RESTART IDENTITY CASCADE`);
-
-      // Prima passata: inserisci senza invitedById
-      for (const u of users) {
-        await remoteClient.query(
-          `INSERT INTO fantapresidenti
-             (id, email, "passwordHash", role, "isActive", "mustChangePassword",
-              nickname, "invitedById", "createdAt", "updatedAt")
-           VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9)`,
-          [
-            u.id, u.email, u.passwordHash, u.role, u.isActive,
-            u.mustChangePassword, u.nickname,
-            u.createdAt, u.updatedAt,
-          ]
-        );
-      }
-
-      // Seconda passata: aggiorna invitedById
-      for (const u of users) {
-        if (u.invitedById !== null) {
-          await remoteClient.query(
-            `UPDATE fantapresidenti SET "invitedById" = $1 WHERE id = $2`,
-            [u.invitedById, u.id]
-          );
-        }
-      }
-
-      // Ripristina i log remoti salvati
-      if (savedLogs.length > 0) {
-        for (const l of savedLogs) {
-          await remoteClient.query(
-            `INSERT INTO log_azioni (id, azione, entita, "entitaId", dettaglio, "adminId", "createdAt")
-             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [l.id, l.azione, l.entita, l.entitaId, l.dettaglio, l.adminId, l.createdAt]
-          );
-        }
-        log(`  ✅ Ripristinati ${savedLogs.length} record di log_azioni`);
-      }
-
-      await remoteClient.query("COMMIT");
-      log(`  OK – ${users.length} righe sincronizzate`);
-    } catch (err) {
-      await remoteClient.query("ROLLBACK");
-      throw err;
-    } finally {
-      remoteClient.release();
-    }
-
-    await resetSequence(remotePool, "fantapresidenti");
-    await resetSequence(remotePool, "log_azioni");
+    // ── fantapresidenti: SKIP ──
+    logSection("Tabella fantapresidenti: SALTATA (utenti e password preservati su Render)");
 
     // ── fanta_teams ──
     logSection("Sync tabella: fanta_teams");
