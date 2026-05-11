@@ -273,7 +273,7 @@ async function showListaGiocatori(req, res) {
   }
 }
 
-module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio };
+module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio, showRegolamento };
 
 // ── GET /fanta/rose ───────────────────────────────────────────────────────────
 async function showRose(req, res) {
@@ -413,4 +413,9 @@ async function showRosaDettaglio(req, res) {
     console.error("showRosaDettaglio error:", err.message);
     res.redirect("/fanta/rose");
   }
+}
+
+// ── GET /fanta/regolamento ────────────────────────────────────────────────────
+function showRegolamento(req, res) {
+  res.render("fanta/regolamento", { currentUser: req.user });
 }

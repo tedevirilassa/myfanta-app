@@ -76,6 +76,8 @@
     <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>"><%= currentUser.role %></span>
     <a href="/fanta/classifica">💰 Situazione Patrimoniale</a>
     <a href="/fanta/rose">📋 Rose</a>
+    <a href="/fanta/regolamento">📖 Regolamento</a>
+    <% if (currentUser.role === 'ADMIN') { %>
     <div class="nav-dropdown">
       <button class="nav-dd-btn">📊 Fogli ▾</button>
       <div class="nav-dd-menu">
@@ -86,6 +88,7 @@
         <a href="/fanta/log">📝 Log</a>
       </div>
     </div>
+    <% } %>
     <a href="/fanta/lista-giocatori">📋 Lista Giocatori</a>
     <% if (currentUser.role === 'ADMIN') { %>
       <a href="/admin/contratti/riepilogo">📋 Riepilogo Contratti</a>

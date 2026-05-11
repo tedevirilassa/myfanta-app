@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Regolamento' }) %>
+  <style>
+    html { scroll-behavior: smooth; }
+    .reg-container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+      line-height: 1.6;
+      color: #111;
+    }
+    .reg-indice {
+      border: 1px solid var(--gray-200);
+      background: #f8fafc;
+      padding: 20px 24px;
+      margin-bottom: 32px;
+      border-radius: 10px;
+    }
+    .reg-indice h2 { margin: 0 0 12px; font-size: 1.1rem; }
+    .reg-indice ul { margin: 0; padding-left: 20px; list-style: disc; }
+    .reg-indice li { margin-bottom: 6px; font-size: .9rem; }
+    .reg-container a { color: #0b57d0; text-decoration: none; }
+    .reg-container a:hover { text-decoration: underline; }
+    .reg-container h1 { margin-bottom: 24px; }
+    .reg-container h2 {
+      margin-top: 36px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 6px;
+    }
+    .reg-container p { margin: 0 0 12px; }
+    .reg-container ul { margin: 0 0 16px 20px; }
+    .reg-container table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 20px;
+    }
+    .reg-container th, .reg-container td {
+      border: 1px solid #ccc;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      background: #fff;
+      color: #000;
+    }
+    .reg-container th { background: #f1f5f9; font-weight: 700; }
+    .reg-container .top-link {
+      margin-top: 24px;
+      font-size: 0.95rem;
+    }
+    .reg-search {
+      margin-bottom: 28px;
+      position: relative;
+    }
+    .reg-search input {
+      width: 100%;
+      padding: 12px 16px 12px 40px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: .95rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .reg-search input:focus { border-color: var(--green-mid); }
+    .reg-search::before {
+      content: '🔍';
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1rem;
+    }
+    .reg-search-info {
+      font-size: .82rem;
+      color: var(--gray-400);
+      margin-top: 6px;
+    }
+    .art-block { transition: opacity .2s; }
+    .art-block.hidden { display: none; }
+    .art-highlight { background: #fef08a; border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="reg-container">
+    <div class="reg-indice" id="indice">
+      <h2>Indice</h2>
+      <ul>
+        <li><a href="#iscrizione-e-premi">Iscrizione e premi</a></li>
+        <li><a href="#strumenti-ufficiali">Strumenti ufficiali</a></li>
+        <li><a href="#stipendi-premi-e-botteghino">Stipendi, premi e botteghino</a></li>
+        <li><a href="#rose-u21-e-infortuni">Rose, U21 e infortuni</a></li>
+        <li><a href="#mercato">Mercato</a></li>
+        <li><a href="#competizioni-aggiuntive">Competizioni aggiuntive</a></li>
+      </ul>
+    </div>
+
+    <h1>Regolamento</h1>
+
+    <div class="reg-search">
+      <input type="text" id="reg-search-input" placeholder="Cerca nel regolamento… (es. prestito, stipendio, VMR)">
+      <div class="reg-search-info" id="reg-search-info"></div>
+    </div>
+
+    <h2 id="iscrizione-e-premi">Iscrizione e premi</h2>
+    <p><strong>Art. 1</strong> Ciascun fantapresidente è tenuto a corrispondere una quota annuale pari a 60€, di cui 10€ destinati alle coppe europee a cui si aggiungono ulteriori 10€ per l'hosting del sito (Tot. 70€).</p>
+    <p><strong>Art. 2</strong> Qualora uno o più fantapresidenti omettano di presentare la formazione per almeno tre volte, le rispettive caparre saranno ripartite in parti uguali tra i vari montepremi e sarà necessario riversare la caparra.</p>
+    <p><strong>Art. 3</strong> Sono previsti premi per i primi tre classificati del campionato, nonché per il primo e il secondo classificato della coppa di lega e per i vincitori delle coppe europee.</p>
+    <ul>
+      <li>al primo classificato del campionato spetta il 50% del montepremi complessivo, al netto delle caparre;</li>
+      <li>al secondo classificato del campionato spetta la parte residua del montepremi;</li>
+      <li>il terzo classificato del campionato recupera la quota di 50€;</li>
+      <li>al primo classificato della coppa di lega spettano 50€;</li>
+      <li>al secondo classificato della coppa di lega spettano 15€;</li>
+      <li>al vincitore della Champions League spettano 50€;</li>
+      <li>al vincitore dell'Europa League spettano 30€;</li>
+      <li>al vincitore della Supercoppa spettano 20€.</li>
+    </ul>
+    <p>In caso di arrivo a pari punti di due o più squadre, il criterio di precedenza sarà la fantamedia: sarà collocata in posizione superiore la squadra con la fantamedia più elevata. Tale criterio si applica sia all'albo sia all'assegnazione dei premi.</p>
+    <p class="top-link"><a href="#indice">Torna all'indice</a></p>
+
+    <h2 id="strumenti-ufficiali">Strumenti ufficiali</h2>
+    <p><strong>Art. 4</strong> Per il regolare svolgimento del gioco si farà riferimento ai seguenti strumenti ufficiali:</p>
+    <ul>
+      <li><a href="https://leghe.fantamaster.it/" target="_blank" rel="noopener noreferrer">https://leghe.fantamaster.it/</a></li>
+      <li><a href="https://www.transfermarkt.com/" target="_blank" rel="noopener noreferrer">www.transfermarkt.com</a></li>
+      <li>Google Sheets</li>
+      <li><a href="https://fratarcalcio.forumfree.it/" target="_blank" rel="noopener noreferrer">https://fratarcalcio.forumfree.it/</a></li>
+      <li><a href="https://myfanta-app.onrender.com/" target="_blank" rel="noopener noreferrer">https://myfanta-app.onrender.com/</a></li>
+    </ul>
+    <p class="top-link"><a href="#indice">Torna all'indice</a></p>
+
+    <h2 id="stipendi-premi-e-botteghino">Stipendi, premi e botteghino</h2>
+    <p><strong>Art. 5</strong> Ciascun presidente è tenuto a corrispondere uno stipendio ai propri giocatori. Tale stipendio corrisponde al 10% della quotazione del giocatore su Transfermarkt al momento dell'acquisto, qualora il mercato pubblico sia aperto. Nel caso di mercato chiuso (febbraio-giugno), l'acquisto diviene effettivo a luglio e sarà quella la quotazione da considerare ai fini del calcolo dello stipendio. Nel caso del mercato di gennaio, lo stipendio corrisposto fino al termine della stagione sarà pari al 5% e non al 10%.</p>
+    <p>Gli stipendi sono corrisposti annualmente; anche ai fini del monte rinnovi sarà considerato esclusivamente il primo stipendio, anche in presenza di contratti pluriennali.</p>
+    <p><strong>Art. 6</strong> In caso di contratto biennale per un giocatore, non è necessario corrispondere anticipatamente gli stipendi di entrambe le annualità, in quanto gli stipendi sono corrisposti annualmente.</p>
+    <p><strong>Art. 7</strong> Il limite economico dei rinnovi è determinato da un importo pari al 2,5% della media tra il valore della rosa più ricca e quello della rosa più povera, calcolati con le quotazioni aggiornate di Transfermarkt all'inizio di giugno.</p>
+    <p><strong>Art. 8</strong> Al termine del campionato saranno assegnati premi in fantacrediti al fine di incrementare la competitività delle squadre che hanno conseguito una posizione inferiore in classifica.</p>
+    <p>I premi sono riassunti nella seguente tabella.</p>
+    <p>La tabella indica che il montepremi più elevato viene calcolato sulla base del valore del giocatore più costoso, al quale viene aggiunto un 23%. Nella tabella sono riportati anche i premi precedenti, utilizzati per determinarne l'incidenza percentuale rispetto al premio più elevato. Nel rispetto di tali proporzioni, tutti i premi sono stati ricalcolati rispetto al "Nuovo premio". Tale valore sarà naturalmente aggiornato al variare delle quotazioni.</p>
+    <p><strong>Art. 9</strong> Il valore del premio più elevato si determina prendendo a riferimento il valore del giocatore più costoso e applicando la percentuale prevista dalla tabella. I premi relativi agli altri piazzamenti sono quindi determinati in proporzione, secondo le percentuali indicate, e sono aggiornati al variare delle quotazioni.</p>
+
+    <table>
+      <tr>
+        <th>Piazzamento</th>
+        <th>Percentuale giocatore più costoso</th>
+      </tr>
+      <tr><td>10</td><td>123%</td></tr>
+      <tr><td>9</td><td>116%</td></tr>
+      <tr><td>8</td><td>93%</td></tr>
+      <tr><td>7</td><td>91%</td></tr>
+      <tr><td>6</td><td>76%</td></tr>
+      <tr><td>5</td><td>73%</td></tr>
+      <tr><td>4</td><td>71%</td></tr>
+      <tr><td>3</td><td>67%</td></tr>
+      <tr><td>2</td><td>61%</td></tr>
+      <tr><td>1</td><td>53%</td></tr>
+    </table>
+
+    <p>A partire da gennaio, per la sessione invernale, saranno distribuiti premi in crediti sulla base della posizione in classifica. Saranno distribuiti esclusivamente qualora la Serie A abbia registrato una minusvalenza rispetto all'anno precedente, al fine di tamponare la difficoltà oggettiva di generare plusvalenze attraverso la compravendita di giocatori.</p>
+    <p>Di seguito la tabella riassuntiva di tali premi:</p>
+
+    <table>
+      <tr>
+        <th>Pos</th>
+        <th>Crediti</th>
+      </tr>
+      <tr><td>10</td><td>28.0</td></tr>
+      <tr><td>9</td><td>26.6</td></tr>
+      <tr><td>8</td><td>25.2</td></tr>
+      <tr><td>7</td><td>24.4</td></tr>
+      <tr><td>6</td><td>23.8</td></tr>
+      <tr><td>5</td><td>23.2</td></tr>
+      <tr><td>4</td><td>23.0</td></tr>
+      <tr><td>3</td><td>22.4</td></tr>
+      <tr><td>2</td><td>21.8</td></tr>
+      <tr><td>1</td><td>21.0</td></tr>
+    </table>
+
+    <p><strong>Art. 11</strong> Le ultime due squadre classificate parteciperanno alla coppa di lega con un handicap di 5 punti.</p>
+    <p><strong>Art. 12</strong> È previsto un incasso pari a 1M di fantacrediti per ogni partita di coppa di lega disputata in casa.</p>
+    <p><strong>Art. 13</strong> È previsto un incasso fisso pari a 2M per ogni giornata di campionato disputata in casa.</p>
+    <p class="top-link"><a href="#indice">Torna all'indice</a></p>
+
+    <h2 id="rose-u21-e-infortuni">Rose, U21 e infortuni</h2>
+    <p><strong>Art. 14</strong> Ogni rosa deve essere composta da almeno 25 giocatori, così suddivisi: 3 portieri, 8 difensori, 8 centrocampisti e 6 attaccanti. A tali giocatori possono aggiungersi al massimo 5 fuori rosa e 2 under 21. I fuori rosa e gli under 21 devono essere dichiarati prima dell'inizio del campionato e possono essere modificati esclusivamente in caso di operazioni di mercato, infortuni gravi o cessioni/prestiti all'estero o in serie minori.</p>
+    <p><strong>Art. 15</strong> Qualora tutti gli slot siano occupati, resta comunque possibile effettuare uno scambio, purché l'uscita di un tesserato e l'ingresso di un altro siano considerati contestuali.</p>
+    <p><strong>Art. 16</strong> Nella gestione dei due slot under 21, si precisa che, una volta compiuti i 22 anni, i giocatori interessati dovranno essere tagliati, inseriti in rosa oppure collocati fuori rosa. Al fine di evitare controlli quotidiani sui compleanni di tutti i giocatori, la verifica sarà effettuata al termine della stagione di Serie A. Tale criterio consente inoltre una gestione meno onerosa dei movimenti dei giocatori più giovani; pertanto, essi potranno permanere nel relativo slot anche se concessi in prestito in altri campionati, assegnati alla primavera oppure ceduti con diritto di ricompra. In presenza di uno dei suddetti movimenti, sarà comunque possibile svincolare il giocatore in qualsiasi momento del campionato. In caso di cessione definitiva, saranno recuperati i crediti corrispondenti alla quotazione aggiornata.</p>
+    <p><strong>Art. 17</strong> Qualora un giocatore inserito nello slot under 21 compia 22 anni nel corso della stagione, per la stagione in corso non si producono effetti immediati: rileva infatti l'età posseduta al momento dell'inserimento nello slot. La verifica sarà effettuata all'inizio della stagione successiva.</p>
+    <p><strong>Art. 18</strong> Qualora un giocatore subisca un infortunio di durata pari o superiore a 3 mesi, sarà possibile sostituirlo con un giocatore fuori rosa dello stesso ruolo, se disponibile, oppure tramite prestito da parte di un altro presidente, nel rispetto del limite massimo di giocatori consentiti in rosa.</p>
+    <p>I siti di riferimento per la durata degli infortuni sono <a href="https://www.fantacalcio.it/" target="_blank" rel="noopener noreferrer">Fantacalcio.it</a> e <a href="https://www.pianetafanta.it/giocatori-infortunati.asp" target="_blank" rel="noopener noreferrer">www.pianetafanta.it/giocatori-infortunati.asp</a>.</p>
+    <p>Al fine di tutelare i presidenti, sarà presa in considerazione la previsione più sfavorevole tra le due fonti. Ad esempio, se Transfermarkt indica come data di rientro la fine di settembre mentre Fantacalcio.it indica novembre, sarà considerata la seconda indicazione.</p>
+    <p><strong>Art. 19</strong> Qualora un giocatore concesso in prestito venga ceduto fuori dalla Serie A, il presidente che ne detiene il cartellino recupera la quotazione del giocatore e restituisce metà dell'importo del prestito oneroso al presidente che lo aveva in prestito.</p>
+    <p class="top-link"><a href="#indice">Torna all'indice</a></p>
+
+    <h2 id="mercato">Mercato</h2>
+    <p><strong>Art. 20</strong> Il mercato è sempre aperto durante il fantacampionato. Gli acquisti effettuati durante le sessioni di mercato "standard" potranno essere integrati immediatamente in rosa o fuori rosa; gli altri acquisti saranno invece perfezionati e integrati all'apertura del mercato "standard". Per sessioni di mercato "standard" si intendono quelle della Serie A, eventualmente prorogate di 1 o 2 settimane, se necessario.</p>
+    <p><strong>Art. 21</strong> Qualora un giocatore cambi ruolo su Transfermarkt nel corso del campionato, egli mantiene il ruolo vigente al momento dell'acquisto, salvo i casi espressamente disciplinati per gli acquisti che divengono efficaci all'apertura del mercato standard.</p>
+    <p><strong>Art. 22</strong> Qualora un giocatore venga acquistato in un periodo antecedente all'apertura del mercato standard e il suo ruolo venga modificato su Transfermarkt prima della decorrenza effettiva dell'acquisto, si considera valido il ruolo risultante al momento in cui l'acquisto diviene ufficiale.</p>
+    <p>Si precisa che le somme impiegate per il mercato pubblico saranno sempre detratte dalle finanze disponibili al momento dell'aggiudicazione del giocatore, mentre lo stipendio sarà calcolato al momento dell'inserimento in rosa. Esempio: qualora il 15 maggio venga nominato Cigarini, quotato 15M, e non pervengano offerte concorrenti, il giocatore sarà acquisito al prezzo di quotazione. In tal caso, 15M saranno immediatamente detratti dalle finanze disponibili e, nel momento in cui il giocatore sarà effettivamente aggregato alla rosa a luglio, il relativo stipendio sarà calcolato sul 10% del valore aggiornato.</p>
+    <p>Qui di seguito uno schema delle varie fasi di mercato durante l'anno.</p>
+    <p><strong>Art. 23</strong> Il fantacampionato ha inizio contestualmente al campionato di Serie A. Poiché tale data rientra ancora nella finestra di mercato estivo, la sessione standard del fantacalcio termina il giovedì precedente alla seconda giornata di campionato, che si disputa a settembre. Entro tale termine sarà possibile acquistare giocatori e disporne immediatamente per la collocazione in rosa o fuori rosa.</p>
+    <p><strong>Art. 24</strong> La comunicazione relativa ai giocatori da collocare in rosa e fuori rosa deve avvenire almeno 36 ore prima della prima giornata di campionato. Le successive modifiche saranno consentite esclusivamente nei casi e nelle finestre temporali previste dal regolamento.</p>
+    <p><strong>Art. 25</strong> Tutte le ulteriori operazioni di mercato tra fantapresidenti producono effetti immediati oppure differiti alla data stabilita dalle parti coinvolte nell'accordo.</p>
+    <p><strong>Art. 26</strong> Non sussistono limiti al numero di cessioni con diritto di ricompra; resta tuttavia fermo il limite massimo di due diritti di ricompra esercitabili.</p>
+    <p><strong>Art. 27</strong> Non è consentito concedere in prestito un giocatore acquisito a sua volta in prestito.</p>
+    <p><strong>Art. 28</strong> In caso di rientro in Serie A di un giocatore per il quale spetti diritto di prelazione, tale diritto dovrà essere esercitato entro 15 giorni, purché nell'ambito della medesima sessione di mercato.</p>
+    <p><strong>Art. 29</strong> È ammessa la cessione di un giocatore in scadenza anche dopo la chiusura della sessione di mercato invernale, fermo restando l'obbligo di rinnovo del contratto al termine della stagione qualora la cessione debba perfezionarsi successivamente.</p>
+    <p><strong>Art. 30</strong> Al fine di consentire un'efficiente amministrazione delle rose su Fantacalcioservice, è necessario rispettare un limite temporale. Ogni operazione effettuata entro le 36 ore precedenti la prima partita della giornata diverrà efficace al termine della giornata successiva. Lo stesso criterio si applica anche ai turni infrasettimanali. In linea generale, tutte le operazioni ufficializzate entro il giovedì saranno recepite in tempo utile per il turno del sabato o della domenica successivi.</p>
+    <p><strong>Art. 31</strong> Entro le ore 23:00 di ogni lunedì sarà possibile comunicare una lista di giocatori che si intende acquistare. Entro le ore 21:00 del martedì successivo, tutti i presidenti potranno presentare offerte per tali giocatori. La nomina di un giocatore costituisce anche un'offerta implicita pari al valore della sua quotazione. Qualora non pervengano ulteriori offerte, il giocatore sarà aggiudicato al presidente che lo ha nominato, al prezzo della quotazione Transfermarkt. È vietato presentare offerte fittizie al solo scopo di indurre gli altri partecipanti ad aumentare le proprie. Tale condotta comporta l'esclusione dalla prima sessione di mercato di luglio o gennaio e una sanzione pari alla metà del valore del giocatore più costoso presente in quella nomination.</p>
+    <p><strong>Art. 32</strong> Non è consentito nominare un giocatore qualora non si disponga di crediti sufficienti a coprirne almeno la quotazione di partenza.</p>
+    <p><strong>Art. 33</strong> Le liste dei giocatori che si intende acquistare devono essere comunicate tramite email a tutti i fantapresidenti.</p>
+    <p><strong>Art. 34</strong> Le offerte devono essere criptate utilizzando il sito <a href="https://aescrypto.com" target="_blank" rel="noopener noreferrer">https://aescrypto.com</a> e inviate via email a tutti i presidenti. Le password saranno comunicate dopo la scadenza del termine ultimo per la presentazione delle offerte. L'ordine delle offerte è rilevante poiché, nel caso di aggiudicazione di più giocatori tale da esaurire i crediti disponibili, saranno considerate valide soltanto le offerte compatibili con il credito residuo.</p>
+    <p><strong>Art. 35</strong> Qualora un presidente disponga di 10M e presenti, ad esempio, due offerte da 8M per giocatori diversi, l'eventuale aggiudicazione del primo giocatore secondo l'ordine delle offerte renderà inefficaci le offerte successive incompatibili con il credito residuo.</p>
+    <p><strong>Art. 36</strong> Le offerte devono avere un valore almeno pari alla quotazione del giocatore su Transfermarkt; gli scaglioni minimi di rilancio sono pari a 0,1M.</p>
+    <p><strong>Art. 37</strong> Non sono ammesse offerte pari, ad esempio, a 5,01M per un giocatore quotato 5M, poiché gli incrementi validi devono rispettare lo scaglione minimo di 0,1M.</p>
+    <p><strong>Art. 38</strong> In caso di offerte identiche presentate da due o più presidenti, il giocatore sarà assegnato al fantapresidente che presenti il VMR più basso nel ruolo di riferimento.</p>
+    <p><strong>Art. 39</strong> Il VMR, ossia il valore medio di reparto, si determina sommando le quotazioni aggiornate dei giocatori posseduti nel ruolo interessato, inclusi rosa, fuori rosa e under 21, e dividendo tale importo per il numero massimo di giocatori previsto per quel ruolo.</p>
+    <p>VMR = Valore medio di reparto e si calcola sommando le quotazioni dei giocatori che si posseggono in quel ruolo (rosa + fuori rosa + U21) diviso il numero dei giocatori massimi previsti per tale ruolo. Per tale calcolo si utilizza la quotazione aggiornata di Transfermarkt e non quella al momento dell'acquisto.</p>
+    <p class="top-link"><a href="#indice">Torna all'indice</a></p>
+
+    <h2 id="competizioni-aggiuntive">Competizioni aggiuntive</h2>
+    <p><strong>Art. 40</strong> È istituita la Champions League, alla quale partecipano i primi quattro classificati della stagione precedente. La competizione si svolge con formula a eliminazione diretta, articolata in semifinali e finale. Gli accoppiamenti delle semifinali saranno determinati casualmente da Fantamaster. Il botteghino della Champions League è fissato in 2M per ogni partita, fino a un massimo di due partite per squadra, corrispondenti a semifinale e finale.</p>
+    <p><strong>Art. 41</strong> È istituita l'Europa League, consistente in una finale secca tra il quinto e il sesto classificato della stagione precedente. Il botteghino dell'Europa League è fissato in 2M per ciascuna finalista.</p>
+    <p><strong>Art. 42</strong> È istituita la Supercoppa di Lega, consistente in una finale secca tra il vincitore del campionato e il vincitore della coppa di lega della stagione precedente. Qualora la medesima squadra abbia vinto entrambe le competizioni, la finale sarà disputata tra il vincitore del campionato e la finalista della coppa di lega.</p>
+    <p class="top-link"><a href="#indice">Torna all'indice</a></p>
+  </div>
+
+  <script>
+  (function() {
+    const input = document.getElementById('reg-search-input');
+    const info  = document.getElementById('reg-search-info');
+    const container = document.querySelector('.reg-container');
+
+    // Raggruppa i paragrafi "Art." con i loro contenuti correlati
+    // Ogni art-block = il <p> con Art. + i <p>, <ul>, <table> fino al prossimo Art. o <h2>
+    const allElements = container.querySelectorAll('h2, p, ul, table');
+    const artBlocks = [];
+    let currentBlock = null;
+
+    allElements.forEach(function(el) {
+      if (el.tagName === 'H2') {
+        currentBlock = null;
+        return;
+      }
+      if (el.tagName === 'P' && el.innerHTML.match(/^<strong>Art\.\s*\d+/)) {
+        currentBlock = { elements: [el], text: el.textContent };
+        artBlocks.push(currentBlock);
+      } else if (currentBlock && !el.classList.contains('top-link')) {
+        currentBlock.elements.push(el);
+        currentBlock.text += ' ' + el.textContent;
+      }
+    });
+
+    function applySearch() {
+      const query = input.value.trim().toLowerCase();
+
+      if (!query) {
+        // Mostra tutto, rimuovi highlights
+        artBlocks.forEach(function(block) {
+          block.elements.forEach(function(el) {
+            el.style.display = '';
+            el.innerHTML = el.innerHTML.replace(/<span class="art-highlight">([^<]*)<\/span>/g, '$1');
+          });
+        });
+        // Mostra anche h2 e top-link
+        container.querySelectorAll('h2, .top-link, .reg-indice, h1, .reg-search').forEach(function(el) {
+          el.style.display = '';
+        });
+        info.textContent = '';
+        return;
+      }
+
+      let visibleCount = 0;
+      const totalArt = artBlocks.length;
+
+      artBlocks.forEach(function(block) {
+        const match = block.text.toLowerCase().indexOf(query) !== -1;
+        block.elements.forEach(function(el) {
+          el.style.display = match ? '' : 'none';
+          // Highlight
+          if (match) {
+            // Rimuovi vecchi highlight prima
+            el.innerHTML = el.innerHTML.replace(/<span class="art-highlight">([^<]*)<\/span>/g, '$1');
+            // Aggiungi nuovo highlight (solo nel testo, non negli attributi/tag)
+            const regex = new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+            el.innerHTML = el.innerHTML.replace(/>([^<]+)</g, function(match, text) {
+              return '>' + text.replace(regex, '<span class="art-highlight">$1</span>') + '<';
+            });
+          }
+        });
+        if (match) visibleCount++;
+      });
+
+      // Nascondi le sezioni h2 se non ci sono articoli visibili sotto
+      container.querySelectorAll('h2[id]').forEach(function(h2) {
+        let next = h2.nextElementSibling;
+        let hasVisible = false;
+        while (next && next.tagName !== 'H2') {
+          if (next.style.display !== 'none' && next.tagName === 'P' && next.innerHTML.match(/<strong>Art\./)) {
+            hasVisible = true;
+            break;
+          }
+          next = next.nextElementSibling;
+        }
+        h2.style.display = hasVisible ? '' : 'none';
+      });
+
+      // Nascondi top-link se la sezione è nascosta
+      container.querySelectorAll('.top-link').forEach(function(el) {
+        let prev = el.previousElementSibling;
+        while (prev && prev.tagName !== 'H2') {
+          if (prev.style.display !== 'none' && prev.tagName === 'P' && prev.innerHTML.match(/<strong>Art\./)) {
+            el.style.display = '';
+            return;
+          }
+          prev = prev.previousElementSibling;
+        }
+        el.style.display = 'none';
+      });
+
+      info.textContent = visibleCount + ' di ' + totalArt + ' articoli trovati';
+    }
+
+    input.addEventListener('input', applySearch);
+  })();
+  </script>
+</body>
+</html>

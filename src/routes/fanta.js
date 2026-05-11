@@ -16,6 +16,7 @@ router.get("/diario",            ctrl.showDiario);
 router.get("/log",               ctrl.showLog);
 router.get("/rose",              ctrl.showRose);
 router.get("/rose/:fantaTeamId", ctrl.showRosaDettaglio);
+router.get("/regolamento",       ctrl.showRegolamento);
 
 // redirect di default
 router.get("/", (req, res) => res.redirect("/fanta/classifica"));
