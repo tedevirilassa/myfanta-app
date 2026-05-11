@@ -239,7 +239,16 @@ async function showListaGiocatori(req, res) {
     }
 
     const ruoliEstesi = [...new Set(giocatori.map(g => g.ruoloEsteso).filter(Boolean))].sort();
-    const squadre     = [...new Set(giocatori.map(g => g.squadra).filter(Boolean))].sort();
+
+    // Usa solo le squadre attive dai parametri (Serie A configurate)
+    const activeTeamNames = await parametriService.getSerieATeamNames();
+    let squadre;
+    if (activeTeamNames) {
+      const activeSet = new Set(activeTeamNames.map(n => n.toLowerCase()));
+      squadre = [...new Set(giocatori.map(g => g.squadra).filter(s => s && activeSet.has(s.toLowerCase())))].sort();
+    } else {
+      squadre = [...new Set(giocatori.map(g => g.squadra).filter(Boolean))].sort();
+    }
 
     res.render("fanta/lista-giocatori", {
       giocatori, ruoliEstesi, squadre,

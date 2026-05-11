@@ -208,6 +208,16 @@
           </select>
         </div>
 
+        <!-- Stato -->
+        <div class="form-group">
+          <label for="f-active">Stato</label>
+          <select id="f-active">
+            <option value="1" selected>Attivo</option>
+            <option value="0">Inattivo</option>
+            <option value="">Tutti</option>
+          </select>
+        </div>
+
         <!-- Data scraping -->
         <div class="form-group">
           <label for="f-data-scraping">Data scraping</label>
@@ -266,6 +276,7 @@
                 data-valore="<%= valoriStorici ? (valoriStorici[g.id] !== undefined ? (valoriStorici[g.id] !== null ? valoriStorici[g.id] : '') : '') : (g.valore !== null ? Number(g.valore) : '') %>"
                 data-nome="<%= g.nome.toLowerCase() %>"
                 data-avail="<%= g.contratti && g.contratti.length > 0 ? '0' : '1' %>"
+                data-active="<%= g.active ? '1' : '0' %>"
               >
                 <td class="num-col" style="color:var(--gray-400);font-size:.78rem;"><%= g.id %></td>
                 <td class="nome-col"><%= g.nome %></td>
@@ -398,6 +409,7 @@
         const valMax      = numVal("f-val-max");
         const nome        = val("f-nome").toLowerCase();
         const avail       = val("f-avail");
+        const active      = val("f-active");
 
         let visible = 0;
         rows.forEach(function (row) {
@@ -408,6 +420,7 @@
           const rVal    = row.dataset.valore !== "" ? parseFloat(row.dataset.valore) : null;
           const rNome   = row.dataset.nome;
           const rAvail  = row.dataset.avail;
+          const rActive = row.dataset.active;
 
           let show = true;
           if (ruolo       && rRuolo  !== ruolo)                    show = false;
@@ -415,6 +428,7 @@
           if (squadra     && rSq     !== squadra)                  show = false;
           if (nome        && rNome.indexOf(nome) === -1)           show = false;
           if (avail       && rAvail  !== avail)                    show = false;
+          if (active      && rActive !== active)                   show = false;
           if (etaMin !== null && (rEta === null || rEta < etaMin)) show = false;
           if (etaMax !== null && (rEta === null || rEta > etaMax)) show = false;
           if (valMin !== null && (rVal === null || rVal < valMin)) show = false;
@@ -431,7 +445,7 @@
         countEl2.textContent = label;
       }
 
-      ["f-ruolo","f-ruolo-esteso","f-squadra","f-avail"].forEach(function(id) {
+      ["f-ruolo","f-ruolo-esteso","f-squadra","f-avail","f-active"].forEach(function(id) {
         document.getElementById(id).addEventListener("change", applyFilters);
       });
       ["f-eta-min","f-eta-max","f-val-min","f-val-max","f-nome"].forEach(function(id) {
@@ -447,6 +461,7 @@
         ["f-ruolo","f-ruolo-esteso","f-squadra","f-avail"].forEach(function(id) {
           document.getElementById(id).value = "";
         });
+        document.getElementById("f-active").value = "1";
         ["f-eta-min","f-eta-max","f-val-min","f-val-max","f-nome"].forEach(function(id) {
           document.getElementById(id).value = "";
         });

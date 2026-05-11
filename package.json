@@ -14,7 +14,11 @@
     "prisma:seed": "node prisma/seed.js",
     "render:migrate": "node scripts/sync-to-render.js --migrate-only",
     "render:sync": "node scripts/sync-to-render.js",
-    "render:migrate-and-sync": "node scripts/sync-to-render.js --migrate"
+    "render:migrate-and-sync": "node scripts/sync-to-render.js --migrate",
+    "render:pull": "node scripts/sync-from-render.js",
+    "render:pull-dry": "node scripts/sync-from-render.js --dry-run",
+    "db:backup": "node scripts/backup-db.js",
+    "db:backup-remote": "node scripts/backup-db.js --remote"
   },
   "keywords": [],
   "author": "",

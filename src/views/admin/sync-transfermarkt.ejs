@@ -99,14 +99,10 @@
       <div style="display:flex; gap:12px; align-items:center; margin-bottom:20px; flex-wrap:wrap;">
         <!-- Selezione squadra singola o tutte -->
         <select id="sel-squadra" style="padding:8px 12px;border-radius:8px;border:1px solid var(--gray-200);font-size:.9rem;">
-          <option value="">Tutte le squadre (20)</option>
-          <option>Atalanta</option><option>Bologna</option><option>Cagliari</option>
-          <option>Como</option><option>Empoli</option><option>Fiorentina</option>
-          <option>Genoa</option><option>Inter</option><option>Juventus</option>
-          <option>Lazio</option><option>Lecce</option><option>Milan</option>
-          <option>Monza</option><option>Napoli</option><option>Parma</option>
-          <option>Roma</option><option>Torino</option><option>Udinese</option>
-          <option>Venezia</option><option>Verona</option>
+          <option value="">Tutte le squadre (<%= serieATeams.length %>)</option>
+          <% serieATeams.forEach(function(nome) { %>
+          <option value="<%= nome %>"><%= nome %></option>
+          <% }); %>
         </select>
         <button id="btn-scrape" class="btn btn-primary">▶ Avvia scraping</button>
         <span id="scrape-spinner" style="display:none;"><span class="spinner"></span> Scraping in corso… (può richiedere alcuni minuti)</span>

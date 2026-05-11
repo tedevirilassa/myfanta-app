@@ -368,8 +368,11 @@ async function syncQuotazioni(req, res) {
 }
 
 // ── GET /admin/sync-transfermarkt ────────────────────────────────────────────
-function showSyncTransfermarkt(req, res) {
-  res.render("admin/sync-transfermarkt", { currentUser: req.user });
+async function showSyncTransfermarkt(req, res) {
+  const catalogo = await parametriService.getSerieACatalogo() || SERIE_A_TEAMS;
+  const activeTeamNames = await parametriService.getSerieATeamNames();
+  const serieATeams = activeTeamNames || catalogo.map(t => t.nome);
+  res.render("admin/sync-transfermarkt", { currentUser: req.user, serieATeams });
 }
 
 // ── POST /admin/sync-transfermarkt/scrape (SSE) ──────────────────────────────
