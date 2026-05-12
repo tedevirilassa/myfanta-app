@@ -1,7 +1,17 @@
 npm run render:migrate-and-sync
-per allineare anche il Db su render
+per allineare il Db su render con i dati in locale
 
 npm run dev
 per eseguito il sito 
 
 dan24l77tesf5mj10kretecer1c0llaud0Prova
+
+
+npm run db:backup
+backup local db
+
+npm run db:backup-remote
+backup del db su render
+
+npm run render:pull <— esegue la sync Render → locale
+npm run render:pull-dry <— mostra cosa farebbe senza scrivere (dry-run)
