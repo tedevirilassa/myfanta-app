@@ -15,6 +15,10 @@
       transition: width .3s;
     }
     .val-rose { font-size: .75rem; color: var(--gray-400); display: block; }
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { background: var(--gray-100); }
+    th.sortable .sort-arrow { opacity: .35; margin-left: 4px; font-size: .75rem; }
+    th.sortable.sort-active .sort-arrow { opacity: 1; }
   </style>
 </head>
 <body>
@@ -51,9 +55,9 @@
           <tr>
             <th style="width:40px;">#</th>
             <th>Presidente</th>
-            <th>Patrimonio</th>
-            <th>Rosa</th>
-            <th>Crediti</th>
+            <th class="sortable sort-active" data-sort-key="patrimonio" data-sort-dir="desc">Patrimonio<span class="sort-arrow">▼</span></th>
+            <th class="sortable" data-sort-key="rosa" data-sort-dir="desc">Rosa<span class="sort-arrow">▼</span></th>
+            <th class="sortable" data-sort-key="crediti" data-sort-dir="desc">Crediti<span class="sort-arrow">▼</span></th>
             <th>Giocatori</th>
             <th>Età media</th>
             <th>Stipendi</th>
@@ -68,8 +72,8 @@
             const barWidth = Math.round((p.patrimonio / maxPat) * 100);
             const pmClass = p.ultimoPlusMinus > 0 ? 'pm-pos' : p.ultimoPlusMinus < 0 ? 'pm-neg' : 'pm-zero';
           %>
-          <tr class="<%= rowClass %>">
-            <td style="text-align:center; font-weight:700;"><%= pos %></td>
+          <tr class="<%= rowClass %>" data-patrimonio="<%= p.patrimonio %>" data-rosa="<%= p.valoreRose %>" data-crediti="<%= p.crediti %>">
+            <td class="rank-cell" style="text-align:center; font-weight:700;"><%= pos %></td>
             <td>
               <strong><%= p.nomePresidente %></strong>
               <% if (p.fantaTeam) { %>
@@ -136,5 +140,54 @@
       Stagione: <strong><%= stagioneFiltro %></strong> · Dati importati dal foglio riepilogoEx
     </p>
   </div>
+
+  <script>
+    (function() {
+      const table = document.querySelector('.card table');
+      if (!table) return;
+      const tbody = table.querySelector('tbody');
+      const headers = table.querySelectorAll('th.sortable');
+
+      function applySort(key, dir) {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const mult = dir === 'asc' ? 1 : -1;
+        rows.sort((a, b) => {
+          const va = parseFloat(a.dataset[key]) || 0;
+          const vb = parseFloat(b.dataset[key]) || 0;
+          return (va - vb) * mult;
+        });
+        rows.forEach((r, i) => {
+          const pos = i + 1;
+          r.classList.remove('rank-1', 'rank-2', 'rank-3');
+          if (pos === 1) r.classList.add('rank-1');
+          else if (pos === 2) r.classList.add('rank-2');
+          else if (pos === 3) r.classList.add('rank-3');
+          const rc = r.querySelector('.rank-cell');
+          if (rc) rc.textContent = pos;
+          tbody.appendChild(r);
+        });
+      }
+
+      headers.forEach(h => {
+        h.addEventListener('click', () => {
+          const key = h.dataset.sortKey;
+          const currentDir = h.dataset.sortDir;
+          const isActive = h.classList.contains('sort-active');
+          const newDir = isActive ? (currentDir === 'desc' ? 'asc' : 'desc') : 'desc';
+          headers.forEach(o => {
+            o.classList.remove('sort-active');
+            const arr = o.querySelector('.sort-arrow');
+            if (arr) arr.textContent = '▼';
+            o.dataset.sortDir = 'desc';
+          });
+          h.classList.add('sort-active');
+          h.dataset.sortDir = newDir;
+          const arrow = h.querySelector('.sort-arrow');
+          if (arrow) arrow.textContent = newDir === 'asc' ? '▲' : '▼';
+          applySort(key, newDir);
+        });
+      });
+    })();
+  </script>
 </body>
 </html>
