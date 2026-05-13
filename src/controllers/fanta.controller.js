@@ -302,7 +302,7 @@ async function showListaGiocatori(req, res) {
   }
 }
 
-module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio, showRegolamento };
+module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio, showRegolamento, showDashboard };
 
 // ── GET /fanta/rose ───────────────────────────────────────────────────────────
 async function showRose(req, res) {
@@ -461,4 +461,97 @@ async function showRosaDettaglio(req, res) {
 // ── GET /fanta/regolamento ────────────────────────────────────────────────────
 function showRegolamento(req, res) {
   res.render("fanta/regolamento", { currentUser: req.user });
+}
+
+// ── GET / (Dashboard del fantapresidente loggato) ─────────────────────────────
+async function showDashboard(req, res) {
+  const user = req.user;
+  try {
+    if (!user.fantaTeam) {
+      return res.render("dashboard", {
+        currentUser: user, fantaTeam: null, stagione: null, stats: null,
+      });
+    }
+
+    const params = await parametriService.getAll();
+    const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+    const now = new Date();
+    const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
+    const stagione = `${annoInizio}-${annoInizio + 1}`;
+
+    const [contratti, sf] = await Promise.all([
+      prisma.contratto.findMany({
+        where:   { fantaTeamId: user.fantaTeam.id, valido: true },
+        include: {
+          giocatore: {
+            select: {
+              id: true, nome: true, ruolo: true, ruoloEsteso: true,
+              valore: true, eta: true, squadra: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.situazioneFinanziaria.findFirst({
+        where:  { fantaTeamId: user.fantaTeam.id, stagione },
+        select: { crediti: true },
+      }),
+    ]);
+
+    // anni rimanenti dal contratto dataFine (MM-YYYY)
+    function anniRimanenti(dataFine) {
+      if (!dataFine) return null;
+      const [mm, yyyy] = dataFine.split("-").map(Number);
+      if (!mm || !yyyy) return null;
+      const diffMesi = (yyyy - now.getFullYear()) * 12 + (mm - (now.getMonth() + 1));
+      return Math.max(0, Math.ceil(diffMesi / 12));
+    }
+
+    // Aggreghiamo solo i contratti Acquisto, evitando duplicati per giocatore
+    const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
+    let totaleStipendi = 0;
+    const acquistiVisti = new Set();
+    const giocatoriRosa = [];
+    let inScadenzaCount = 0;
+    for (const c of contratti) {
+      if (c.tipo !== "Acquisto") continue;
+      if (acquistiVisti.has(c.giocatoreId)) continue;
+      acquistiVisti.add(c.giocatoreId);
+      totaleStipendi += c.importoOperazione ? +c.importoOperazione : 0;
+      const anni = anniRimanenti(c.dataFine);
+      if (anni !== null && anni <= 1) inScadenzaCount++;
+      giocatoriRosa.push({
+        nome:        c.giocatore.nome,
+        ruolo:       c.giocatore.ruolo,
+        ruoloEsteso: c.giocatore.ruoloEsteso || "",
+        valore:      c.giocatore.valore !== null ? +c.giocatore.valore : null,
+        eta:         c.giocatore.eta,
+        squadra:     c.giocatore.squadra || "",
+        anni,
+        dataFine:    c.dataFine,
+      });
+    }
+    giocatoriRosa.sort((a, b) =>
+      (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) ||
+      a.nome.localeCompare(b.nome)
+    );
+
+    res.render("dashboard", {
+      currentUser: user,
+      fantaTeam:   user.fantaTeam,
+      stagione,
+      stats: {
+        totaleGiocatori: acquistiVisti.size,
+        inScadenzaCount,
+        giocatoriRosa,
+        totaleStipendi:  Math.round(totaleStipendi * 100) / 100,
+        crediti:         sf ? +sf.crediti : null,
+      },
+    });
+  } catch (err) {
+    console.error("showDashboard error:", err.message);
+    res.render("dashboard", {
+      currentUser: user, fantaTeam: user.fantaTeam || null, stagione: null, stats: null,
+    });
+  }
 }

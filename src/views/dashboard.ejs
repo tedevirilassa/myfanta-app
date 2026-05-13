@@ -2,26 +2,180 @@
 <html lang="it">
 <head>
   <%- include('partials/head', { title: 'Dashboard' }) %>
+  <style>
+    .welcome-bar {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .welcome-bar h1 { font-size: 1.5rem; color: var(--green-dark); }
+    .team-name {
+      font-size: 1rem; font-weight: 700; color: var(--gray-700);
+      background: var(--gray-100); padding: 6px 14px; border-radius: 999px;
+    }
+
+    .stat-grid {
+      display: grid; gap: 16px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--white); border-radius: 12px;
+      padding: 20px 22px; box-shadow: 0 2px 10px rgba(26,58,42,.06);
+      border-top: 4px solid var(--green-mid);
+    }
+    .stat-card .label {
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .5px;
+      color: var(--gray-400); font-weight: 700; margin-bottom: 8px;
+    }
+    .stat-card .value { font-size: 1.8rem; font-weight: 800; color: var(--green-dark); }
+    .stat-card .sub { font-size: .78rem; color: var(--gray-400); margin-top: 6px; }
+    .stat-warn .value { color: #b45309; }
+    .stat-warn { border-top-color: #f59e0b; }
+
+    .scadenza-list {
+      background: var(--white); border-radius: 12px;
+      padding: 20px 22px; box-shadow: 0 2px 10px rgba(26,58,42,.06);
+    }
+    .scadenza-list h3 {
+      font-size: 1rem; font-weight: 800; color: var(--green-dark);
+      margin-bottom: 14px;
+    }
+    .scadenza-list table { width: 100%; border-collapse: collapse; }
+    .scadenza-list th, .scadenza-list td { font-size: .85rem; padding: 8px 10px; }
+    .scadenza-list th { text-align: left; color: var(--gray-700); border-bottom: 1px solid var(--gray-200); }
+    .scadenza-list tbody tr { border-bottom: 1px solid #f1f5f9; }
+    .scadenza-list tbody tr:last-child { border-bottom: none; }
+    .scadenza-list tr.row-scadenza { background: #fff7ed; }
+    .ruolo-badge {
+      display: inline-block; padding: 1px 8px; border-radius: 4px;
+      color: white; font-size: .72rem; font-weight: 700;
+    }
+    .ruolo-P { background: #64748b; }
+    .ruolo-D { background: #2563eb; }
+    .ruolo-C { background: #0891b2; }
+    .ruolo-A { background: #dc2626; }
+    .anni-0 { color: #b91c1c; font-weight: 800; }
+    .anni-1 { color: #b45309; font-weight: 700; }
+
+    .empty-state {
+      background: var(--white); border-radius: 12px;
+      padding: 30px; text-align: center; color: var(--gray-700);
+      box-shadow: 0 2px 10px rgba(26,58,42,.06);
+    }
+
+    .admin-quick {
+      margin-top: 28px; padding-top: 20px;
+      border-top: 1px dashed var(--gray-200);
+    }
+    .admin-quick-title {
+      font-size: .72rem; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--gray-400); font-weight: 800; margin-bottom: 12px;
+    }
+  </style>
 </head>
 <body>
   <%- include('partials/nav') %>
 
   <div class="container">
-    <div class="card">
-      <h1>Benvenuto, <%= currentUser.email %></h1>
-      <p style="color:#64748b; margin-top:8px;">
-        Hai effettuato l'accesso come
-        <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>">
-          <%= currentUser.role %>
-        </span>
-      </p>
 
-      <% if (currentUser.role === 'ADMIN') { %>
-      <div style="margin-top:24px;">
-        <a href="/admin/users" class="btn btn-primary">Gestisci utenti</a>
-      </div>
+    <div class="welcome-bar">
+      <h1>👋 Ciao, <%= currentUser.nickname || currentUser.email.split('@')[0] %>!</h1>
+      <% if (fantaTeam) { %>
+        <span class="team-name">🏆 <%= fantaTeam.nome %></span>
       <% } %>
+      <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>" style="margin-left:auto;">
+        <%= currentUser.role %>
+      </span>
     </div>
+
+    <% if (!fantaTeam) { %>
+      <div class="empty-state">
+        <p style="font-size:1rem; margin-bottom:8px;">Non hai ancora un FantaTeam assegnato.</p>
+        <p style="font-size:.85rem; color:var(--gray-400);">
+          Contatta un amministratore per essere associato a una squadra.
+        </p>
+      </div>
+    <% } else if (!stats) { %>
+      <div class="empty-state">
+        <p>Impossibile caricare il riassunto. Riprova più tardi.</p>
+      </div>
+    <% } else { %>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="label">Giocatori in rosa</div>
+          <div class="value"><%= stats.totaleGiocatori %></div>
+          <div class="sub">contratti Acquisto attivi</div>
+        </div>
+
+        <div class="stat-card <%= stats.inScadenzaCount > 0 ? 'stat-warn' : '' %>">
+          <div class="label">In scadenza</div>
+          <div class="value"><%= stats.inScadenzaCount %></div>
+          <div class="sub">≤ 1 anno rimanente</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="label">Stipendi totali</div>
+          <div class="value"><%= stats.totaleStipendi.toFixed(2) %></div>
+          <div class="sub">M / stagione</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="label">Crediti disponibili</div>
+          <div class="value"><%= stats.crediti !== null ? stats.crediti.toFixed(2) : 'N/D' %></div>
+          <div class="sub">stagione <%= stagione %></div>
+        </div>
+      </div>
+
+      <% if (stats.giocatoriRosa.length > 0) { %>
+        <div class="scadenza-list">
+          <h3>👥 La tua rosa</h3>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:60px;">Ruolo</th>
+                <th>Giocatore</th>
+                <th>Ruolo esteso</th>
+                <th>Squadra Serie A</th>
+                <th style="width:70px; text-align:right;">Età</th>
+                <th style="width:100px; text-align:right;">Valore</th>
+                <th style="width:90px; text-align:right;">Anni rim.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% stats.giocatoriRosa.forEach(function(g) { %>
+                <tr class="<%= g.anni !== null && g.anni <= 1 ? 'row-scadenza' : '' %>">
+                  <td><span class="ruolo-badge ruolo-<%= g.ruolo %>"><%= g.ruolo %></span></td>
+                  <td><strong><%= g.nome %></strong></td>
+                  <td style="color:var(--gray-700); font-size:.8rem;"><%= g.ruoloEsteso || '—' %></td>
+                  <td style="color:var(--gray-700);"><%= g.squadra || '—' %></td>
+                  <td style="text-align:right;"><%= g.eta != null ? g.eta : '—' %></td>
+                  <td style="text-align:right; font-weight:700;">
+                    <%= g.valore != null ? g.valore.toFixed(2) : '—' %>
+                  </td>
+                  <td style="text-align:right;" class="<%= g.anni != null ? 'anni-' + g.anni : '' %>">
+                    <%= g.anni != null ? g.anni : '—' %>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+
+    <% } %>
+
+    <% if (currentUser.role === 'ADMIN') { %>
+      <div class="admin-quick">
+        <div class="admin-quick-title">⚙️ Scorciatoie Admin</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <a href="/admin/pannello" class="btn btn-sm btn-primary">Pannello</a>
+          <a href="/admin/contratti/nuovo" class="btn btn-sm btn-success">Nuovo contratto</a>
+          <a href="/admin/users" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">Gestione utenti</a>
+        </div>
+      </div>
+    <% } %>
+
   </div>
 </body>
 </html>

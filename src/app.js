@@ -14,6 +14,9 @@ const adminRoutes = require("./routes/admin");
 const fantaRoutes = require("./routes/fanta");
 const profileRoutes = require("./routes/profile");
 
+// Controllers
+const fantaCtrl = require("./controllers/fanta.controller");
+
 // Middleware
 const { requireAuth } = require("./middleware/auth.middleware");
 
@@ -60,9 +63,7 @@ app.use("/public", express.static(path.join(__dirname, "public")));
 /**
  * 7) Routes
  */
-app.get("/", requireAuth, (req, res) => {
-  res.render("dashboard", { currentUser: req.user });
-});
+app.get("/", requireAuth, fantaCtrl.showDashboard);
 
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);

@@ -17,6 +17,8 @@
     "render:migrate-and-sync": "node scripts/sync-to-render.js --migrate",
     "render:pull": "node scripts/sync-from-render.js",
     "render:pull-dry": "node scripts/sync-from-render.js --dry-run",
+    "render:pull-fantapresidenti": "node scripts/pull-fantapresidenti.js",
+    "render:pull-fantapresidenti-dry": "node scripts/pull-fantapresidenti.js --dry-run",
     "db:backup": "node scripts/backup-db.js",
     "db:backup-remote": "node scripts/backup-db.js --remote"
   },
