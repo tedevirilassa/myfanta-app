@@ -2,6 +2,7 @@
 const prisma = require("../lib/prisma");
 const authService = require("../services/auth.service");
 const { logAction } = require("../services/log.service");
+const { cleanNickname } = require("../lib/sanitize");
 const parametriService = require("../services/parametri.service");
 const { syncQuotazioni: runSyncQuotazioni } = require("../services/sync-quotazioni.service");
 const { scrapeSerieA, SERIE_A_TEAMS, scrapeSquadFromBrowser, createBrowser, slugifyRuolo } = require("../services/transfermarkt.service");
@@ -198,13 +199,13 @@ async function saveEditProfile(req, res) {
   const user = await prisma.user.findUnique({ where: { id }, include: { fantaTeam: true } });
   if (!user) return res.redirect("/admin/users");
 
-  const nick = (req.body.nickname || "").trim().slice(0, 40);
+  const nick = cleanNickname(req.body.nickname);
   const team = (req.body.teamName  || "").trim().slice(0, 60);
 
   try {
     const updated = await prisma.user.update({
       where: { id },
-      data: { nickname: nick || null },
+      data: { nickname: nick },
       include: { fantaTeam: true },
     });
 
@@ -618,7 +619,7 @@ module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUse
 async function saveUserFields(req, res) {
   const id = parseInt(req.params.id, 10);
   const email    = (req.body.email    || "").trim().toLowerCase();
-  const nickname = (req.body.nickname || "").trim().slice(0, 40);
+  const nickname = cleanNickname(req.body.nickname);
   const fantaTeamId = req.body.fantaTeamId ? parseInt(req.body.fantaTeamId, 10) : null;
 
   if (!email) {
@@ -652,7 +653,7 @@ async function saveUserFields(req, res) {
     }
     await tx.user.update({
       where: { id },
-      data: { email, nickname: nickname || null },
+      data: { email, nickname },
     });
   }).catch((err) => {
     return res.redirect("/admin/users?fieldError=" + encodeURIComponent(err.message));
