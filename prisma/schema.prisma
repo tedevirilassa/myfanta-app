@@ -136,6 +136,24 @@ enum ClausolaContratto {
   ObbligoRicompra
 }
 
+enum TipoPremio {
+  InizioStagione
+  Gennaio
+}
+
+model PremioErogato {
+  id          Int        @id @default(autoincrement())
+  tipo        TipoPremio
+  stagione    String     // es. "2025-2026"
+  totale      Decimal    @db.Decimal(10, 2)
+  numBenef    Int        // numero presidenti che hanno ricevuto qualcosa
+  createdAt   DateTime   @default(now())
+  adminId     Int
+
+  @@unique([tipo, stagione])
+  @@map("premi_erogati")
+}
+
 model Log {
   id         Int      @id @default(autoincrement())
   azione     String              // CREATE | UPDATE | DELETE

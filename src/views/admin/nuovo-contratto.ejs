@@ -100,6 +100,7 @@
                 <option
                   value="<%= g.id %>"
                   data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
+                  data-valore-contratto="<%= g.valoreContratto !== null && g.valoreContratto !== undefined ? Number(g.valoreContratto) : '' %>"
                   data-has-contratto="<%= g.hasContratto ? '1' : '0' %>"
                   data-titolare="<%= g.titolareContratto || '' %>"
                 >
@@ -344,12 +345,18 @@
       // ── Aggiorna valore giocatore + auto-provenienza ───────
       selGiocatore.addEventListener("change", function () {
         const opt = selGiocatore.options[selGiocatore.selectedIndex];
-        const val = opt ? opt.dataset.valore : "";
+        // Se il giocatore ha un contratto valido: usa il valore di quel contratto;
+        // altrimenti usa la quotazione corrente.
+        const hasC      = opt ? opt.dataset.hasContratto === "1" : false;
+        const valQuot   = opt ? opt.dataset.valore : "";
+        const valContr  = opt ? opt.dataset.valoreContratto : "";
+        const val       = hasC && valContr !== "" ? valContr : valQuot;
         if (val !== "") {
           const num = parseFloat(val);
+          const fonte = hasC && valContr !== "" ? " (da contratto in corso)" : " (quotazione)";
           valoreDisplay.textContent = num.toLocaleString("it-IT", {
             minimumFractionDigits: 2, maximumFractionDigits: 2
-          }) + " €";
+          }) + " €" + fonte;
           valoreInput.value = num;
         } else {
           valoreDisplay.textContent = "— seleziona prima un giocatore —";
@@ -416,7 +423,6 @@
           fineStr = mesePad + "-" + fineAnno;
         } else {
           fineStr = String(mm).padStart(2, "0") + "-" + (yyyy + durata);
-        }
         }
 
         dataFineDisplay.textContent = fineStr;

@@ -42,6 +42,8 @@ router.post("/parametri/:id", ctrl.saveParametro);
 router.get("/rosa", ctrl.listRosa);
 router.get("/rosa/:fantaTeamId", ctrl.showRosa);
 router.post("/rosa/:fantaTeamId", ctrl.saveRosa);
+router.get("/premi/:tipo", ctrl.showPremi);
+router.post("/premi/:tipo", ctrl.savePremi);
 router.post("/sync-quotazioni", ctrl.syncQuotazioni);
 router.get("/sync-transfermarkt", ctrl.showSyncTransfermarkt);
 router.post("/sync-transfermarkt/scrape", ctrl.runScrapeTransfermarkt);

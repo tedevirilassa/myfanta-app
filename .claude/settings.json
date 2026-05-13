@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(\"---\")"
+      "PowerShell(\"---\")",
+      "PowerShell(node scripts/debug-presidenti.js)"
     ]
   }
 }

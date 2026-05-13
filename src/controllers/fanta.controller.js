@@ -21,6 +21,34 @@ async function showClassifica(req, res) {
         })
       : [];
 
+    // Fallback: alcune righe SF non hanno fantaTeamId valorizzato (assegnazione admin manuale).
+    // Risolviamo via nomePresidente con cascading: nickname esatto → email prefix esatto → substring nell'email.
+    const usersWithTeam = await prisma.user.findMany({
+      where: { fantaTeam: { isNot: null } },
+      select: { nickname: true, email: true, fantaTeam: { select: { id: true, nome: true } } },
+    });
+    const norm = (s) => (s || "").trim().toLowerCase();
+    // I nickname letterali "null" sono un bug a monte: filtriamoli.
+    const isValidNick = (n) => n && norm(n) !== "null" && norm(n) !== "";
+
+    function resolveTeam(nomePresidente) {
+      const nN = norm(nomePresidente);
+      if (!nN) return null;
+      // 1. Nickname esatto
+      for (const u of usersWithTeam) {
+        if (isValidNick(u.nickname) && norm(u.nickname) === nN) return u.fantaTeam;
+      }
+      // 2. Email prefix esatto
+      for (const u of usersWithTeam) {
+        if (u.email && norm(u.email.split("@")[0]) === nN) return u.fantaTeam;
+      }
+      // 3. nomePresidente come substring dell'email (es. "Giulio" in "giuliosergente@…")
+      for (const u of usersWithTeam) {
+        if (u.email && norm(u.email).includes(nN)) return u.fantaTeam;
+      }
+      return null;
+    }
+
     // Calcola valori dinamicamente dai contratti validi e giocatori attivi
     const teamIds = rawRecords.filter(r => r.fantaTeamId).map(r => r.fantaTeamId);
     const contrattiValidi = teamIds.length > 0
@@ -74,6 +102,7 @@ async function showClassifica(req, res) {
 
       return {
         ...p,
+        fantaTeam:       p.fantaTeam || resolveTeam(p.nomePresidente),
         valoreRose:      valoreRoseCalcolato,
         crediti,
         patrimonio:      Math.round((valoreRoseCalcolato + crediti) * 100) / 100,
