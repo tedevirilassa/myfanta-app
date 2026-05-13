@@ -665,7 +665,7 @@ async function saveUserFields(req, res) {
     entitaId: id,
     dettaglio: {
       prima: { email: user.email, nickname: user.nickname, fantaTeamId: vecchioTeamId },
-      dopo:  { email, nickname: nickname || null, fantaTeamId },
+      dopo:  { email, nickname, fantaTeamId },
     },
     adminId: req.user.id,
   });
