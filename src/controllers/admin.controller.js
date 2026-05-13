@@ -858,13 +858,13 @@ async function showPannello(req, res) {
 // ── POST /admin/users/:id/inline-profile ─────────────────────────────────────
 async function inlineEditUser(req, res) {
   const id = parseInt(req.params.id, 10);
-  const nick = (req.body.nickname || "").trim().slice(0, 40);
+  const nick = cleanNickname(req.body.nickname);
   const team = (req.body.teamName  || "").trim().slice(0, 60);
   try {
     const userPre = await prisma.user.findUnique({ where: { id }, select: { nickname: true } });
     const updated = await prisma.user.update({
       where: { id },
-      data: { nickname: nick || null },
+      data: { nickname: nick },
       include: { fantaTeam: true },
     });
 
@@ -879,7 +879,7 @@ async function inlineEditUser(req, res) {
     await logAction({ azione: "UPDATE", entita: "utente", entitaId: id,
       dettaglio: {
         prima: { nickname: userPre?.nickname ?? null },
-        dopo:  { nickname: nick || null },
+        dopo:  { nickname: nick },
       },
       adminId: req.user.id });
   } catch (err) {

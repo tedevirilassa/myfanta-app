@@ -1,6 +1,7 @@
 // src/controllers/profile.controller.js
 const prisma = require("../lib/prisma");
 const { logAction } = require("../services/log.service");
+const { cleanNickname } = require("../lib/sanitize");
 
 // GET /profilo
 function showProfile(req, res) {
@@ -16,13 +17,13 @@ async function saveProfile(req, res) {
   const { nickname, teamName } = req.body;
 
   // validazione base
-  const nick = (nickname || "").trim().slice(0, 40);
+  const nick = cleanNickname(nickname);
   const team = (teamName  || "").trim().slice(0, 60);
 
   try {
     const updated = await prisma.user.update({
       where: { id: req.user.id },
-      data:  { nickname: nick || null },
+      data:  { nickname: nick },
       include: { fantaTeam: true },
     });
 
@@ -43,7 +44,7 @@ async function saveProfile(req, res) {
       azione: "UPDATE",
       entita: "profilo",
       entitaId: req.user.id,
-      dettaglio: { nickname: nick || null, teamName: team || null },
+      dettaglio: { nickname: nick, teamName: team || null },
       adminId: req.user.id,
     });
 
