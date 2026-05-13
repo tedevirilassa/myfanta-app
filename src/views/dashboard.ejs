@@ -46,6 +46,23 @@
     .scadenza-list tbody tr { border-bottom: 1px solid #f1f5f9; }
     .scadenza-list tbody tr:last-child { border-bottom: none; }
     .scadenza-list tr.row-scadenza { background: #fff7ed; }
+    .scadenza-list + .scadenza-list { margin-top: 18px; }
+
+    .conteggi-bar {
+      display: flex; gap: 18px; flex-wrap: wrap;
+      padding: 12px 18px; margin-bottom: 14px;
+      background: var(--gray-100); border-radius: 8px;
+      font-size: .88rem; color: var(--gray-700);
+    }
+    .conteggi-bar strong { color: var(--green-dark); font-weight: 800; }
+    .conteggi-bar .sep { color: var(--gray-300); }
+    .cat-pill {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: .72rem; font-weight: 700; margin-left: 10px;
+      background: var(--gray-100); color: var(--gray-700);
+    }
+    .cat-pill.fuori { background: #fef3c7; color: #92400e; }
+    .cat-pill.u21   { background: #dbeafe; color: #1e40af; }
     .ruolo-badge {
       display: inline-block; padding: 1px 8px; border-radius: 4px;
       color: white; font-size: .72rem; font-weight: 700;
@@ -127,40 +144,64 @@
         </div>
       </div>
 
-      <% if (stats.giocatoriRosa.length > 0) { %>
-        <div class="scadenza-list">
-          <h3>👥 La tua rosa</h3>
-          <table>
-            <thead>
-              <tr>
-                <th style="width:60px;">Ruolo</th>
-                <th>Giocatore</th>
-                <th>Ruolo esteso</th>
-                <th>Squadra Serie A</th>
-                <th style="width:70px; text-align:right;">Età</th>
-                <th style="width:100px; text-align:right;">Valore</th>
-                <th style="width:90px; text-align:right;">Anni rim.</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% stats.giocatoriRosa.forEach(function(g) { %>
-                <tr class="<%= g.anni !== null && g.anni <= 1 ? 'row-scadenza' : '' %>">
-                  <td><span class="ruolo-badge ruolo-<%= g.ruolo %>"><%= g.ruolo %></span></td>
-                  <td><strong><%= g.nome %></strong></td>
-                  <td style="color:var(--gray-700); font-size:.8rem;"><%= g.ruoloEsteso || '—' %></td>
-                  <td style="color:var(--gray-700);"><%= g.squadra || '—' %></td>
-                  <td style="text-align:right;"><%= g.eta != null ? g.eta : '—' %></td>
-                  <td style="text-align:right; font-weight:700;">
-                    <%= g.valore != null ? g.valore.toFixed(2) : '—' %>
-                  </td>
-                  <td style="text-align:right;" class="<%= g.anni != null ? 'anni-' + g.anni : '' %>">
-                    <%= g.anni != null ? g.anni : '—' %>
-                  </td>
-                </tr>
-              <% }); %>
-            </tbody>
-          </table>
+      <% if (stats.totaleGiocatori > 0) { %>
+        <div class="conteggi-bar">
+          <span><strong><%= stats.countInRosa %></strong> in rosa</span>
+          <span class="sep">·</span>
+          <span><strong><%= stats.countFuoriRosa %></strong> fuori rosa</span>
+          <span class="sep">·</span>
+          <span><strong><%= stats.countU21 %></strong> U21</span>
         </div>
+
+        <%
+          const SEZIONI = [
+            { key: 'InRosa',    titolo: '👥 In rosa',    pill: '',      pillClass: '' },
+            { key: 'FuoriRosa', titolo: '📦 Fuori rosa', pill: 'Fuori', pillClass: 'fuori' },
+            { key: 'U21',       titolo: '🌱 U21',        pill: 'U21',   pillClass: 'u21' },
+          ];
+        %>
+        <% SEZIONI.forEach(function(s) {
+             const lista = stats.gruppi[s.key];
+             if (!lista || lista.length === 0) return;
+        %>
+          <div class="scadenza-list">
+            <h3>
+              <%= s.titolo %>
+              <span style="color:var(--gray-400); font-weight:500; font-size:.85rem;">(<%= lista.length %>)</span>
+              <% if (s.pill) { %><span class="cat-pill <%= s.pillClass %>"><%= s.pill %></span><% } %>
+            </h3>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:60px;">Ruolo</th>
+                  <th>Giocatore</th>
+                  <th>Ruolo esteso</th>
+                  <th>Squadra Serie A</th>
+                  <th style="width:70px; text-align:right;">Età</th>
+                  <th style="width:100px; text-align:right;">Valore</th>
+                  <th style="width:90px; text-align:right;">Anni rim.</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% lista.forEach(function(g) { %>
+                  <tr class="<%= g.anni !== null && g.anni <= 1 ? 'row-scadenza' : '' %>">
+                    <td><span class="ruolo-badge ruolo-<%= g.ruolo %>"><%= g.ruolo %></span></td>
+                    <td><strong><%= g.nome %></strong></td>
+                    <td style="color:var(--gray-700); font-size:.8rem;"><%= g.ruoloEsteso || '—' %></td>
+                    <td style="color:var(--gray-700);"><%= g.squadra || '—' %></td>
+                    <td style="text-align:right;"><%= g.eta != null ? g.eta : '—' %></td>
+                    <td style="text-align:right; font-weight:700;">
+                      <%= g.valore != null ? g.valore.toFixed(2) : '—' %>
+                    </td>
+                    <td style="text-align:right;" class="<%= g.anni != null ? 'anni-' + g.anni : '' %>">
+                      <%= g.anni != null ? g.anni : '—' %>
+                    </td>
+                  </tr>
+                <% }); %>
+              </tbody>
+            </table>
+          </div>
+        <% }); %>
       <% } %>
 
     <% } %>

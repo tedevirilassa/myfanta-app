@@ -479,7 +479,7 @@ async function showDashboard(req, res) {
     const annoInizio = now.getMonth() + 1 >= meseInizio ? now.getFullYear() : now.getFullYear() - 1;
     const stagione = `${annoInizio}-${annoInizio + 1}`;
 
-    const [contratti, sf] = await Promise.all([
+    const [contratti, sf, rosaAssegnazioni] = await Promise.all([
       prisma.contratto.findMany({
         where:   { fantaTeamId: user.fantaTeam.id, valido: true },
         include: {
@@ -496,7 +496,15 @@ async function showDashboard(req, res) {
         where:  { fantaTeamId: user.fantaTeam.id, stagione },
         select: { crediti: true },
       }),
+      prisma.rosaGiocatore.findMany({
+        where:  { fantaTeamId: user.fantaTeam.id, stagione },
+        select: { giocatoreId: true, categoria: true },
+      }),
     ]);
+
+    // mappa giocatoreId → categoria (default InRosa)
+    const categoriaMap = {};
+    for (const r of rosaAssegnazioni) categoriaMap[r.giocatoreId] = r.categoria;
 
     // anni rimanenti dal contratto dataFine (MM-YYYY)
     function anniRimanenti(dataFine) {
@@ -511,7 +519,7 @@ async function showDashboard(req, res) {
     const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
     let totaleStipendi = 0;
     const acquistiVisti = new Set();
-    const giocatoriRosa = [];
+    const gruppi = { InRosa: [], FuoriRosa: [], U21: [] };
     let inScadenzaCount = 0;
     for (const c of contratti) {
       if (c.tipo !== "Acquisto") continue;
@@ -520,7 +528,8 @@ async function showDashboard(req, res) {
       totaleStipendi += c.importoOperazione ? +c.importoOperazione : 0;
       const anni = anniRimanenti(c.dataFine);
       if (anni !== null && anni <= 1) inScadenzaCount++;
-      giocatoriRosa.push({
+      const categoria = categoriaMap[c.giocatoreId] || "InRosa";
+      (gruppi[categoria] || gruppi.InRosa).push({
         nome:        c.giocatore.nome,
         ruolo:       c.giocatore.ruolo,
         ruoloEsteso: c.giocatore.ruoloEsteso || "",
@@ -531,10 +540,12 @@ async function showDashboard(req, res) {
         dataFine:    c.dataFine,
       });
     }
-    giocatoriRosa.sort((a, b) =>
+    const sortByRuolo = (a, b) =>
       (ruoloOrdine[a.ruolo] ?? 9) - (ruoloOrdine[b.ruolo] ?? 9) ||
-      a.nome.localeCompare(b.nome)
-    );
+      a.nome.localeCompare(b.nome);
+    gruppi.InRosa.sort(sortByRuolo);
+    gruppi.FuoriRosa.sort(sortByRuolo);
+    gruppi.U21.sort(sortByRuolo);
 
     res.render("dashboard", {
       currentUser: user,
@@ -543,7 +554,10 @@ async function showDashboard(req, res) {
       stats: {
         totaleGiocatori: acquistiVisti.size,
         inScadenzaCount,
-        giocatoriRosa,
+        gruppi,
+        countInRosa:    gruppi.InRosa.length,
+        countFuoriRosa: gruppi.FuoriRosa.length,
+        countU21:       gruppi.U21.length,
         totaleStipendi:  Math.round(totaleStipendi * 100) / 100,
         crediti:         sf ? +sf.crediti : null,
       },
