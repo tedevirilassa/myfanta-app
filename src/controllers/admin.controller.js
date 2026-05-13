@@ -21,11 +21,9 @@ async function listUsers(req, res) {
       orderBy: { nome: "asc" },
     }),
   ]);
-  const teamLiberi = tuttiTeam.filter((t) => t.userId === null);
   const reset = req.query.reset === "1";
   res.render("admin/users", {
     users,
-    teamLiberi,
     tuttiTeam,
     giocatoriIncompleti,
     currentUser: req.user,
