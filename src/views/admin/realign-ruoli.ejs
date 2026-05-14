@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Riallinea Ruoli' }) %>
+  <style>
+    .page-intro {
+      font-size: .9rem; color: var(--gray-700); line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .stats-bar {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
+    }
+    .stat-chip {
+      padding: 6px 14px; border-radius: 20px; font-size: .78rem; font-weight: 700;
+    }
+    .stat-chip.totali     { background: var(--gray-100); color: var(--gray-700); }
+    .stat-chip.invariati  { background: #e2e8f0; color: #334155; }
+    .stat-chip.cambi      { background: #fef3c7; color: #92400e; }
+    .stat-chip.nomap      { background: #fee2e2; color: #991b1b; }
+    .stat-chip.nodato     { background: #f1f5f9; color: #64748b; }
+
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .filter-bar select, .filter-bar input {
+      font-size: .82rem; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--gray-200);
+    }
+
+    .preview-wrap { overflow-x: auto; margin-bottom: 20px; }
+    .preview-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .preview-table th {
+      background: var(--green-dark); color: #fff;
+      padding: 8px 10px; text-align: left; white-space: nowrap;
+      position: sticky; top: 0;
+    }
+    .preview-table td { padding: 7px 10px; border-bottom: 1px solid var(--gray-200); }
+    .preview-table tr:hover td { background: #f0faf4; }
+
+    .ruolo-pill {
+      display: inline-block; min-width: 22px; text-align: center;
+      padding: 2px 8px; border-radius: 10px; font-size: .72rem; font-weight: 800;
+    }
+    .ruolo-P { background: #fef3c7; color: #92400e; }
+    .ruolo-D { background: #dbeafe; color: #1e40af; }
+    .ruolo-C { background: #d1fae5; color: #065f46; }
+    .ruolo-A { background: #fee2e2; color: #991b1b; }
+    .ruolo-NA { background: #f1f5f9; color: #64748b; }
+
+    .arrow { color: var(--gray-400); margin: 0 6px; }
+
+    .badge-cambio { background: #fef3c7; color: #92400e; padding: 2px 7px; border-radius: 9px; font-size: .7rem; font-weight: 700; }
+    .badge-nomap  { background: #fee2e2; color: #991b1b; padding: 2px 7px; border-radius: 9px; font-size: .7rem; font-weight: 700; }
+
+    .action-bar {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      margin-top: 16px;
+    }
+    .empty-state {
+      padding: 30px; text-align: center; color: var(--gray-400);
+      background: var(--gray-100); border-radius: 8px; font-size: .9rem;
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>🎯 Riallinea Ruoli</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">
+        ← Pannello
+      </a>
+    </div>
+
+    <p class="page-intro">
+      Ricalcola il ruolo <strong>P/D/C/A</strong> di ogni giocatore attivo a partire dal
+      <code>ruoloEsteso</code> salvato nell'ultimo scraping Transfermarkt, applicando la
+      <a href="/admin/parametri" style="color:var(--green-dark);">mappa ruoli</a> attualmente
+      configurata. Usa questa pagina dopo aver modificato i mapping a fine stagione.
+    </p>
+
+    <% if (applied !== null) { %>
+      <div class="alert alert-success" style="margin-bottom:16px;">
+        ✅ Riallineamento applicato. <strong><%= applied %></strong> giocatori aggiornati.
+      </div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert alert-error" style="margin-bottom:16px;">❌ <%= error %></div>
+    <% } %>
+
+    <div class="stats-bar">
+      <span class="stat-chip totali"><%= totaleGiocatori %> giocatori scansionati</span>
+      <span class="stat-chip cambi"><%= cambi.filter(c => c.stato === 'cambio').length %> cambi previsti</span>
+      <span class="stat-chip invariati"><%= invariati %> invariati</span>
+      <span class="stat-chip nomap"><%= mappingMancante %> mapping mancante</span>
+      <span class="stat-chip nodato"><%= senzaRuoloEsteso %> senza ruoloEsteso</span>
+    </div>
+
+    <% if (cambi.length === 0) { %>
+      <div class="empty-state">
+        Nessun cambio rilevato. Tutti i ruoli sono già allineati alla mappa attuale.
+      </div>
+    <% } else { %>
+      <div class="filter-bar">
+        <select id="filter-stato">
+          <option value="">Tutti gli stati</option>
+          <option value="cambio">Solo cambi</option>
+          <option value="no_map">Solo mapping mancante</option>
+        </select>
+        <select id="filter-squadra">
+          <option value="">Tutte le squadre</option>
+          <% [...new Set(cambi.map(c => c.squadra).filter(Boolean))].sort().forEach(function(sq) { %>
+            <option value="<%= sq %>"><%= sq %></option>
+          <% }); %>
+        </select>
+        <input type="text" id="filter-nome" placeholder="Cerca nome…" style="flex:1;min-width:140px;">
+      </div>
+
+      <div class="preview-wrap">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th>Stato</th>
+              <th>Nome</th>
+              <th>Squadra</th>
+              <th>Ruolo Esteso</th>
+              <th>Slug</th>
+              <th style="text-align:center;">Attuale → Nuovo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-cambi">
+            <% cambi.forEach(function(c) { %>
+              <tr data-stato="<%= c.stato %>" data-sq="<%= c.squadra || '' %>" data-nome="<%= (c.nome || '').toLowerCase() %>">
+                <td>
+                  <% if (c.stato === 'cambio') { %>
+                    <span class="badge-cambio">Cambio</span>
+                  <% } else { %>
+                    <span class="badge-nomap">No map</span>
+                  <% } %>
+                </td>
+                <td><%= c.nome %></td>
+                <td><%= c.squadra || '—' %></td>
+                <td><%= c.ruoloEsteso %></td>
+                <td style="font-size:.72rem;color:var(--gray-400);"><%= c.slug %></td>
+                <td style="text-align:center; white-space:nowrap;">
+                  <span class="ruolo-pill ruolo-<%= c.ruoloAttuale || 'NA' %>"><%= c.ruoloAttuale || '—' %></span>
+                  <span class="arrow">→</span>
+                  <% if (c.ruoloNuovo) { %>
+                    <span class="ruolo-pill ruolo-<%= c.ruoloNuovo %>"><%= c.ruoloNuovo %></span>
+                  <% } else { %>
+                    <span class="ruolo-pill ruolo-NA">?</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
+    <div class="action-bar">
+      <% const numCambi = cambi.filter(c => c.stato === 'cambio').length; %>
+      <form action="/admin/realign-ruoli/apply" method="POST"
+            onsubmit="return confirm('Applicare il riallineamento? Verranno aggiornati <%= numCambi %> giocatori.');">
+        <button type="submit" class="btn btn-primary" <%= numCambi === 0 ? 'disabled' : '' %>>
+          💾 Applica riallineamento (<%= numCambi %>)
+        </button>
+      </form>
+      <a href="/admin/realign-ruoli" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">
+        ↺ Ricarica anteprima
+      </a>
+      <% if (mappingMancante > 0) { %>
+        <a href="/admin/parametri" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;">
+          ⚠ Configura mapping mancante
+        </a>
+      <% } %>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    const fStato = document.getElementById('filter-stato');
+    const fSq    = document.getElementById('filter-squadra');
+    const fNome  = document.getElementById('filter-nome');
+    const tbody  = document.getElementById('tbody-cambi');
+    if (!tbody) return;
+
+    function apply() {
+      const s  = fStato.value;
+      const sq = fSq.value;
+      const nm = fNome.value.toLowerCase().trim();
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const show =
+          (!s  || tr.dataset.stato === s)  &&
+          (!sq || tr.dataset.sq    === sq) &&
+          (!nm || tr.dataset.nome.includes(nm));
+        tr.style.display = show ? '' : 'none';
+      });
+    }
+    fStato.addEventListener('change', apply);
+    fSq.addEventListener('change',    apply);
+    fNome.addEventListener('input',    apply);
+  })();
+  </script>
+</body>
+</html>

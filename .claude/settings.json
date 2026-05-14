@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "PowerShell(\"---\")",
-      "PowerShell(node scripts/debug-presidenti.js)"
+      "PowerShell(node scripts/debug-presidenti.js)",
+      "PowerShell(if \\(Test-Path \"$env:USERPROFILE\\\\.claude\"\\) { Get-ChildItem \"$env:USERPROFILE\\\\.claude\" -Force | Select-Object Name } else { Write-Output \"no .claude dir\" })",
+      "PowerShell(Test-Path \"$env:USERPROFILE\\\\.claude\")",
+      "Read(//c/Users/fantauser/.claude/**)",
+      "PowerShell(npm install -g @anthropic-ai/claude-code 2>&1)",
+      "PowerShell($env:PATH = \"$env:APPDATA\\\\npm;\" + $env:PATH; & \"$env:APPDATA\\\\npm\\\\claude.cmd\" --version 2>&1 | Out-String)",
+      "PowerShell(& \"$env:APPDATA\\\\npm\\\\claude.cmd\" plugin marketplace add JuliusBrussee/caveman 2>&1 | Out-String)",
+      "PowerShell(& \"$env:APPDATA\\\\npm\\\\claude.cmd\" plugin install caveman@caveman 2>&1 | Out-String)",
+      "PowerShell(& \"$env:APPDATA\\\\npm\\\\claude.cmd\" plugin list 2>&1 | Out-String)",
+      "Bash(node -c src/controllers/admin.controller.js)"
     ]
   }
 }

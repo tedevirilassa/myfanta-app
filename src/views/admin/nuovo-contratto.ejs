@@ -63,7 +63,6 @@
             <select id="tipo" name="tipo" required>
               <option value="">— Scegli —</option>
               <option value="Acquisto">Acquisto</option>
-              <option value="Cessione">Cessione</option>
               <option value="Prestito">Prestito</option>
             </select>
           </div>
@@ -77,6 +76,15 @@
               <option value="DirittoRicompra">Diritto di ricompra</option>
               <option value="ObbligoRiscatto">Obbligo di riscatto</option>
               <option value="ObbligoRicompra">Obbligo di ricompra</option>
+            </select>
+          </div>
+
+          <!-- ── SESSIONE DI MERCATO ────────────────────── -->
+          <div class="form-group">
+            <label for="sessione">Sessione <span class="required-mark">*</span></label>
+            <select id="sessione" name="sessione" required>
+              <option value="Estiva">Estiva (10%)</option>
+              <option value="Invernale">Invernale (5%)</option>
             </select>
           </div>
 
@@ -99,7 +107,7 @@
               <% giocatori.forEach(function(g) { %>
                 <option
                   value="<%= g.id %>"
-                  data-valore="<%= g.valore !== null ? Number(g.valore) : '' %>"
+                  data-valore="<%= g.valoreTM !== null && g.valoreTM !== undefined ? g.valoreTM : (g.valore !== null && g.valore !== undefined ? Number(g.valore) : '') %>"
                   data-valore-contratto="<%= g.valoreContratto !== null && g.valoreContratto !== undefined ? Number(g.valoreContratto) : '' %>"
                   data-has-contratto="<%= g.hasContratto ? '1' : '0' %>"
                   data-titolare="<%= g.titolareContratto || '' %>"
@@ -172,7 +180,7 @@
           <div class="form-group" id="grp-prezzo" style="display:none;">
             <label for="prezzoAcquisto">Prezzo acquisto (M) <span class="required-mark">*</span></label>
             <input type="number" id="prezzoAcquisto" name="prezzoAcquisto"
-                   min="0" step="0.01" placeholder="Costo per il compratore">
+                   min="0" step="0.1" placeholder="Costo per il compratore (1 decimale)">
             <div class="select-hint" id="hint-prezzo">Importo che verrà scalato dai crediti dell'acquirente</div>
           </div>
 
@@ -249,6 +257,8 @@
       const inputStipula = document.getElementById("dataStipula");
       const dataFineDisplay = document.getElementById("dataFine-display");
       const dataFineInput = document.getElementById("dataFine");
+      const inputProvenienza = document.getElementById("provenienza");
+      const selSessione = document.getElementById("sessione");
 
       // ── Parametri mercato invernale ────────────────────────
       const STIPENDIO_PCT = parseFloat("<%= (parametri && parametri.stipendio_percentuale) || '0.10' %>");
@@ -267,12 +277,11 @@
       function calcStipendio() {
         if (selTipo.value !== "Acquisto") return;
         const valore = parseFloat(valoreInput.value);
-        const stipula = inputStipula.value.trim();
         if (!valore || isNaN(valore)) {
           hintImporto.textContent = "Seleziona un giocatore per calcolare lo stipendio";
           return;
         }
-        const invernale = isSessioneInvernale(stipula);
+        const invernale = selSessione.value === "Invernale";
         const pct = invernale ? STIPENDIO_PCT_INV : STIPENDIO_PCT;
         const stip = Math.round(valore * pct * 100) / 100;
         inputImporto.value = stip.toFixed(2);
@@ -280,6 +289,85 @@
           ? "Sessione invernale: " + (pct * 100).toFixed(0) + "% di " + valore.toFixed(1) + " = " + stip.toFixed(2) + " M"
           : "Sessione estiva: " + (pct * 100).toFixed(0) + "% di " + valore.toFixed(1) + " = " + stip.toFixed(2) + " M";
       }
+      // ── Auto-fill / validazione data stipula in base alla sessione ─────────
+      // Invernale → MM=01, Estiva → MM=07. Preserva YYYY se già inserito.
+      function meseAttesoPerSessione() {
+        return selSessione.value === "Invernale" ? "01" : "07";
+      }
+      function syncStipulaConSessione() {
+        const expected = meseAttesoPerSessione();
+        const cur = (inputStipula.value || "").trim();
+        const m = cur.match(/^(\d{2})-(\d{4})$/);
+        if (m) {
+          if (m[1] !== expected) {
+            inputStipula.value = expected + "-" + m[2];
+          }
+        } else if (!cur) {
+          // Pre-compila con anno corrente
+          const yyyy = new Date().getFullYear();
+          inputStipula.value = expected + "-" + yyyy;
+        }
+        calcStipendio();
+        calcDataFine();
+      }
+      selSessione.addEventListener("change", syncStipulaConSessione);
+
+      // ── Range prezzoAcquisto: ±40% ultima quotazione TM ────────────────────
+      const hintPrezzo = document.getElementById("hint-prezzo");
+      function updatePrezzoRange() {
+        if (selTipo.value !== "Acquisto") return;
+        const valore = parseFloat(valoreInput.value);
+        if (!valore || isNaN(valore)) {
+          inputPrezzo.removeAttribute("min");
+          inputPrezzo.removeAttribute("max");
+          inputPrezzo.setCustomValidity("");
+          hintPrezzo.textContent = "Seleziona un giocatore per definire il range prezzo";
+          return;
+        }
+        // Range arrotondato a 1 decimale (step=0.1)
+        const minP = Math.round(valore * 0.6 * 10) / 10;
+        const maxP = Math.round(valore * 1.4 * 10) / 10;
+        inputPrezzo.min = String(minP);
+        inputPrezzo.max = String(maxP);
+        inputPrezzo.placeholder = minP.toFixed(1) + " – " + maxP.toFixed(1);
+        hintPrezzo.textContent =
+          "Range ammesso: " + minP.toFixed(1) + " – " + maxP.toFixed(1) +
+          " M (±40% di " + valore.toFixed(2) + " M, 1 decimale)";
+        validatePrezzo();
+      }
+      function validatePrezzo() {
+        if (selTipo.value !== "Acquisto") { inputPrezzo.setCustomValidity(""); return; }
+        const raw = (inputPrezzo.value || "").trim();
+        if (raw === "") { inputPrezzo.setCustomValidity(""); return; }
+        // Solo 1 decimale ammesso (es. 7, 7.1; NO 7.12).
+        if (!/^\d+(\.\d)?$/.test(raw)) {
+          inputPrezzo.setCustomValidity("Prezzo acquisto: ammessa al massimo 1 cifra decimale (es. 7.1).");
+          return;
+        }
+        const v = parseFloat(raw);
+        const min = parseFloat(inputPrezzo.min);
+        const max = parseFloat(inputPrezzo.max);
+        if (!isNaN(v) && !isNaN(min) && !isNaN(max) && (v < min || v > max)) {
+          inputPrezzo.setCustomValidity(
+            "Prezzo acquisto fuori range: ammesso " + min.toFixed(1) + " – " + max.toFixed(1) + " M (±40% quotazione).");
+        } else {
+          inputPrezzo.setCustomValidity("");
+        }
+      }
+      inputPrezzo.addEventListener("input", validatePrezzo);
+
+      // Validazione live: blocca se MM non coerente con la sessione
+      inputStipula.addEventListener("input", function () {
+        const expected = meseAttesoPerSessione();
+        const cur = inputStipula.value.trim();
+        const m = cur.match(/^(\d{2})-(\d{4})$/);
+        if (m && m[1] !== expected) {
+          const label = selSessione.value === "Invernale" ? "Invernale (01-YYYY)" : "Estiva (07-YYYY)";
+          inputStipula.setCustomValidity("Mese non coerente con sessione " + label + ". Atteso " + expected + "-YYYY.");
+        } else {
+          inputStipula.setCustomValidity("");
+        }
+      });
 
       // ── Aggiorna label/range importo in base al tipo ───────
       selTipo.addEventListener("change", updateImportoLabel);
@@ -305,6 +393,7 @@
           calcStipendio();
           grpPrezzo.style.display = "";
           inputPrezzo.required = true;
+          updatePrezzoRange();
         } else {
           lblImporto.textContent = "Importo operazione (€)";
           inputImporto.min = "0";
@@ -319,10 +408,9 @@
       }
       updateImportoLabel();
 
-      // Trigger calcStipendio on giocatore/data changes
-      selGiocatore.addEventListener("change", function () {
-        calcStipendio();
-      });
+      // NB: calcStipendio viene invocato dopo che valoreInput è stato popolato
+      // (vedi listener "Aggiorna valore giocatore" più sotto). Qui solo trigger
+      // per input dipendenti diversi dal giocatore.
       inputStipula.addEventListener("input", calcStipendio);
 
       // ── Gestione Prestito: durata fissa 1 stagione ─────────
@@ -340,37 +428,42 @@
       }
       updateDurataPrestito();
 
-      const inputProvenienza = document.getElementById("provenienza");
-
       // ── Aggiorna valore giocatore + auto-provenienza ───────
       selGiocatore.addEventListener("change", function () {
         const opt = selGiocatore.options[selGiocatore.selectedIndex];
-        // Se il giocatore ha un contratto valido: usa il valore di quel contratto;
-        // altrimenti usa la quotazione corrente.
-        const hasC      = opt ? opt.dataset.hasContratto === "1" : false;
-        const valQuot   = opt ? opt.dataset.valore : "";
-        const valContr  = opt ? opt.dataset.valoreContratto : "";
-        const val       = hasC && valContr !== "" ? valContr : valQuot;
-        if (val !== "") {
-          const num = parseFloat(val);
-          const fonte = hasC && valContr !== "" ? " (da contratto in corso)" : " (quotazione)";
+        // Sempre l'ultima valutazione Transfermarkt (Giocatore.valore aggiornato dallo scraping).
+        const valQuot = opt ? opt.dataset.valore : "";
+        if (valQuot !== "") {
+          const num = parseFloat(valQuot);
           valoreDisplay.textContent = num.toLocaleString("it-IT", {
             minimumFractionDigits: 2, maximumFractionDigits: 2
-          }) + " €" + fonte;
+          }) + " € (ultima quotazione Transfermarkt)";
           valoreInput.value = num;
         } else {
-          valoreDisplay.textContent = "— seleziona prima un giocatore —";
+          valoreDisplay.textContent = "— quotazione Transfermarkt non disponibile —";
           valoreInput.value = "";
         }
-        // Auto-popola provenienza col nome del titolare
+        // Ricalcola stipendio + range prezzo ora che valoreInput è popolato.
+        calcStipendio();
+        updatePrezzoRange();
+        // Auto-popola provenienza:
+        //  - giocatore con contratto attivo → nome del presidente cedente (mercato privato)
+        //  - giocatore libero               → "Pubblico"
+        //  - nessuna selezione              → vuoto
         const titolare = opt ? (opt.dataset.titolare || "") : "";
-        if (titolare) {
+        const value    = opt ? opt.value : "";
+        if (!value) {
+          inputProvenienza.value = "";
+          inputProvenienza.style.background = "";
+        } else if (titolare) {
           inputProvenienza.value = titolare;
           inputProvenienza.style.background = "#fff8e1";
         } else {
-          inputProvenienza.value = "";
-          inputProvenienza.style.background = "";
+          inputProvenienza.value = "Pubblico";
+          inputProvenienza.style.background = "#e8f5e9";
         }
+        // Ricalcola data fine (provenienza incide sul calcolo)
+        calcDataFine();
       });
 
       const hintMercato = document.getElementById("hint-mercato");

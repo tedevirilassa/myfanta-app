@@ -611,7 +611,94 @@ async function importTransfermarkt(req, res) {
   res.json(stats);
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi };
+// ── GET /admin/realign-ruoli ─────────────────────────────────────────────────
+// Mostra anteprima: per ogni giocatore con ruoloEsteso, ricalcola il ruolo P/D/C/A
+// secondo la ruoliMap attuale e segnala i cambi. Nessuna scrittura.
+async function showRealignRuoli(req, res) {
+  const ruoliMap = await parametriService.getRuoliTM();
+
+  const giocatori = await prisma.giocatore.findMany({
+    where: { active: true },
+    select: { id: true, nome: true, squadra: true, ruolo: true, ruoloEsteso: true },
+    orderBy: [{ squadra: "asc" }, { nome: "asc" }],
+  });
+
+  const cambi = [];
+  let invariati = 0;
+  let senzaRuoloEsteso = 0;
+  let mappingMancante = 0;
+
+  for (const g of giocatori) {
+    if (!g.ruoloEsteso) { senzaRuoloEsteso++; continue; }
+    const slug = slugifyRuolo(g.ruoloEsteso);
+    const nuovoRuolo = ruoliMap[slug];
+    if (!nuovoRuolo) {
+      mappingMancante++;
+      cambi.push({ id: g.id, nome: g.nome, squadra: g.squadra, ruoloEsteso: g.ruoloEsteso, slug, ruoloAttuale: g.ruolo, ruoloNuovo: null, stato: "no_map" });
+      continue;
+    }
+    if (nuovoRuolo !== g.ruolo) {
+      cambi.push({ id: g.id, nome: g.nome, squadra: g.squadra, ruoloEsteso: g.ruoloEsteso, slug, ruoloAttuale: g.ruolo, ruoloNuovo: nuovoRuolo, stato: "cambio" });
+    } else {
+      invariati++;
+    }
+  }
+
+  res.render("admin/realign-ruoli", {
+    currentUser: req.user,
+    cambi,
+    totaleGiocatori: giocatori.length,
+    invariati,
+    senzaRuoloEsteso,
+    mappingMancante,
+    applied: req.query.applied || null,
+    error: req.query.error ? decodeURIComponent(req.query.error) : null,
+  });
+}
+
+// ── POST /admin/realign-ruoli/apply ──────────────────────────────────────────
+// Applica i cambi di ruolo P/D/C/A in base alla ruoliMap corrente.
+// Aggiorna solo giocatori il cui ruolo calcolato differisce da quello in DB.
+async function applyRealignRuoli(req, res) {
+  try {
+    const ruoliMap = await parametriService.getRuoliTM();
+
+    const giocatori = await prisma.giocatore.findMany({
+      where: { active: true, NOT: { ruoloEsteso: null } },
+      select: { id: true, ruolo: true, ruoloEsteso: true },
+    });
+
+    let aggiornati = 0;
+    let skipNoMap = 0;
+
+    for (const g of giocatori) {
+      const slug = slugifyRuolo(g.ruoloEsteso);
+      const nuovoRuolo = ruoliMap[slug];
+      if (!nuovoRuolo) { skipNoMap++; continue; }
+      if (nuovoRuolo === g.ruolo) continue;
+
+      await prisma.giocatore.update({
+        where: { id: g.id },
+        data:  { ruolo: nuovoRuolo },
+      });
+      aggiornati++;
+    }
+
+    await logAction({
+      azione:   "UPDATE",
+      entita:   "giocatori",
+      entitaId: null,
+      dettaglio: { tipo: "realign-ruoli", aggiornati, skipNoMap, totaleScansionati: giocatori.length },
+      adminId:  req.user.id,
+    });
+
+    res.redirect(`/admin/realign-ruoli?applied=${aggiornati}`);
+  } catch (err) {
+    res.redirect(`/admin/realign-ruoli?error=${encodeURIComponent(err.message)}`);
+  }
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -935,7 +1022,7 @@ async function findGiocatoriUltimoScraping() {
 
 // ── GET /admin/contratti/nuovo ────────────────────────────────────────────────
 async function showNuovoContratto(req, res) {
-  const [giocatori, presidenti, contrattiAttivi] = await Promise.all([
+  const [giocatori, presidenti, contrattiAttivi, ultimeQuotazioniTM] = await Promise.all([
     findGiocatoriUltimoScraping(),
     prisma.user.findMany({
       where:   { isActive: true },
@@ -943,7 +1030,7 @@ async function showNuovoContratto(req, res) {
       select:  { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } },
     }),
     prisma.contratto.findMany({
-      where:   { valido: true },
+      where:   { valido: true, tipo: "Acquisto" },
       orderBy: { createdAt: "desc" },
       select: {
         giocatoreId:     true,
@@ -955,6 +1042,12 @@ async function showNuovoContratto(req, res) {
           },
         },
       },
+    }),
+    prisma.quotazione.findMany({
+      where:    { fonte: "transfermarkt" },
+      orderBy:  { createdAt: "desc" },
+      distinct: ["giocatoreId"],
+      select:   { giocatoreId: true, valore: true },
     }),
   ]);
 
@@ -968,11 +1061,20 @@ async function showNuovoContratto(req, res) {
     valoreContrattoMap[c.giocatoreId] = c.valoreGiocatore !== null ? Number(c.valoreGiocatore) : null;
   });
 
+  // Ultima quotazione Transfermarkt per giocatore
+  const valoreTMMap = {};
+  ultimeQuotazioniTM.forEach(q => {
+    if (q.valore !== null && q.valore !== undefined) {
+      valoreTMMap[q.giocatoreId] = Number(q.valore);
+    }
+  });
+
   const giocatoriAnnotati = giocatori.map(g => ({
     ...g,
     hasContratto:      g.id in titolareMap,
     titolareContratto: titolareMap[g.id] || null,
     valoreContratto:   valoreContrattoMap[g.id] ?? null,
+    valoreTM:          valoreTMMap[g.id] ?? (g.valore !== null && g.valore !== undefined ? Number(g.valore) : null),
   }));
 
   res.render("admin/nuovo-contratto", {
@@ -990,6 +1092,7 @@ async function saveNuovoContratto(req, res) {
     tipo, clausola, dataStipula, durataContratto,
     dataFine, giocatoreId, fantaPresidenteId,
     importoOperazione, prezzoAcquisto, provenienza, destinazione,
+    sessione,
   } = req.body;
 
   // Validazione base
@@ -999,6 +1102,15 @@ async function saveNuovoContratto(req, res) {
   if (!durataContratto)    errors.push("Durata obbligatoria.");
   if (!giocatoreId)        errors.push("Giocatore obbligatorio.");
   if (!fantaPresidenteId)  errors.push("Fantapresidente obbligatorio.");
+
+  // Coerenza sessione ↔ mese di stipula: Invernale=01-YYYY, Estiva=07-YYYY
+  if (dataStipula && /^\d{2}-\d{4}$/.test(dataStipula)) {
+    const meseStipula = dataStipula.slice(0, 2);
+    const meseAtteso  = sessione === "Invernale" ? "01" : "07";
+    if (meseStipula !== meseAtteso) {
+      errors.push(`Sessione ${sessione || "Estiva"}: data stipula deve essere ${meseAtteso}-YYYY (ricevuto ${dataStipula}).`);
+    }
+  }
 
   const durata = parseInt(durataContratto, 10);
   const params = await parametriService.getAll();
@@ -1069,33 +1181,58 @@ async function saveNuovoContratto(req, res) {
     });
   }
 
-  // Valore "alla stipula": se il giocatore ha già un contratto valido
-  // (trattativa privata) si eredita il valoreGiocatore di quel contratto;
-  // altrimenti si usa la quotazione corrente (mercato pubblico).
-  const giocatore = await prisma.giocatore.findUnique({
-    where:  { id: parseInt(giocatoreId, 10) },
-    select: { valore: true },
-  });
-  const contrattoEsistente = await prisma.contratto.findFirst({
-    where:   { giocatoreId: parseInt(giocatoreId, 10), valido: true },
-    orderBy: { createdAt: "desc" },
-    select:  { valoreGiocatore: true },
-  });
-  const valoreEffettivo = contrattoEsistente?.valoreGiocatore ?? giocatore?.valore ?? null;
+  // Valore "alla stipula": sempre l'ultima valutazione Transfermarkt.
+  // Priorità: ultima Quotazione fonte='transfermarkt'; fallback su Giocatore.valore.
+  const gid = parseInt(giocatoreId, 10);
+  const [giocatore, ultimaQuotTM] = await Promise.all([
+    prisma.giocatore.findUnique({
+      where:  { id: gid },
+      select: { valore: true },
+    }),
+    prisma.quotazione.findFirst({
+      where:   { giocatoreId: gid, fonte: "transfermarkt" },
+      orderBy: { createdAt: "desc" },
+      select:  { valore: true },
+    }),
+  ]);
+  const valoreEffettivo = ultimaQuotTM?.valore ?? giocatore?.valore ?? null;
 
-  // Calcola stipendio server-side per Acquisto (non fidarsi del client)
+  // Calcola stipendio server-side per Acquisto (non fidarsi del client).
+  // Percentuale guidata dalla sessione scelta dall'utente: Estiva=10%, Invernale=5%.
   let importo = importoOperazione ? parseFloat(importoOperazione) : null;
   if (tipo === "Acquisto" && valoreEffettivo) {
-    const mercatoInvInizio = params.mercato_invernale_inizio || "01-01"; // GG-MM
-    const mercatoInvFine = params.mercato_invernale_fine || "15-02";     // GG-MM
-    const meseStipula = parseInt((dataStipula || "").split("-")[0], 10);
-    const invIzMM = parseInt(mercatoInvInizio.split("-")[1], 10);
-    const invFinMM = parseInt(mercatoInvFine.split("-")[1], 10);
-    const isInvernale = meseStipula >= invIzMM && meseStipula <= invFinMM;
+    const isInvernale = sessione === "Invernale";
     const pct = isInvernale
       ? parseFloat(params.stipendio_percentuale_invernale || "0.05")
       : parseFloat(params.stipendio_percentuale || "0.10");
     importo = Math.round(parseFloat(valoreEffettivo) * pct * 100) / 100;
+
+    // Validazione prezzoAcquisto: ±40% dell'ultima quotazione TM, max 1 decimale
+    const prezzoRaw = prezzoAcquisto !== undefined && prezzoAcquisto !== null ? String(prezzoAcquisto).trim() : "";
+    if (prezzoRaw === "") {
+      errors.push("Prezzo acquisto obbligatorio.");
+    } else if (!/^\d+(\.\d)?$/.test(prezzoRaw)) {
+      errors.push(`Prezzo acquisto: ammessa al massimo 1 cifra decimale (ricevuto ${prezzoRaw}).`);
+    } else {
+      const prezzo = parseFloat(prezzoRaw);
+      const baseV  = parseFloat(valoreEffettivo);
+      const minP   = Math.round(baseV * 0.6 * 10) / 10;
+      const maxP   = Math.round(baseV * 1.4 * 10) / 10;
+      if (prezzo < minP || prezzo > maxP) {
+        errors.push(`Prezzo acquisto fuori range: ammesso ${minP.toFixed(1)} – ${maxP.toFixed(1)} M (±40% di ${baseV.toFixed(2)} M, ricevuto ${prezzo.toFixed(2)}).`);
+      }
+    }
+  }
+
+  // Validazione post-calcolo (prezzoAcquisto/stipendio): rirenderizza form se errori
+  if (errors.length > 0) {
+    const [giocatoriR, presidentiR] = await Promise.all([
+      findGiocatoriUltimoScraping(),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } } }),
+    ]);
+    return res.render("admin/nuovo-contratto", {
+      giocatori: giocatoriR, presidenti: presidentiR, currentUser: req.user, error: errors.join(" "), parametri: params,
+    });
   }
 
   // Ricalcola data fine server-side (non fidarsi solo del client)
@@ -1123,22 +1260,7 @@ async function saveNuovoContratto(req, res) {
   }
   const dataFineCalcolata = calcDataFineServer(dataStipula.trim(), durata, provenienza || null, tipo);
 
-  // Marca come scaduti i contratti precedenti dello stesso giocatore
-  // - Acquisto/Cessione nuovo → invalida tutti i precedenti (Acquisto + Prestito)
-  // - Prestito nuovo → invalida solo i Prestiti precedenti (l'Acquisto resta valido)
-  if (tipo === "Prestito") {
-    await prisma.contratto.updateMany({
-      where: { giocatoreId: parseInt(giocatoreId, 10), valido: true, tipo: "Prestito" },
-      data: { valido: false },
-    });
-  } else {
-    await prisma.contratto.updateMany({
-      where: { giocatoreId: parseInt(giocatoreId, 10), valido: true },
-      data: { valido: false },
-    });
-  }
-
-  // Trova il fantaTeam associato al presidente selezionato
+  // Trova il fantaTeam associato al presidente selezionato (acquirente B)
   const fantaTeam = await prisma.fantaTeam.findFirst({
     where: { userId: parseInt(fantaPresidenteId, 10) },
   });
@@ -1153,77 +1275,130 @@ async function saveNuovoContratto(req, res) {
     });
   }
 
-  const prezzoNum = tipo === "Acquisto" ? parseFloat(prezzoAcquisto) : null;
+  const prezzoNum     = tipo === "Acquisto" ? parseFloat(prezzoAcquisto) : null;
+  const stipendioBNum = tipo === "Acquisto" && Number.isFinite(importo) ? importo : null;
+  const isPrivato     = tipo === "Acquisto" && provenienza && provenienza !== "Pubblico";
 
-  const nuovoContratto = await prisma.contratto.create({
-    data: {
-      tipo,
-      clausola:           clausola || null,
-      dataStipula:        dataStipula.trim(),
-      durataContratto:    durata,
-      dataFine:           dataFineCalcolata,
-      giocatoreId:        parseInt(giocatoreId, 10),
-      fantaTeamId:        fantaTeam.id,
-      valoreGiocatore:    valoreEffettivo,
-      importoOperazione:  Number.isFinite(importo) ? importo : null,
-      prezzoAcquisto:     Number.isFinite(prezzoNum) ? prezzoNum : null,
-      provenienza:        provenienza || null,
-      destinazione:       destinazione || null,
-    },
-  });
+  // Identifica il contratto del venditore A (ultimo Acquisto valido) PRIMA di invalidarlo.
+  let contrattoVenditore = null;
+  if (isPrivato) {
+    contrattoVenditore = await prisma.contratto.findFirst({
+      where: {
+        giocatoreId: parseInt(giocatoreId, 10),
+        tipo:        "Acquisto",
+        valido:      true,
+      },
+      orderBy: { createdAt: "desc" },
+      include: { fantaTeam: { include: { user: true } } },
+    });
+  }
 
-  // ── Aggiornamento crediti per Acquisto ──────────────────────────────────────
-  if (tipo === "Acquisto" && Number.isFinite(prezzoNum) && prezzoNum > 0) {
-    // Determina la stagione corrente dalla data stipula
-    const meseInizioStagione2 = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
-    const [mmStip, yyyyStip] = dataStipula.trim().split("-").map(Number);
-    const annoStagioneInizio = mmStip >= meseInizioStagione2 ? yyyyStip : yyyyStip - 1;
-    const stagione = `${annoStagioneInizio}-${annoStagioneInizio + 1}`;
+  // ── Calcolo storno stipendio (rimborso a A) ────────────────────────────────
+  // Matrice: A-Estiva→B-Estiva 100%, A-Estiva→B-Invernale 50%, A-Inv→B-Inv 100%, altri 0.
+  function sessioneDaMese(mm) {
+    if (mm === 1)  return "Invernale";
+    if (mm === 7)  return "Estiva";
+    return null;
+  }
+  let stornoStipendio = 0;
+  let sessioneA       = null;
+  if (contrattoVenditore) {
+    const mmA = parseInt((contrattoVenditore.dataStipula || "").slice(0, 2), 10);
+    sessioneA = sessioneDaMese(mmA);
+    const stipendioA = contrattoVenditore.importoOperazione
+      ? Number(contrattoVenditore.importoOperazione) : 0;
+    const sessioneB = sessione;
+    let pct = 0;
+    if (sessioneA === "Estiva"    && sessioneB === "Estiva")     pct = 1.00;
+    else if (sessioneA === "Estiva"    && sessioneB === "Invernale")  pct = 0.50;
+    else if (sessioneA === "Invernale" && sessioneB === "Invernale")  pct = 1.00;
+    stornoStipendio = Math.round(stipendioA * pct * 100) / 100;
+  }
 
-    // Acquirente: crediti -= prezzo
-    const buyerUser = await prisma.user.findUnique({ where: { id: parseInt(fantaPresidenteId, 10) } });
-    if (buyerUser) {
-      const sfBuyer = await prisma.situazioneFinanziaria.findFirst({
-        where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
+  // Determina la stagione corrente dalla data stipula
+  const meseInizioStagione2 = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+  const [mmStip, yyyyStip]  = dataStipula.trim().split("-").map(Number);
+  const annoStagioneInizio  = mmStip >= meseInizioStagione2 ? yyyyStip : yyyyStip - 1;
+  const stagione            = `${annoStagioneInizio}-${annoStagioneInizio + 1}`;
+
+  // ── Transazione atomica: chiusura contratti precedenti + creazione nuovo +
+  //    movimenti finanziari B (acquirente) e A (venditore privato).
+  const { nuovoContratto } = await prisma.$transaction(async (tx) => {
+    // 1. Chiudi contratti precedenti dello stesso giocatore
+    if (tipo === "Prestito") {
+      await tx.contratto.updateMany({
+        where: { giocatoreId: parseInt(giocatoreId, 10), valido: true, tipo: "Prestito" },
+        data:  { valido: false },
       });
-      if (sfBuyer) {
-        const nuoviCreditiBuyer = Math.round((parseFloat(sfBuyer.crediti) - prezzoNum) * 100) / 100;
-        const nuovoPatrimonioBuyer = Math.round((parseFloat(sfBuyer.patrimonio) - prezzoNum) * 100) / 100;
-        await prisma.situazioneFinanziaria.update({
-          where: { id: sfBuyer.id },
-          data: { crediti: nuoviCreditiBuyer, patrimonio: nuovoPatrimonioBuyer },
-        });
-      }
+    } else {
+      await tx.contratto.updateMany({
+        where: { giocatoreId: parseInt(giocatoreId, 10), valido: true },
+        data:  { valido: false },
+      });
     }
 
-    // Venditore (solo Privato): crediti += prezzo
-    if (provenienza === "Privato") {
-      // Il venditore è il presidente dell'ultimo contratto Acquisto valido per lo stesso giocatore (prima di invalidarlo)
-      const contrattoVenditore = await prisma.contratto.findFirst({
-        where: {
-          giocatoreId: parseInt(giocatoreId, 10),
-          tipo: "Acquisto",
-          id: { not: nuovoContratto.id },
-        },
-        orderBy: { createdAt: "desc" },
-        include: { fantaTeam: { include: { user: true } } },
+    // 2. Crea il nuovo contratto
+    const nuovo = await tx.contratto.create({
+      data: {
+        tipo,
+        clausola:          clausola || null,
+        dataStipula:       dataStipula.trim(),
+        durataContratto:   durata,
+        dataFine:          dataFineCalcolata,
+        giocatoreId:       parseInt(giocatoreId, 10),
+        fantaTeamId:       fantaTeam.id,
+        valoreGiocatore:   valoreEffettivo,
+        importoOperazione: Number.isFinite(importo) ? importo : null,
+        prezzoAcquisto:    Number.isFinite(prezzoNum) ? prezzoNum : null,
+        provenienza:       provenienza || null,
+        destinazione:      destinazione || null,
+      },
+    });
+
+    // 3. Movimenti finanziari (solo per Acquisto)
+    if (tipo === "Acquisto" && Number.isFinite(prezzoNum) && prezzoNum > 0) {
+      // 3a. Acquirente B: addebito = prezzo + stipendio nuovo
+      const buyerUser = await tx.user.findUnique({
+        where: { id: parseInt(fantaPresidenteId, 10) },
       });
-      if (contrattoVenditore && contrattoVenditore.fantaTeam?.user) {
+      if (buyerUser) {
+        const sfBuyer = await tx.situazioneFinanziaria.findFirst({
+          where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
+        });
+        if (sfBuyer) {
+          const addebito        = prezzoNum + (Number.isFinite(stipendioBNum) ? stipendioBNum : 0);
+          const nuoviCrediti    = Math.round((parseFloat(sfBuyer.crediti)    - addebito) * 100) / 100;
+          const nuovoPatrimonio = Math.round((parseFloat(sfBuyer.patrimonio) - addebito) * 100) / 100;
+          const nuoviStipendi   = Math.round((parseFloat(sfBuyer.stipendi)   + (stipendioBNum || 0)) * 100) / 100;
+          await tx.situazioneFinanziaria.update({
+            where: { id: sfBuyer.id },
+            data:  { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio, stipendi: nuoviStipendi },
+          });
+        }
+      }
+
+      // 3b. Venditore A (solo privato): accredito = prezzo + storno stipendio
+      if (isPrivato && contrattoVenditore && contrattoVenditore.fantaTeam?.user) {
         const sellerUser = contrattoVenditore.fantaTeam.user;
-        const sfSeller = await prisma.situazioneFinanziaria.findFirst({
+        const sfSeller   = await tx.situazioneFinanziaria.findFirst({
           where: { nomePresidente: sellerUser.nickname || sellerUser.email, stagione },
         });
         if (sfSeller) {
-          const nuoviCreditiSeller = Math.round((parseFloat(sfSeller.crediti) + prezzoNum) * 100) / 100;
-          const nuovoPatrimonioSeller = Math.round((parseFloat(sfSeller.patrimonio) + prezzoNum) * 100) / 100;
-          await prisma.situazioneFinanziaria.update({
+          const accredito       = prezzoNum + stornoStipendio;
+          const nuoviCrediti    = Math.round((parseFloat(sfSeller.crediti)    + accredito) * 100) / 100;
+          const nuovoPatrimonio = Math.round((parseFloat(sfSeller.patrimonio) + accredito) * 100) / 100;
+          // Storno riduce la voce "stipendi" del venditore (rimborso ricevuto)
+          const nuoviStipendi   = Math.round((parseFloat(sfSeller.stipendi)   - stornoStipendio) * 100) / 100;
+          await tx.situazioneFinanziaria.update({
             where: { id: sfSeller.id },
-            data: { crediti: nuoviCreditiSeller, patrimonio: nuovoPatrimonioSeller },
+            data:  { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio, stipendi: nuoviStipendi },
           });
         }
       }
     }
-  }
+
+    return { nuovoContratto: nuovo };
+  });
 
   await logAction({ azione: "CREATE", entita: "contratto", entitaId: nuovoContratto.id,
     dettaglio: {
@@ -1239,6 +1414,10 @@ async function saveNuovoContratto(req, res) {
         importoOperazione: Number.isFinite(importo) ? importo : null,
         prezzoAcquisto:    Number.isFinite(prezzoNum) ? prezzoNum : null,
         provenienza:       provenienza || null,
+        sessione:          sessione || null,
+        sessioneVenditore: sessioneA,
+        stornoStipendio:   stornoStipendio,
+        contrattoVenditoreId: contrattoVenditore ? contrattoVenditore.id : null,
       },
     },
     adminId: req.user.id });

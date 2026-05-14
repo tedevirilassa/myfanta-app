@@ -48,5 +48,7 @@ router.post("/sync-quotazioni", ctrl.syncQuotazioni);
 router.get("/sync-transfermarkt", ctrl.showSyncTransfermarkt);
 router.post("/sync-transfermarkt/scrape", ctrl.runScrapeTransfermarkt);
 router.post("/sync-transfermarkt/import", ctrl.importTransfermarkt);
+router.get("/realign-ruoli", ctrl.showRealignRuoli);
+router.post("/realign-ruoli/apply", ctrl.applyRealignRuoli);
 
 module.exports = router;
