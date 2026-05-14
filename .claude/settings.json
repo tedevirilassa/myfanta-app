@@ -11,7 +11,9 @@
       "PowerShell(& \"$env:APPDATA\\\\npm\\\\claude.cmd\" plugin marketplace add JuliusBrussee/caveman 2>&1 | Out-String)",
       "PowerShell(& \"$env:APPDATA\\\\npm\\\\claude.cmd\" plugin install caveman@caveman 2>&1 | Out-String)",
       "PowerShell(& \"$env:APPDATA\\\\npm\\\\claude.cmd\" plugin list 2>&1 | Out-String)",
-      "Bash(node -c src/controllers/admin.controller.js)"
+      "Bash(node -c src/controllers/admin.controller.js)",
+      "Bash(node -e \"const c=require\\('./src/controllers/admin.controller'\\); console.log\\('annullaContratto:', typeof c.annullaContratto\\)\")",
+      "Bash(node scripts/test-contratto-annulla.js)"
     ]
   }
 }

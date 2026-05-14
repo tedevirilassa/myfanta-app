@@ -15,6 +15,7 @@ router.get("/contratti/nuovo", ctrl.showNuovoContratto);
 router.post("/contratti/nuovo", ctrl.saveNuovoContratto);
 router.post("/contratti/:id/edit", ctrl.saveEditContratto);
 router.post("/contratti/:id/delete", ctrl.deleteContratto);
+router.post("/contratti/:id/annulla", ctrl.annullaContratto);
 router.get("/log", ctrl.listLog);
 router.get("/users/invite", ctrl.showInvite);
 router.post("/users/invite", ctrl.inviteUser);

@@ -423,6 +423,11 @@
               style="background:var(--gray-200);color:var(--gray-700);">
         Annulla
       </button>
+      <button type="button" class="btn btn-sm" id="btn-annulla"
+              onclick="confirmAnnulla()"
+              style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b;">
+        ↶ Annulla stipula (rollback)
+      </button>
       <button class="btn-delete-contract" id="btn-delete"
               onclick="confirmDelete()">
         🗑 Elimina
@@ -431,6 +436,7 @@
   </div>
 
   <form id="form-delete-contratto" method="POST" style="display:none;"></form>
+  <form id="form-annulla-contratto" method="POST" style="display:none;"></form>
 
   <script>
     // ── Filtri ────────────────────────────────────────────────────
@@ -501,6 +507,8 @@
         '/admin/contratti/' + currentContrattoId + '/edit';
       document.getElementById('form-delete-contratto').action =
         '/admin/contratti/' + currentContrattoId + '/delete';
+      document.getElementById('form-annulla-contratto').action =
+        '/admin/contratti/' + currentContrattoId + '/annulla';
 
       document.getElementById('edit-drawer').classList.add('open');
       document.getElementById('drawer-overlay').classList.add('open');
@@ -524,6 +532,19 @@
     function confirmDelete() {
       if (confirm('Eliminare definitivamente questo contratto?')) {
         document.getElementById('form-delete-contratto').submit();
+      }
+    }
+
+    function confirmAnnulla() {
+      if (confirm(
+        'Annullare la stipula del contratto?\n\n' +
+        '• I saldi (crediti/patrimonio/stipendi) di acquirente e venditore tornano al valore precedente.\n' +
+        '• Il contratto precedente (se esisteva) torna valido.\n' +
+        '• Il giocatore torna nello stato precedente (libero o sotto contratto precedente).\n' +
+        '• Il contratto annullato viene eliminato.\n\n' +
+        'L\\'operazione è registrata in log azioni.'
+      )) {
+        document.getElementById('form-annulla-contratto').submit();
       }
     }
 

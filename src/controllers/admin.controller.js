@@ -698,7 +698,7 @@ async function applyRealignRuoli(req, res) {
   }
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -919,8 +919,9 @@ async function listContrattiRiepilogo(req, res) {
     scadenzaVicina,
     valoreTotal,
     currentUser: req.user,
-    editSuccess: req.query.saved  === "1" ? "Contratto aggiornato con successo." :
-                 req.query.deleted === "1" ? "Contratto eliminato."              : null,
+    editSuccess: req.query.saved     === "1" ? "Contratto aggiornato con successo." :
+                 req.query.deleted    === "1" ? "Contratto eliminato."              :
+                 req.query.annullato         ? `Contratto #${req.query.annullato} annullato: saldi ripristinati, contratti precedenti rivalidati.` : null,
     editError:   req.query.error  ? decodeURIComponent(req.query.error)          : null,
   });
 }
@@ -1323,16 +1324,20 @@ async function saveNuovoContratto(req, res) {
 
   // ── Transazione atomica: chiusura contratti precedenti + creazione nuovo +
   //    movimenti finanziari B (acquirente) e A (venditore privato).
-  const { nuovoContratto } = await prisma.$transaction(async (tx) => {
+  const nuovoContrattoPayload = await prisma.$transaction(async (tx) => {
     // 1. Chiudi contratti precedenti dello stesso giocatore
-    if (tipo === "Prestito") {
+    //    Cattura prima gli id per consentire l'annullamento futuro.
+    const whereInvalidate = tipo === "Prestito"
+      ? { giocatoreId: parseInt(giocatoreId, 10), valido: true, tipo: "Prestito" }
+      : { giocatoreId: parseInt(giocatoreId, 10), valido: true };
+    const toInvalidate = await tx.contratto.findMany({
+      where:  whereInvalidate,
+      select: { id: true },
+    });
+    const contrattiInvalidatiIds = toInvalidate.map(c => c.id);
+    if (contrattiInvalidatiIds.length > 0) {
       await tx.contratto.updateMany({
-        where: { giocatoreId: parseInt(giocatoreId, 10), valido: true, tipo: "Prestito" },
-        data:  { valido: false },
-      });
-    } else {
-      await tx.contratto.updateMany({
-        where: { giocatoreId: parseInt(giocatoreId, 10), valido: true },
+        where: { id: { in: contrattiInvalidatiIds } },
         data:  { valido: false },
       });
     }
@@ -1356,6 +1361,8 @@ async function saveNuovoContratto(req, res) {
     });
 
     // 3. Movimenti finanziari (solo per Acquisto)
+    let movimentoBuyer = null;
+    let movimentoSeller = null;
     if (tipo === "Acquisto" && Number.isFinite(prezzoNum) && prezzoNum > 0) {
       // 3a. Acquirente B: addebito = prezzo + stipendio nuovo
       const buyerUser = await tx.user.findUnique({
@@ -1367,13 +1374,27 @@ async function saveNuovoContratto(req, res) {
         });
         if (sfBuyer) {
           const addebito        = prezzoNum + (Number.isFinite(stipendioBNum) ? stipendioBNum : 0);
-          const nuoviCrediti    = Math.round((parseFloat(sfBuyer.crediti)    - addebito) * 100) / 100;
-          const nuovoPatrimonio = Math.round((parseFloat(sfBuyer.patrimonio) - addebito) * 100) / 100;
-          const nuoviStipendi   = Math.round((parseFloat(sfBuyer.stipendi)   + (stipendioBNum || 0)) * 100) / 100;
+          const creditiPrima    = parseFloat(sfBuyer.crediti);
+          const patrimonioPrima = parseFloat(sfBuyer.patrimonio);
+          const stipendiPrima   = parseFloat(sfBuyer.stipendi);
+          const nuoviCrediti    = Math.round((creditiPrima    - addebito) * 100) / 100;
+          const nuovoPatrimonio = Math.round((patrimonioPrima - addebito) * 100) / 100;
+          const nuoviStipendi   = Math.round((stipendiPrima   + (stipendioBNum || 0)) * 100) / 100;
           await tx.situazioneFinanziaria.update({
             where: { id: sfBuyer.id },
             data:  { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio, stipendi: nuoviStipendi },
           });
+          movimentoBuyer = {
+            sfId:               sfBuyer.id,
+            presidente:         sfBuyer.nomePresidente,
+            ruolo:              "acquirente",
+            prezzo:             prezzoNum,
+            stipendio:          stipendioBNum,
+            addebitoTotale:     addebito,
+            crediti:    { prima: creditiPrima,    dopo: nuoviCrediti },
+            patrimonio: { prima: patrimonioPrima, dopo: nuovoPatrimonio },
+            stipendi:   { prima: stipendiPrima,   dopo: nuoviStipendi },
+          };
         }
       }
 
@@ -1385,21 +1406,38 @@ async function saveNuovoContratto(req, res) {
         });
         if (sfSeller) {
           const accredito       = prezzoNum + stornoStipendio;
-          const nuoviCrediti    = Math.round((parseFloat(sfSeller.crediti)    + accredito) * 100) / 100;
-          const nuovoPatrimonio = Math.round((parseFloat(sfSeller.patrimonio) + accredito) * 100) / 100;
+          const creditiPrima    = parseFloat(sfSeller.crediti);
+          const patrimonioPrima = parseFloat(sfSeller.patrimonio);
+          const stipendiPrima   = parseFloat(sfSeller.stipendi);
+          const nuoviCrediti    = Math.round((creditiPrima    + accredito) * 100) / 100;
+          const nuovoPatrimonio = Math.round((patrimonioPrima + accredito) * 100) / 100;
           // Storno riduce la voce "stipendi" del venditore (rimborso ricevuto)
-          const nuoviStipendi   = Math.round((parseFloat(sfSeller.stipendi)   - stornoStipendio) * 100) / 100;
+          const nuoviStipendi   = Math.round((stipendiPrima   - stornoStipendio) * 100) / 100;
           await tx.situazioneFinanziaria.update({
             where: { id: sfSeller.id },
             data:  { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio, stipendi: nuoviStipendi },
           });
+          movimentoSeller = {
+            sfId:               sfSeller.id,
+            presidente:         sfSeller.nomePresidente,
+            ruolo:              "venditore",
+            prezzo:             prezzoNum,
+            stornoStipendio:    stornoStipendio,
+            sessioneVenditore:  sessioneA,
+            sessioneAcquirente: sessione || null,
+            accreditoTotale:    accredito,
+            crediti:    { prima: creditiPrima,    dopo: nuoviCrediti },
+            patrimonio: { prima: patrimonioPrima, dopo: nuovoPatrimonio },
+            stipendi:   { prima: stipendiPrima,   dopo: nuoviStipendi },
+          };
         }
       }
     }
 
-    return { nuovoContratto: nuovo };
+    return { nuovoContratto: nuovo, movimentoBuyer, movimentoSeller, contrattiInvalidatiIds };
   });
 
+  const { nuovoContratto, movimentoBuyer, movimentoSeller, contrattiInvalidatiIds } = nuovoContrattoPayload;
   await logAction({ azione: "CREATE", entita: "contratto", entitaId: nuovoContratto.id,
     dettaglio: {
       prima: null,
@@ -1418,9 +1456,38 @@ async function saveNuovoContratto(req, res) {
         sessioneVenditore: sessioneA,
         stornoStipendio:   stornoStipendio,
         contrattoVenditoreId: contrattoVenditore ? contrattoVenditore.id : null,
+        contrattiInvalidatiIds: contrattiInvalidatiIds || [],
       },
     },
     adminId: req.user.id });
+
+  // Log movimenti finanziari (uno per presidente coinvolto)
+  if (movimentoBuyer) {
+    await logAction({
+      azione:    "UPDATE",
+      entita:    "situazione_finanziaria",
+      entitaId:  movimentoBuyer.sfId,
+      dettaglio: {
+        contrattoId: nuovoContratto.id,
+        giocatoreId: parseInt(giocatoreId, 10),
+        movimento:   movimentoBuyer,
+      },
+      adminId: req.user.id,
+    });
+  }
+  if (movimentoSeller) {
+    await logAction({
+      azione:    "UPDATE",
+      entita:    "situazione_finanziaria",
+      entitaId:  movimentoSeller.sfId,
+      dettaglio: {
+        contrattoId: nuovoContratto.id,
+        giocatoreId: parseInt(giocatoreId, 10),
+        movimento:   movimentoSeller,
+      },
+      adminId: req.user.id,
+    });
+  }
 
   res.redirect("/admin/contratti?created=1");
 }
@@ -1502,6 +1569,102 @@ async function saveEditContratto(req, res) {
     adminId: req.user.id });
 
   res.redirect(`/admin/contratti/riepilogo?edited=${id}&saved=1`);
+}
+
+// ── POST /admin/contratti/:id/annulla ────────────────────────────────────────
+// Rollback completo della stipula:
+//  - rivalida i contratti che la stipula aveva chiuso (valido=false → true)
+//  - ripristina saldi crediti/patrimonio/stipendi di acquirente e venditore
+//  - elimina il contratto annullato
+// Tutto atomico in $transaction. Dati di rollback letti dai log_azioni emessi
+// da saveNuovoContratto.
+async function annullaContratto(req, res) {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.redirect("/admin/contratti/riepilogo?error=" + encodeURIComponent("Id non valido."));
+  }
+
+  try {
+    const contratto = await prisma.contratto.findUnique({
+      where:   { id },
+      include: { giocatore: { select: { id: true, nome: true } } },
+    });
+    if (!contratto) {
+      return res.redirect("/admin/contratti/riepilogo?error=" + encodeURIComponent("Contratto non trovato."));
+    }
+
+    // 1. Log CREATE → estrae elenco contratti precedentemente invalidati
+    const logCreate = await prisma.log.findFirst({
+      where:   { entita: "contratto", entitaId: id, azione: "CREATE" },
+      orderBy: { createdAt: "desc" },
+    });
+    let creationDettaglio = null;
+    if (logCreate?.dettaglio) {
+      try { creationDettaglio = JSON.parse(logCreate.dettaglio); } catch { /* ignore */ }
+    }
+    const contrattiInvalidatiIds = Array.isArray(creationDettaglio?.dopo?.contrattiInvalidatiIds)
+      ? creationDettaglio.dopo.contrattiInvalidatiIds
+      : [];
+
+    // 2. Log UPDATE situazione_finanziaria associati a questo contrattoId
+    const logSF = await prisma.log.findMany({
+      where:   { entita: "situazione_finanziaria", azione: "UPDATE" },
+      orderBy: { createdAt: "desc" },
+    });
+    const sfMovements = [];
+    for (const l of logSF) {
+      if (!l.dettaglio) continue;
+      try {
+        const d = JSON.parse(l.dettaglio);
+        if (d.contrattoId === id && d.movimento?.sfId) {
+          sfMovements.push(d.movimento);
+        }
+      } catch { /* ignore */ }
+    }
+
+    // 3. Esecuzione atomica del rollback
+    await prisma.$transaction(async (tx) => {
+      // Ripristina saldi (prima → valore pre-stipula)
+      for (const m of sfMovements) {
+        await tx.situazioneFinanziaria.update({
+          where: { id: m.sfId },
+          data: {
+            crediti:    m.crediti?.prima    ?? undefined,
+            patrimonio: m.patrimonio?.prima ?? undefined,
+            stipendi:   m.stipendi?.prima   ?? undefined,
+          },
+        });
+      }
+      // Rivalida contratti chiusi dalla stipula
+      if (contrattiInvalidatiIds.length > 0) {
+        await tx.contratto.updateMany({
+          where: { id: { in: contrattiInvalidatiIds } },
+          data:  { valido: true },
+        });
+      }
+      // Elimina il contratto annullato (audit resta in log_azioni)
+      await tx.contratto.delete({ where: { id } });
+    });
+
+    await logAction({
+      azione:   "DELETE",
+      entita:   "contratto",
+      entitaId: id,
+      dettaglio: {
+        tipo:                "annullamento",
+        giocatoreId:         contratto.giocatoreId,
+        giocatoreNome:       contratto.giocatore?.nome,
+        contrattiRivalidati: contrattiInvalidatiIds,
+        movimentiAnnullati:  sfMovements.length,
+        movimenti:           sfMovements,
+      },
+      adminId: req.user.id,
+    });
+
+    res.redirect("/admin/contratti/riepilogo?annullato=" + id);
+  } catch (err) {
+    res.redirect("/admin/contratti/riepilogo?error=" + encodeURIComponent("Annullamento fallito: " + err.message));
+  }
 }
 
 // ── POST /admin/contratti/:id/delete ─────────────────────────────────────────
