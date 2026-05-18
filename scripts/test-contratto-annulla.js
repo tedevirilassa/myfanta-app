@@ -143,15 +143,20 @@ async function testScenarioPrivato(admin) {
   });
   if (!sfSeller) { console.log("Skipping: SF venditore 2025-2026 mancante."); return; }
 
-  // Acquirente B: presidente diverso da A
-  const sfBuyer = await prisma.situazioneFinanziaria.findFirst({
-    where: { stagione: "2025-2026", NOT: { id: sfSeller.id } },
+  // Acquirente B: presidente diverso da A, con user che possiede un fantaTeam.
+  const sfCandidates = await prisma.situazioneFinanziaria.findMany({
+    where:   { stagione: "2025-2026", NOT: { id: sfSeller.id } },
+    orderBy: { id: "asc" },
   });
-  if (!sfBuyer) { console.log("Skipping: nessun secondo presidente."); return; }
-  const buyerUser = await prisma.user.findFirst({
-    where: { OR: [{ nickname: sfBuyer.nomePresidente }, { email: sfBuyer.nomePresidente }], isActive: true },
-  });
-  if (!buyerUser) { console.log("Skipping: user acquirente non trovato."); return; }
+  let sfBuyer = null, buyerUser = null;
+  for (const cand of sfCandidates) {
+    const u = await prisma.user.findFirst({
+      where:   { OR: [{ nickname: cand.nomePresidente }, { email: cand.nomePresidente }], isActive: true },
+      include: { fantaTeam: true },
+    });
+    if (u && u.fantaTeam) { sfBuyer = cand; buyerUser = u; break; }
+  }
+  if (!sfBuyer || !buyerUser) { console.log("Skipping: nessun acquirente con fantaTeam."); return; }
   console.log("Acquirente B:", sfBuyer.nomePresidente, "sfId=", sfBuyer.id);
 
   const giocatoreId = contrattoA.giocatore.id;

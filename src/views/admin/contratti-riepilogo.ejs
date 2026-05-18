@@ -78,6 +78,13 @@
       transition: background .15s, border-color .15s;
     }
     .btn-edit:hover { background: var(--gray-100); border-color: var(--green-mid); }
+    .btn-annulla-row {
+      background: #fef3c7; border: 1.5px solid #f59e0b;
+      border-radius: 6px; padding: 4px 9px; cursor: pointer;
+      font-size: .85rem; color: #92400e; margin-left: 4px;
+      transition: background .15s;
+    }
+    .btn-annulla-row:hover { background: #fde68a; }
 
     /* ── drawer overlay ──────────────────────────────── */
     #drawer-overlay {
@@ -304,8 +311,11 @@
                 <%= c.valido ? 'Valido' : 'Scaduto' %>
               </span>
             </td>
-            <td>
-              <button class="btn-edit" onclick="openDrawer(this.closest('tr'))">✏️</button>
+            <td style="white-space:nowrap;">
+              <button class="btn-edit" onclick="openDrawer(this.closest('tr'))" title="Modifica">✏️</button>
+              <button class="btn-annulla-row"
+                      onclick="confirmAnnullaRow('<%= c.id %>', '<%= c.giocatore.nome.replace(/'/g, "\\'") %>', '<%= c.fantaTeam.nome.replace(/'/g, "\\'") %>')"
+                      title="Annulla stipula (rollback)">↶</button>
             </td>
           </tr>
           <% }) %>
@@ -530,21 +540,45 @@
     }
 
     function confirmDelete() {
-      if (confirm('Eliminare definitivamente questo contratto?')) {
+      if (confirm(
+        "Eliminare il contratto?\n\n" +
+        "• I saldi (crediti/patrimonio/stipendi) di acquirente e venditore tornano al valore precedente.\n" +
+        "• Il contratto precedente (se esisteva) torna valido.\n" +
+        "• Il giocatore torna nello stato precedente (libero o sotto contratto precedente).\n" +
+        "• Il contratto viene eliminato.\n\n" +
+        "L'operazione è registrata in log azioni."
+      )) {
         document.getElementById('form-delete-contratto').submit();
       }
     }
 
     function confirmAnnulla() {
       if (confirm(
-        'Annullare la stipula del contratto?\n\n' +
-        '• I saldi (crediti/patrimonio/stipendi) di acquirente e venditore tornano al valore precedente.\n' +
-        '• Il contratto precedente (se esisteva) torna valido.\n' +
-        '• Il giocatore torna nello stato precedente (libero o sotto contratto precedente).\n' +
-        '• Il contratto annullato viene eliminato.\n\n' +
-        'L\\'operazione è registrata in log azioni.'
+        "Annullare la stipula del contratto?\n\n" +
+        "• I saldi (crediti/patrimonio/stipendi) di acquirente e venditore tornano al valore precedente.\n" +
+        "• Il contratto precedente (se esisteva) torna valido.\n" +
+        "• Il giocatore torna nello stato precedente (libero o sotto contratto precedente).\n" +
+        "• Il contratto annullato viene eliminato.\n\n" +
+        "L'operazione è registrata in log azioni."
       )) {
         document.getElementById('form-annulla-contratto').submit();
+      }
+    }
+
+    function confirmAnnullaRow(id, giocatore, team) {
+      if (confirm(
+        "Annullare la stipula del contratto?\n\n" +
+        "Giocatore: " + giocatore + "\n" +
+        "FantaTeam: " + team + "\n\n" +
+        "• I saldi (crediti/patrimonio/stipendi) di acquirente e venditore tornano al valore precedente.\n" +
+        "• Il contratto precedente (se esisteva) torna valido.\n" +
+        "• Il giocatore torna nello stato precedente (libero o sotto contratto precedente).\n" +
+        "• Il contratto annullato viene eliminato.\n\n" +
+        "L'operazione è registrata in log azioni."
+      )) {
+        const form = document.getElementById('form-annulla-contratto');
+        form.action = '/admin/contratti/' + id + '/annulla';
+        form.submit();
       }
     }
 

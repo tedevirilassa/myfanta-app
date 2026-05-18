@@ -14,7 +14,10 @@ router.get("/contratti/riepilogo", ctrl.listContrattiRiepilogo);
 router.get("/contratti/nuovo", ctrl.showNuovoContratto);
 router.post("/contratti/nuovo", ctrl.saveNuovoContratto);
 router.post("/contratti/:id/edit", ctrl.saveEditContratto);
-router.post("/contratti/:id/delete", ctrl.deleteContratto);
+// /delete e /annulla fanno la stessa cosa: annullano la stipula e ripristinano
+// la situazione finanziaria precedente. Manteniamo entrambe le route per
+// retro-compatibilità dell'UI (drawer "🗑 Elimina" e ↶ "Annulla stipula").
+router.post("/contratti/:id/delete", ctrl.annullaContratto);
 router.post("/contratti/:id/annulla", ctrl.annullaContratto);
 router.get("/log", ctrl.listLog);
 router.get("/users/invite", ctrl.showInvite);

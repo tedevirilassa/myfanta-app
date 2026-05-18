@@ -698,7 +698,7 @@ async function applyRealignRuoli(req, res) {
   }
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, deleteContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli };
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
@@ -1263,7 +1263,8 @@ async function saveNuovoContratto(req, res) {
 
   // Trova il fantaTeam associato al presidente selezionato (acquirente B)
   const fantaTeam = await prisma.fantaTeam.findFirst({
-    where: { userId: parseInt(fantaPresidenteId, 10) },
+    where:   { userId: parseInt(fantaPresidenteId, 10) },
+    include: { user: true },
   });
   if (!fantaTeam) {
     const [giocatoriList, presidentiList] = await Promise.all([
@@ -1273,6 +1274,24 @@ async function saveNuovoContratto(req, res) {
     return res.render("admin/nuovo-contratto", {
       giocatori: giocatoriList, presidenti: presidentiList, currentUser: req.user,
       error: "Il presidente selezionato non ha un FantaTeam associato.", parametri: params,
+    });
+  }
+
+  // destinazione = nickname (o email) dell'acquirente, derivato server-side.
+  // Il form lato admin non espone il campo per Acquisto/Prestito → riempito qui
+  // così la colonna non resta NULL e resta consistente con i contratti storici.
+  const destinazioneAuto = fantaTeam.user
+    ? (fantaTeam.user.nickname || fantaTeam.user.email)
+    : null;
+  if (!destinazioneAuto) {
+    const [giocatoriList2, presidentiList2] = await Promise.all([
+      findGiocatoriUltimoScraping(),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } } }),
+    ]);
+    return res.render("admin/nuovo-contratto", {
+      giocatori: giocatoriList2, presidenti: presidentiList2, currentUser: req.user,
+      error: "Impossibile determinare la destinazione: il FantaTeam selezionato non ha un user collegato.",
+      parametri: params,
     });
   }
 
@@ -1322,6 +1341,53 @@ async function saveNuovoContratto(req, res) {
   const annoStagioneInizio  = mmStip >= meseInizioStagione2 ? yyyyStip : yyyyStip - 1;
   const stagione            = `${annoStagioneInizio}-${annoStagioneInizio + 1}`;
 
+  // ── Preflight SF: blocca la stipula se mancano le SF della stagione ────────
+  // Senza queste righe il contratto verrebbe creato, ma i saldi non verrebbero
+  // toccati e il log UPDATE situazione_finanziaria non verrebbe emesso →
+  // impossibile fare rollback successivo (annullaContratto fallirebbe).
+  let sfBuyerPreflight = null;
+  let sfSellerPreflight = null;
+  if (tipo === "Acquisto") {
+    const buyerUser = await prisma.user.findUnique({
+      where: { id: parseInt(fantaPresidenteId, 10) },
+    });
+    if (!buyerUser) {
+      errors.push("Presidente acquirente non trovato.");
+    } else {
+      sfBuyerPreflight = await prisma.situazioneFinanziaria.findFirst({
+        where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
+      });
+      if (!sfBuyerPreflight) {
+        errors.push(
+          `Situazione finanziaria mancante per '${buyerUser.nickname || buyerUser.email}' stagione ${stagione}. ` +
+          `Crea la SF della stagione prima di stipulare il contratto.`
+        );
+      }
+    }
+    if (isPrivato && contrattoVenditore && contrattoVenditore.fantaTeam?.user) {
+      const sellerUser = contrattoVenditore.fantaTeam.user;
+      sfSellerPreflight = await prisma.situazioneFinanziaria.findFirst({
+        where: { nomePresidente: sellerUser.nickname || sellerUser.email, stagione },
+      });
+      if (!sfSellerPreflight) {
+        errors.push(
+          `Situazione finanziaria mancante per il venditore '${sellerUser.nickname || sellerUser.email}' stagione ${stagione}. ` +
+          `Stipula impossibile finché la SF venditore non viene creata.`
+        );
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    const [giocatoriR2, presidentiR2] = await Promise.all([
+      findGiocatoriUltimoScraping(),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { email: "asc" }, select: { id: true, email: true, nickname: true, fantaTeam: { select: { nome: true } } } }),
+    ]);
+    return res.render("admin/nuovo-contratto", {
+      giocatori: giocatoriR2, presidenti: presidentiR2, currentUser: req.user, error: errors.join(" "), parametri: params,
+    });
+  }
+
   // ── Transazione atomica: chiusura contratti precedenti + creazione nuovo +
   //    movimenti finanziari B (acquirente) e A (venditore privato).
   const nuovoContrattoPayload = await prisma.$transaction(async (tx) => {
@@ -1356,7 +1422,7 @@ async function saveNuovoContratto(req, res) {
         importoOperazione: Number.isFinite(importo) ? importo : null,
         prezzoAcquisto:    Number.isFinite(prezzoNum) ? prezzoNum : null,
         provenienza:       provenienza || null,
-        destinazione:      destinazione || null,
+        destinazione:      destinazioneAuto,
       },
     });
 
@@ -1368,11 +1434,17 @@ async function saveNuovoContratto(req, res) {
       const buyerUser = await tx.user.findUnique({
         where: { id: parseInt(fantaPresidenteId, 10) },
       });
-      if (buyerUser) {
+      if (!buyerUser) {
+        throw new Error(`Presidente acquirente id=${fantaPresidenteId} non trovato in transazione.`);
+      }
+      {
         const sfBuyer = await tx.situazioneFinanziaria.findFirst({
           where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
         });
-        if (sfBuyer) {
+        if (!sfBuyer) {
+          throw new Error(`SF acquirente '${buyerUser.nickname || buyerUser.email}' stagione ${stagione} non trovata in transazione.`);
+        }
+        {
           const addebito        = prezzoNum + (Number.isFinite(stipendioBNum) ? stipendioBNum : 0);
           const creditiPrima    = parseFloat(sfBuyer.crediti);
           const patrimonioPrima = parseFloat(sfBuyer.patrimonio);
@@ -1404,7 +1476,10 @@ async function saveNuovoContratto(req, res) {
         const sfSeller   = await tx.situazioneFinanziaria.findFirst({
           where: { nomePresidente: sellerUser.nickname || sellerUser.email, stagione },
         });
-        if (sfSeller) {
+        if (!sfSeller) {
+          throw new Error(`SF venditore '${sellerUser.nickname || sellerUser.email}' stagione ${stagione} non trovata in transazione.`);
+        }
+        {
           const accredito       = prezzoNum + stornoStipendio;
           const creditiPrima    = parseFloat(sfSeller.crediti);
           const patrimonioPrima = parseFloat(sfSeller.patrimonio);
@@ -1489,7 +1564,7 @@ async function saveNuovoContratto(req, res) {
     });
   }
 
-  res.redirect("/admin/contratti?created=1");
+  res.redirect("/admin/contratti/riepilogo?created=1");
 }
 
 // ── POST /admin/contratti/:id/edit ────────────────────────────────────────────
@@ -1604,7 +1679,7 @@ async function annullaContratto(req, res) {
     }
     const contrattiInvalidatiIds = Array.isArray(creationDettaglio?.dopo?.contrattiInvalidatiIds)
       ? creationDettaglio.dopo.contrattiInvalidatiIds
-      : [];
+      : null; // null = campo non presente nel log → log incompleto
 
     // 2. Log UPDATE situazione_finanziaria associati a questo contrattoId
     const logSF = await prisma.log.findMany({
@@ -1622,7 +1697,49 @@ async function annullaContratto(req, res) {
       } catch { /* ignore */ }
     }
 
-    // 3. Esecuzione atomica del rollback
+    // ── 3. PRE-FLIGHT: verifica presenza dati di rollback ──────────────────
+    // Acquisto richiede:
+    //  - logCreate con contrattiInvalidatiIds (anche array vuoto è OK).
+    //  - 1 movimento SF "acquirente" con snapshot prima completo.
+    //  - Se provenienza ≠ "Pubblico" → anche 1 movimento "venditore".
+    // Prestito: niente SF, niente preflight finanze (saveNuovoContratto non tocca finanze per Prestito).
+    const missing = [];
+    if (contratto.tipo === "Acquisto") {
+      if (!logCreate)            missing.push("log CREATE assente");
+      if (contrattiInvalidatiIds === null) {
+        missing.push("log CREATE non contiene 'contrattiInvalidatiIds' (contratto stipulato prima dell'introduzione del rollback)");
+      }
+
+      const isPrivato = contratto.provenienza && contratto.provenienza !== "Pubblico";
+
+      function snapshotValido(m, ruolo) {
+        if (!m || m.ruolo !== ruolo) return false;
+        for (const k of ["crediti", "patrimonio", "stipendi"]) {
+          if (!m[k] || typeof m[k].prima !== "number") return false;
+        }
+        return true;
+      }
+      const movB = sfMovements.find(m => m.ruolo === "acquirente");
+      const movA = sfMovements.find(m => m.ruolo === "venditore");
+
+      if (!movB)                          missing.push("movimento SF acquirente assente");
+      else if (!snapshotValido(movB, "acquirente")) missing.push("snapshot SF acquirente incompleto (crediti/patrimonio/stipendi 'prima' mancanti)");
+      if (isPrivato) {
+        if (!movA)                          missing.push("movimento SF venditore assente (provenienza='" + contratto.provenienza + "')");
+        else if (!snapshotValido(movA, "venditore"))  missing.push("snapshot SF venditore incompleto");
+      }
+    }
+
+    if (missing.length > 0) {
+      const msg = "Annullamento non sicuro — dati di rollback incompleti: " + missing.join("; ") +
+                  ". Modifica/elimina manualmente.";
+      return res.redirect("/admin/contratti/riepilogo?error=" + encodeURIComponent(msg));
+    }
+
+    // contrattiInvalidatiIds ora è array (può essere vuoto)
+    const idsToRevalidate = contrattiInvalidatiIds || [];
+
+    // 4. Esecuzione atomica del rollback
     await prisma.$transaction(async (tx) => {
       // Ripristina saldi (prima → valore pre-stipula)
       for (const m of sfMovements) {
@@ -1636,9 +1753,9 @@ async function annullaContratto(req, res) {
         });
       }
       // Rivalida contratti chiusi dalla stipula
-      if (contrattiInvalidatiIds.length > 0) {
+      if (idsToRevalidate.length > 0) {
         await tx.contratto.updateMany({
-          where: { id: { in: contrattiInvalidatiIds } },
+          where: { id: { in: idsToRevalidate } },
           data:  { valido: true },
         });
       }
@@ -1654,7 +1771,7 @@ async function annullaContratto(req, res) {
         tipo:                "annullamento",
         giocatoreId:         contratto.giocatoreId,
         giocatoreNome:       contratto.giocatore?.nome,
-        contrattiRivalidati: contrattiInvalidatiIds,
+        contrattiRivalidati: idsToRevalidate,
         movimentiAnnullati:  sfMovements.length,
         movimenti:           sfMovements,
       },
@@ -1668,37 +1785,6 @@ async function annullaContratto(req, res) {
 }
 
 // ── POST /admin/contratti/:id/delete ─────────────────────────────────────────
-async function deleteContratto(req, res) {
-  const id = parseInt(req.params.id, 10);
-  if (!isNaN(id)) {
-    // Leggi prima i dati per il log
-    const c = await prisma.contratto.findUnique({
-      where: { id },
-      include: { giocatore: { select: { nome: true, ruolo: true } }, fantaTeam: { select: { nome: true } } },
-    });
-    await prisma.contratto.delete({ where: { id } });
-    await logAction({ azione: "DELETE", entita: "contratto", entitaId: id,
-      dettaglio: {
-        prima: c ? {
-          giocatore:         c.giocatore?.nome,
-          ruolo:             c.giocatore?.ruolo,
-          team:              c.fantaTeam?.nome,
-          tipo:              c.tipo,
-          clausola:          c.clausola ?? null,
-          dataStipula:       c.dataStipula,
-          durataContratto:   c.durataContratto,
-          dataFine:          c.dataFine ?? null,
-          valoreGiocatore:   c.valoreGiocatore ? Number(c.valoreGiocatore) : null,
-          importoOperazione: c.importoOperazione ? Number(c.importoOperazione) : null,
-          provenienza:       c.provenienza ?? null,
-        } : null,
-        dopo: null,
-      },
-      adminId: req.user.id });
-  }
-  res.redirect("/admin/contratti/riepilogo?deleted=1");
-}
-
 // ── GET /admin/log ────────────────────────────────────────────────────────────
 async function listLog(req, res) {
   const PER_PAGINA = 50;

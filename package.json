@@ -20,7 +20,8 @@
     "render:pull-fantapresidenti": "node scripts/pull-fantapresidenti.js",
     "render:pull-fantapresidenti-dry": "node scripts/pull-fantapresidenti.js --dry-run",
     "db:backup": "node scripts/backup-db.js",
-    "db:backup-remote": "node scripts/backup-db.js --remote"
+    "db:backup-remote": "node scripts/backup-db.js --remote",
+    "db:restore": "node scripts/restore-db.js"
   },
   "keywords": [],
   "author": "",
