@@ -24,14 +24,23 @@
       border-radius: 10px;
       box-shadow: 0 2px 10px rgba(26,58,42,.07);
     }
-    .contratti-table-wrap { overflow-x: auto; }
-    .contratti-table-wrap table { width: 100%; table-layout: auto; }
+    .contratti-table-wrap { overflow-x: auto; position: relative; }
+    .contratti-table-wrap table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; }
     .contratti-table-wrap td, .contratti-table-wrap th {
       font-size: .82rem; padding: 7px 10px; white-space: nowrap;
     }
     @media (max-width: 1024px) {
       .contratti-table-wrap td, .contratti-table-wrap th { font-size: .7rem; padding: 4px 5px; }
     }
+    /* Colonna azioni sempre visibile (sticky a destra durante lo scroll orizzontale) */
+    .contratti-table-wrap th.col-actions,
+    .contratti-table-wrap td.col-actions {
+      position: sticky; right: 0;
+      background: #fff;
+      box-shadow: -4px 0 8px -4px rgba(26,58,42,.12);
+      z-index: 2;
+    }
+    .contratti-table-wrap thead th.col-actions { background: #f8fafb; }
     .ruolo-badge {
       display: inline-block; width: 26px; height: 26px;
       line-height: 26px; text-align: center;
@@ -174,6 +183,13 @@
       </a>
     </div>
 
+    <% if (locals.editSuccess) { %>
+    <div class="alert alert-success" style="margin-bottom:16px;">✔ <%= editSuccess %></div>
+    <% } %>
+    <% if (locals.editError) { %>
+    <div class="alert alert-error" style="margin-bottom:16px;">❌ <%= editError %></div>
+    <% } %>
+
     <!-- ── Statistiche globali ── -->
     <div class="summary-grid">
       <div class="summary-card">
@@ -252,7 +268,7 @@
             <th>Provenienza</th>
             <th>Destinazione</th>
             <th>Stato</th>
-            <th></th>
+            <th class="col-actions">Azioni</th>
           </tr>
         </thead>
         <tbody id="contratti-body">
@@ -311,11 +327,11 @@
                 <%= c.valido ? 'Valido' : 'Scaduto' %>
               </span>
             </td>
-            <td style="white-space:nowrap;">
-              <button class="btn-edit" onclick="openDrawer(this.closest('tr'))" title="Modifica">✏️</button>
+            <td class="col-actions" style="white-space:nowrap;">
+              <button class="btn-edit" onclick="openDrawer(this.closest('tr'))" title="Modifica">✏️ Modifica</button>
               <button class="btn-annulla-row"
                       onclick="confirmAnnullaRow('<%= c.id %>', '<%= c.giocatore.nome.replace(/'/g, "\\'") %>', '<%= c.fantaTeam.nome.replace(/'/g, "\\'") %>')"
-                      title="Annulla stipula (rollback)">↶</button>
+                      title="Annulla stipula (rollback)">↶ Annulla</button>
             </td>
           </tr>
           <% }) %>
@@ -333,13 +349,6 @@
       <h2 id="drawer-title">✏️ Modifica contratto</h2>
       <button class="drawer-close" onclick="closeDrawer()" title="Chiudi">✕</button>
     </div>
-
-    <% if (locals.editSuccess) { %>
-    <div class="alert alert-success" style="margin:16px 24px 0;">✔ <%= editSuccess %></div>
-    <% } %>
-    <% if (locals.editError) { %>
-    <div class="alert alert-error" style="margin:16px 24px 0;">❌ <%= editError %></div>
-    <% } %>
 
     <div class="drawer-body">
       <div class="d-form-group">

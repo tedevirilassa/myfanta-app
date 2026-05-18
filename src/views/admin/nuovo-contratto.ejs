@@ -72,15 +72,15 @@
             <label for="clausola">Clausola</label>
             <select id="clausola" name="clausola">
               <option value="">— Nessuna —</option>
-              <option value="DirittoRiscatto">Diritto di riscatto</option>
-              <option value="DirittoRicompra">Diritto di ricompra</option>
-              <option value="ObbligoRiscatto">Obbligo di riscatto</option>
-              <option value="ObbligoRicompra">Obbligo di ricompra</option>
+              <option value="DirittoRiscatto" data-clausole="acquisto,prestito">Diritto di riscatto</option>
+              <option value="DirittoRicompra" data-clausole="acquisto">Diritto di ricompra</option>
+              <option value="ObbligoRiscatto" data-clausole="acquisto,prestito">Obbligo di riscatto</option>
+              <option value="ObbligoRicompra" data-clausole="acquisto">Obbligo di ricompra</option>
             </select>
           </div>
 
           <!-- ── SESSIONE DI MERCATO ────────────────────── -->
-          <div class="form-group">
+          <div class="form-group" id="grp-sessione">
             <label for="sessione">Sessione <span class="required-mark">*</span></label>
             <select id="sessione" name="sessione" required>
               <option value="Estiva">Estiva (10%)</option>
@@ -120,7 +120,7 @@
           </div>
 
           <!-- ── VALORE GIOCATORE (auto-fill) ──────────── -->
-          <div class="form-group span-2">
+          <div class="form-group span-2" id="grp-valore">
             <label>Valore giocatore alla stipula (€)</label>
             <div class="readonly-field" id="valore-display">— seleziona prima un giocatore —</div>
             <input type="hidden" id="valoreGiocatore" name="valoreGiocatore">
@@ -413,16 +413,62 @@
       // per input dipendenti diversi dal giocatore.
       inputStipula.addEventListener("input", calcStipendio);
 
-      // ── Gestione Prestito: durata fissa 1 stagione ─────────
+      // ── Gestione Prestito: durata fissa 1 stagione + UI ridotta ───────────
+      // Prestito non usa Sessione (mese fissato), né "valore giocatore" (irrilevante),
+      // e si applica SOLO a giocatori con contratto attivo → nascondiamo i filtri
+      // e forziamo il filtro "con contratto".
+      const grpSessione  = document.getElementById("grp-sessione");
+      const grpValore    = document.getElementById("grp-valore");
+      const filtroWrap   = document.getElementById("filtro-giocatore-wrap");
+      const selClausola  = document.getElementById("clausola");
+
+      // Filtra le option clausola in base al tipo di contratto.
+      // data-clausole=comma list di tipi ammessi (acquisto, prestito).
+      function filtraClausole(tipo) {
+        const key = (tipo || "").toLowerCase();
+        let resetVal = false;
+        Array.from(selClausola.options).forEach(opt => {
+          if (!opt.value) return; // "— Nessuna —" sempre visibile
+          const ammessi = (opt.dataset.clausole || "").split(",").map(s => s.trim());
+          const visibile = !key || ammessi.includes(key);
+          opt.hidden = !visibile;
+          opt.disabled = !visibile;
+          if (!visibile && selClausola.value === opt.value) resetVal = true;
+        });
+        if (resetVal) selClausola.value = "";
+      }
+
       selTipo.addEventListener("change", updateDurataPrestito);
       function updateDurataPrestito() {
-        if (selTipo.value === "Prestito") {
+        const isPrestito = selTipo.value === "Prestito";
+        filtraClausole(selTipo.value);
+        if (isPrestito) {
           selDurata.value = "1";
           selDurata.style.pointerEvents = "none";
           selDurata.style.opacity = "0.6";
+
+          grpSessione.style.display = "none";
+          selSessione.required = false;
+
+          grpValore.style.display = "none";
+
+          filtroWrap.style.display = "none";
+          const btnContratto = document.querySelector('.filtro-btn[data-filtro="contratto"]');
+          if (btnContratto) {
+            document.querySelectorAll(".filtro-btn").forEach(b => b.classList.remove("active"));
+            btnContratto.classList.add("active");
+            applyFiltroGiocatori("contratto");
+          }
         } else {
           selDurata.style.pointerEvents = "";
           selDurata.style.opacity = "";
+
+          grpSessione.style.display = "";
+          selSessione.required = true;
+
+          grpValore.style.display = "";
+
+          filtroWrap.style.display = "";
         }
         calcDataFine();
       }

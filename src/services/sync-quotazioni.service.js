@@ -6,6 +6,7 @@
 const prisma               = require('../lib/prisma');
 const { scrapeSerieA }     = require('./transfermarkt.service');
 const parametriService     = require('./parametri.service');
+const { logAction }        = require('./log.service');
 
 const STAGIONE_CORRENTE = '2025-2026';
 
@@ -34,7 +35,7 @@ function normalizeName(str) {
  * @param {string|null} squadraFiltro - se valorizzato, scrapa solo questa squadra
  * @returns {Promise<object>} statistiche finali
  */
-async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
+async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, adminId = null) {
   const stats = {
     squadreOk:  0,
     squadreKo:  0,
@@ -91,19 +92,17 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
 
         if (existing) {
           // ── Aggiorna giocatore esistente ──────────────────────────────
-          await prisma.giocatore.update({
-            where: { id: existing.id },
-            data: {
-              squadra:         g.squadra,
-              valore:          g.valore,
-              active:          true,
-              ...(g.ruoloEsteso    && { ruoloEsteso: g.ruoloEsteso }),
-              ...(g.ruolo         && { ruolo: g.ruolo }),
-              ...(g.dataNascita   && { dataNascita: g.dataNascita }),
-              ...(g.eta != null    && { eta: g.eta }),
-              ...(g.transfermarktId && { transfermarktId: g.transfermarktId }),
-            },
-          });
+          const updateData = {
+            squadra:         g.squadra,
+            valore:          g.valore,
+            active:          true,
+            ...(g.ruoloEsteso    && { ruoloEsteso: g.ruoloEsteso }),
+            ...(g.ruolo         && { ruolo: g.ruolo }),
+            ...(g.dataNascita   && { dataNascita: g.dataNascita }),
+            ...(g.eta != null    && { eta: g.eta }),
+            ...(g.transfermarktId && { transfermarktId: g.transfermarktId }),
+          };
+          await prisma.giocatore.update({ where: { id: existing.id }, data: updateData });
 
           // Storico quotazione
           await prisma.quotazione.create({
@@ -114,6 +113,8 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
               stagione:    STAGIONE_CORRENTE,
             },
           });
+
+          if (adminId) await logAction({ azione: 'UPDATE', entita: 'giocatore', entitaId: existing.id, dettaglio: { dopo: updateData }, adminId });
 
           idScrapati.add(existing.id);
           stats.aggiornati++;
@@ -143,6 +144,8 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
             },
           });
 
+          if (adminId) await logAction({ azione: 'CREATE', entita: 'giocatore', entitaId: nuovo.id, dettaglio: { dopo: { nome: g.nome, ruolo: g.ruolo, squadra: g.squadra, valore: g.valore } }, adminId });
+
           idScrapati.add(nuovo.id);
           stats.nuovi++;
         }
@@ -165,6 +168,11 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null) {
         where: { id: { in: daInattivare.map(g => g.id) } },
         data:  { active: false },
       });
+      if (adminId) {
+        for (const gi of daInattivare) {
+          await logAction({ azione: 'UPDATE', entita: 'giocatore', entitaId: gi.id, dettaglio: { prima: { active: true }, dopo: { active: false } }, adminId });
+        }
+      }
       stats.inattivi += daInattivare.length;
       onEvent({
         type: 'warn',
