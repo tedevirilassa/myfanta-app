@@ -330,7 +330,7 @@
             <td class="col-actions" style="white-space:nowrap;">
               <button class="btn-edit" onclick="openDrawer(this.closest('tr'))" title="Modifica">✏️ Modifica</button>
               <button class="btn-annulla-row"
-                      onclick="confirmAnnullaRow('<%= c.id %>', '<%= c.giocatore.nome.replace(/'/g, "\\'") %>', '<%= c.fantaTeam.nome.replace(/'/g, "\\'") %>')"
+                      onclick="confirmAnnullaRow('<%= c.id %>', '<%= c.giocatore.nome.replace(/'/g, "\\'") %>', '<%= c.fantaTeam.nome.replace(/'/g, "\\'") %>', '<%= c.tipo %>')"
                       title="Annulla stipula (rollback)">↶ Annulla</button>
             </td>
           </tr>
@@ -455,7 +455,9 @@
   </div>
 
   <form id="form-delete-contratto" method="POST" style="display:none;"></form>
-  <form id="form-annulla-contratto" method="POST" style="display:none;"></form>
+  <form id="form-annulla-contratto" method="POST" style="display:none;">
+    <input type="hidden" name="restituisciCrediti" id="input-restituisci-crediti" value="1">
+  </form>
 
   <script>
     // ── Filtri ────────────────────────────────────────────────────
@@ -500,10 +502,12 @@
 
     // ── Drawer ────────────────────────────────────────────────────
     let currentContrattoId = null;
+    let currentContrattoTipo = null;
 
     function openDrawer(row) {
       const d = row.dataset;
       currentContrattoId = d.id;
+      currentContrattoTipo = d.tipo || null;
 
       document.getElementById('drawer-title').textContent =
         '✏️ ' + d.giocatoreNome + ' · ' + d.fantaTeamNome;
@@ -561,6 +565,21 @@
       }
     }
 
+    // Per Acquisto: rollback completo (sempre).
+    // Per Prestito: chiede se restituire o no il corrispettivo al fantapresidente acquirente.
+    //   OK = restituisci (saldi ripristinati). Annulla = NON restituire (solo elimina contratto).
+    // Ritorna "1" / "0" / null (= annullare l'intera operazione).
+    function askRestituisciCrediti(tipo) {
+      if (tipo !== "Prestito") return "1";
+      const ok = confirm(
+        "Restituire al fantapresidente acquirente il corrispettivo pagato per il prestito?\n\n" +
+        "• OK   = SÌ, ripristino dei saldi (acquirente riprende i crediti, presidente di provenienza li perde).\n" +
+        "• Annulla = NO, i saldi restano invariati (il prestito viene comunque eliminato).\n\n" +
+        "Per annullare l'intera operazione, premi ESC o chiudi il dialog di conferma successivo."
+      );
+      return ok ? "1" : "0";
+    }
+
     function confirmAnnulla() {
       if (confirm(
         "Annullare la stipula del contratto?\n\n" +
@@ -570,21 +589,26 @@
         "• Il contratto annullato viene eliminato.\n\n" +
         "L'operazione è registrata in log azioni."
       )) {
+        const flag = askRestituisciCrediti(currentContrattoTipo);
+        document.getElementById('input-restituisci-crediti').value = flag;
         document.getElementById('form-annulla-contratto').submit();
       }
     }
 
-    function confirmAnnullaRow(id, giocatore, team) {
+    function confirmAnnullaRow(id, giocatore, team, tipo) {
       if (confirm(
         "Annullare la stipula del contratto?\n\n" +
         "Giocatore: " + giocatore + "\n" +
-        "FantaTeam: " + team + "\n\n" +
+        "FantaTeam: " + team + "\n" +
+        "Tipo:      " + (tipo || "—") + "\n\n" +
         "• I saldi (crediti/patrimonio/stipendi) di acquirente e venditore tornano al valore precedente.\n" +
         "• Il contratto precedente (se esisteva) torna valido.\n" +
         "• Il giocatore torna nello stato precedente (libero o sotto contratto precedente).\n" +
         "• Il contratto annullato viene eliminato.\n\n" +
         "L'operazione è registrata in log azioni."
       )) {
+        const flag = askRestituisciCrediti(tipo);
+        document.getElementById('input-restituisci-crediti').value = flag;
         const form = document.getElementById('form-annulla-contratto');
         form.action = '/admin/contratti/' + id + '/annulla';
         form.submit();

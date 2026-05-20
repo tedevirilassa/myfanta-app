@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Rinnovi' }) %>
+  <style>
+    .rinnovi-grid { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+    @media (max-width: 1024px) { .rinnovi-grid { grid-template-columns: 1fr; } }
+
+    .section-title { font-size: .95rem; font-weight: 800; color: var(--green-dark); margin: 0 0 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+    .budget-card { background: #fff; border-radius: 10px; padding: 18px 20px; box-shadow: 0 2px 10px rgba(26,58,42,.08); border-top: 3px solid var(--green-mid); position: sticky; top: 80px; }
+    .budget-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .budget-row .lbl { font-size: .78rem; color: var(--gray-400); text-transform: uppercase; letter-spacing: .4px; }
+    .budget-row .val { font-weight: 800; color: var(--green-dark); font-size: 1rem; }
+    .budget-row.budget-cap .val { font-size: 1.4rem; }
+    .budget-bar-wrap { background: var(--gray-200); height: 14px; border-radius: 7px; overflow: hidden; margin: 8px 0 4px; position: relative; }
+    .budget-bar { height: 100%; transition: width .25s ease; background: linear-gradient(90deg, #27ae60, #52b788); }
+    .budget-bar.over { background: linear-gradient(90deg, #e74c3c, #f39c12); }
+    .budget-hint { font-size: .72rem; color: var(--gray-400); }
+
+    .scadenza-card, .proposta-card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow:0 2px 10px rgba(26,58,42,.06); margin-bottom:10px; border-left:4px solid var(--gray-200); }
+    .scadenza-card .row, .proposta-card .row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .scadenza-card .gname, .proposta-card .gname { font-weight: 700; color: var(--green-dark); }
+    .scadenza-card .gmeta, .proposta-card .gmeta { font-size: .78rem; color: var(--gray-400); }
+
+    .proposta-card { border-left: 4px solid #94a3b8; cursor: grab; user-select: none; transition: background .15s, border-color .15s, transform .1s; }
+    .proposta-card:active { cursor: grabbing; transform: scale(.998); }
+    .proposta-card.sortable-ghost { opacity: .35; }
+    .proposta-card.stato-CONFERMATO { border-left-color: #27ae60; background: #f3fcf5; }
+    .proposta-card.stato-SVINCOLO   { border-left-color: var(--red); background: var(--red-light); }
+    .proposta-priority { display:inline-block; background: var(--green-dark); color:#fff; width:26px; height:26px; line-height:26px; text-align:center; border-radius:50%; font-weight:800; font-size:.78rem; margin-right:8px; }
+    .stato-badge { font-size:.7rem; font-weight:800; padding:3px 9px; border-radius:999px; }
+    .stato-badge.CONFERMATO { background:#27ae60; color:#fff; }
+    .stato-badge.SVINCOLO   { background: var(--red); color:#fff; }
+
+    .form-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .form-inline input, .form-inline select { padding: 5px 8px; font-size: .82rem; }
+    .form-inline input[type=number] { width: 80px; }
+    .form-inline select { width: 90px; }
+
+    .drag-handle { color: var(--gray-400); font-size: 1.1rem; padding-right: 4px; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1300px;">
+    <div class="page-header">
+      <h1>🔄 Rinnovi Contrattuali</h1>
+      <a href="/fanta/rinnovi/pubblico" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">👁 Vista pubblica lega</a>
+    </div>
+
+    <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+    <% if (message) { %><div class="alert alert-success">✔ <%= message %></div><% } %>
+
+    <% if (!team) { %>
+      <div class="alert alert-info">Nessun FantaTeam collegato al tuo utente. Contatta l'admin.</div>
+    <% } else { %>
+
+    <div class="rinnovi-grid">
+      <div>
+        <!-- ── Contratti disponibili per rinnovo ── -->
+        <div class="section-title">Contratti in scadenza fine <%= sCorrente.stagione %> (nuovo termine: stagione <%= sTarget %>)</div>
+        <% if (contrattiDisponibili.length === 0) { %>
+          <div class="alert alert-info" style="margin-bottom:18px;">Nessun contratto in scadenza disponibile per nuova proposta.</div>
+        <% } else { %>
+          <% contrattiDisponibili.forEach(function(c) { %>
+          <div class="scadenza-card">
+            <div class="row">
+              <div>
+                <div class="gname">[<%= c.giocatore.ruolo %>] <%= c.giocatore.nome %>
+                  <% if (c.giocatore.squadra) { %><span class="gmeta">– <%= c.giocatore.squadra %></span><% } %>
+                </div>
+                <div class="gmeta">Stipendio attuale: <%= c.importoOperazione ? Number(c.importoOperazione).toFixed(2) : '—' %> M · Scadenza: <%= c.dataFine %> · Valore TM: <%= c.giocatore.valore ? Number(c.giocatore.valore).toFixed(2) : '—' %> M</div>
+              </div>
+              <form action="/fanta/rinnovi/proposte" method="POST" class="form-inline">
+                <input type="hidden" name="contrattoId" value="<%= c.id %>">
+                <label style="margin:0; font-size:.7rem;">Anni</label>
+                <select name="nuovaDurata" required>
+                  <% const dMin=(params.contratto_durata_min||1); const dMax=(params.contratto_durata_max||3);
+                     for (let d=dMin; d<=dMax; d++) { %>
+                    <option value="<%= d %>"><%= d %></option>
+                  <% } %>
+                </select>
+                <label style="margin:0; font-size:.7rem;">Ingaggio (M)</label>
+                <input type="number" name="nuovoIngaggio" step="0.1" min="0.1" placeholder="es. 2.5" required>
+                <button type="submit" class="btn btn-sm btn-primary">+ Proponi</button>
+              </form>
+            </div>
+          </div>
+          <% }) %>
+        <% } %>
+
+        <!-- ── Proposte attive (drag-drop) ── -->
+        <div class="section-title" style="margin-top:24px;">Proposte attive (trascina per ordinare per priorità)</div>
+        <% if (proposte.length === 0) { %>
+          <div class="alert alert-info">Nessuna proposta. Aggiungi rinnovi dai contratti in scadenza sopra.</div>
+        <% } else { %>
+        <div id="proposte-list">
+          <% proposte.forEach(function(p) { %>
+          <div class="proposta-card stato-<%= p.statoSimulato %>" data-id="<%= p.id %>" data-ingaggio="<%= p.nuovoIngaggio %>">
+            <div class="row">
+              <div>
+                <span class="drag-handle">⋮⋮</span>
+                <span class="proposta-priority" data-priority><%= p.ordinePriorita %></span>
+                <span class="gname">[<%= p.giocatore.ruolo %>] <%= p.giocatore.nome %></span>
+                <span class="gmeta">· <%= p.nuovaDurata %> ann<%= p.nuovaDurata===1?'o':'i' %> · <%= Number(p.nuovoIngaggio).toFixed(2) %> M/anno</span>
+              </div>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <span class="stato-badge <%= p.statoSimulato %>" data-stato><%= p.statoSimulato==='CONFERMATO'?'✓ CONFERMATO':'⚠ SVINCOLO' %></span>
+                <form action="/fanta/rinnovi/proposte/<%= p.id %>/delete" method="POST" onsubmit="return confirm('Rimuovere la proposta?');" style="margin:0;">
+                  <button type="submit" class="btn btn-sm" style="background:var(--red-light); color: var(--red); border:1px solid var(--red);">🗑</button>
+                </form>
+              </div>
+            </div>
+          </div>
+          <% }) %>
+        </div>
+        <% } %>
+      </div>
+
+      <!-- ── Budget side panel ── -->
+      <div>
+        <div class="budget-card">
+          <div class="section-title">Salary Cap rinnovi</div>
+          <div class="budget-row budget-cap">
+            <span class="lbl">Cap totale</span>
+            <span class="val" id="budget-cap"><%= salaryCap.toFixed(2) %> M</span>
+          </div>
+          <div class="budget-row">
+            <span class="lbl">Impegnato</span>
+            <span class="val" id="budget-speso">0.00 M</span>
+          </div>
+          <div class="budget-row">
+            <span class="lbl">Residuo</span>
+            <span class="val" id="budget-residuo"><%= salaryCap.toFixed(2) %> M</span>
+          </div>
+          <div class="budget-bar-wrap"><div class="budget-bar" id="budget-bar" style="width:0%"></div></div>
+          <div class="budget-hint">Formula: (maxRosa + minRosa)/2 × 25% — uguale per tutti i team.</div>
+          <hr style="margin:14px 0; border:none; border-top:1px solid var(--gray-200);">
+          <div class="budget-hint">
+            Trascina le proposte per modificarne la priorità. Il sistema ricalcola in tempo reale quali rientrano nel cap (verde) e quali finirebbero svincolate (rosso).
+          </div>
+        </div>
+      </div>
+    </div>
+    <% } %>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script>
+    (function () {
+      const list = document.getElementById('proposte-list');
+      const cap = parseFloat(<%- JSON.stringify(salaryCap) %>) || 0;
+      const elCap = document.getElementById('budget-cap');
+      const elSpeso = document.getElementById('budget-speso');
+      const elResiduo = document.getElementById('budget-residuo');
+      const elBar = document.getElementById('budget-bar');
+
+      function recompute() {
+        if (!list) return;
+        const cards = Array.from(list.querySelectorAll('.proposta-card'));
+        let speso = 0;
+        cards.forEach((card, idx) => {
+          const ingaggio = parseFloat(card.dataset.ingaggio) || 0;
+          const sostenibile = (speso + ingaggio) <= cap + 1e-9;
+          if (sostenibile) speso += ingaggio;
+          card.classList.remove('stato-CONFERMATO','stato-SVINCOLO');
+          card.classList.add(sostenibile ? 'stato-CONFERMATO' : 'stato-SVINCOLO');
+          const badge = card.querySelector('[data-stato]');
+          badge.textContent = sostenibile ? '✓ CONFERMATO' : '⚠ SVINCOLO';
+          badge.classList.remove('CONFERMATO','SVINCOLO');
+          badge.classList.add(sostenibile ? 'CONFERMATO' : 'SVINCOLO');
+          card.querySelector('[data-priority]').textContent = idx + 1;
+        });
+        elSpeso.textContent = speso.toFixed(2) + ' M';
+        const residuo = Math.max(0, cap - speso);
+        elResiduo.textContent = residuo.toFixed(2) + ' M';
+        const pct = cap > 0 ? Math.min(100, (speso / cap) * 100) : 0;
+        elBar.style.width = pct + '%';
+        elBar.classList.toggle('over', speso > cap);
+      }
+
+      async function persistOrder() {
+        const ids = Array.from(list.querySelectorAll('.proposta-card')).map(c => parseInt(c.dataset.id, 10));
+        if (ids.length === 0) return;
+        try {
+          const res = await fetch('/fanta/rinnovi/proposte/ordina', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert('Errore salvataggio ordine: ' + (err.error || res.statusText));
+          }
+        } catch (e) {
+          alert('Errore di rete: ' + e.message);
+        }
+      }
+
+      if (list) {
+        Sortable.create(list, {
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          handle: '.proposta-card',
+          onEnd: function () { recompute(); persistOrder(); },
+        });
+        recompute();
+      }
+    })();
+  </script>
+</body>
+</html>

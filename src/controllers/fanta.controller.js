@@ -11,7 +11,19 @@ async function showClassifica(req, res) {
       select: { stagione: true },
     });
 
-    const stagioneFiltro = req.query.stagione || stagioni[0]?.stagione || null;
+    // Default = stagione corrente derivata da oggi + parametro stagione_inizio (GG-MM).
+    // Se la stagione corrente non ha record SF, fallback alla più recente in tabella.
+    const params = await parametriService.getAll();
+    const stagioneInizio = params.stagione_inizio || "01-07";
+    const meseInizio = parseInt(stagioneInizio.split("-")[1], 10) || 7;
+    const oggi = new Date();
+    const meseOggi = oggi.getMonth() + 1;
+    const annoStagione = meseOggi >= meseInizio ? oggi.getFullYear() : oggi.getFullYear() - 1;
+    const stagioneCorrente = `${annoStagione}-${annoStagione + 1}`;
+    const stagioneEsiste = stagioni.some((s) => s.stagione === stagioneCorrente);
+    const defaultStagione = stagioneEsiste ? stagioneCorrente : stagioni[0]?.stagione || null;
+
+    const stagioneFiltro = req.query.stagione || defaultStagione;
 
     const rawRecords = stagioneFiltro
       ? await prisma.situazioneFinanziaria.findMany({

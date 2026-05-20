@@ -3,9 +3,14 @@ const express = require("express");
 const router = express.Router();
 const { requireAuth, requireAdmin } = require("../middleware/auth.middleware");
 const ctrl = require("../controllers/admin.controller");
+const rinnoviCtrl = require("../controllers/rinnovi.controller");
 
 // Tutte le rotte admin richiedono autenticazione + ruolo ADMIN
 router.use(requireAuth, requireAdmin);
+
+// ── Rinnovi (admin) ──────────────────────────────────────
+router.get("/rinnovi",            rinnoviCtrl.showAdminRinnovi);
+router.post("/rinnovi/finalizza", rinnoviCtrl.finalizzaRinnovi);
 
 router.get("/users", ctrl.listUsers);
 router.post("/users/:id/save-fields", ctrl.saveUserFields);

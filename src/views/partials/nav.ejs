@@ -76,6 +76,7 @@
     <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>"><%= currentUser.role %></span>
     <a href="/fanta/classifica">💰 Situazione Patrimoniale</a>
     <a href="/fanta/rose">📋 Rose</a>
+    <a href="/fanta/rinnovi">🔄 Rinnovi</a>
     <a href="/fanta/regolamento">📖 Regolamento</a>
     <% if (currentUser.role === 'ADMIN') { %>
     <div class="nav-dropdown">
@@ -104,6 +105,7 @@
           <a href="/admin/premi/inizio-stagione">🏁 Premi inizio stagione</a>
           <a href="/admin/premi/gennaio">❄️ Premi di gennaio</a>
           <a href="/admin/rosa">📋 Gestione Rose</a>
+          <a href="/admin/rinnovi">🔄 Rinnovi (finalize)</a>
           <a href="/admin/parametri">⚙️ Parametri</a>
           <a href="/admin/log">📝 Log Azioni</a>
         </div>
@@ -129,6 +131,7 @@
   <span class="nav-mobile-section-title">Navigazione</span>
   <a href="/fanta/classifica">💰 Situazione Patrimoniale</a>
   <a href="/fanta/rose">📋 Rose</a>
+  <a href="/fanta/rinnovi">🔄 Rinnovi</a>
   <a href="/fanta/riepilogo">📊 Riepilogo</a>
   <a href="/fanta/giocatori">⚽ Giocatori</a>
   <a href="/fanta/finanze">💰 Finanze</a>
@@ -147,6 +150,7 @@
   <a href="/admin/premi/inizio-stagione">🏁 Premi inizio stagione</a>
   <a href="/admin/premi/gennaio">❄️ Premi di gennaio</a>
   <a href="/admin/rosa">📋 Gestione Rose</a>
+  <a href="/admin/rinnovi">🔄 Rinnovi (finalize)</a>
   <a href="/admin/parametri">⚙️ Parametri</a>
   <a href="/admin/log">📝 Log Azioni</a>
   <% } %>

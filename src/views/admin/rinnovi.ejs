@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Admin – Rinnovi' }) %>
+  <style>
+    .team-block { background:#fff; border-radius:10px; padding:18px 20px; box-shadow:0 2px 10px rgba(26,58,42,.08); margin-bottom:18px; border-top:3px solid var(--green-mid); }
+    .team-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
+    .team-name { font-weight:800; color:var(--green-dark); font-size:1.05rem; }
+    .team-stats { font-size:.78rem; color:var(--gray-400); }
+    .prop-row { display:flex; justify-content:space-between; align-items:center; padding:7px 12px; border-radius:7px; margin-bottom:5px; font-size:.85rem; gap:10px; flex-wrap:wrap; }
+    .prop-row.CONFERMATO { background:#f3fcf5; border-left:3px solid #27ae60; }
+    .prop-row.SVINCOLO   { background:var(--red-light); border-left:3px solid var(--red); }
+    .prop-row.APPROVED   { background:#eafaf1; border-left:3px solid #27ae60; }
+    .prop-row.REJECTED   { background:#fef2f2; border-left:3px solid var(--red); }
+    .prop-prio { display:inline-block; background:var(--green-dark); color:#fff; width:24px; height:24px; line-height:24px; text-align:center; border-radius:50%; font-weight:800; font-size:.72rem; margin-right:8px; }
+    .stato-badge { font-size:.7rem; font-weight:800; padding:2px 8px; border-radius:999px; }
+    .stato-badge.CONFERMATO, .stato-badge.APPROVED { background:#27ae60; color:#fff; }
+    .stato-badge.SVINCOLO, .stato-badge.REJECTED   { background:var(--red); color:#fff; }
+    .cap-banner { background:var(--green-dark); color:#fff; border-radius:10px; padding:14px 20px; margin-bottom:22px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .cap-banner .val { font-size:1.6rem; font-weight:800; color:#fff; }
+    .finalize-bar { background:#fff8e1; border-radius:10px; padding:14px 20px; margin-bottom:22px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border:1.5px solid var(--gold); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>🛠 Admin · Rinnovi</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">← Pannello</a>
+    </div>
+
+    <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+    <% if (message) { %><div class="alert alert-success">✔ <%= message %></div><% } %>
+
+    <div class="cap-banner">
+      <div>
+        <div style="font-size:.78rem; color:#a7d7b8; text-transform:uppercase; letter-spacing:.5px;">Salary cap rinnovi · stagione <%= sTarget %></div>
+        <div class="val"><%= salaryCap.toFixed(2) %> M</div>
+      </div>
+      <div style="font-size:.82rem; color:#a7d7b8;">
+        Cap globale = (max rosa + min rosa) / 2 × 25%.<br>
+        Uguale per tutti.
+      </div>
+    </div>
+
+    <% if (finalizzazionePossibile) { %>
+    <div class="finalize-bar">
+      <div style="font-size:.85rem; color:#7d5a00;">
+        <strong>⚠ Pronto a finalizzare i rinnovi della stagione <%= sTarget %>.</strong><br>
+        L'operazione è transazionale: chiude i vecchi contratti, crea i nuovi per i rinnovi APPROVATI, e applica i rimborsi sui crediti per gli svincoli (REJECTED).
+      </div>
+      <form action="/admin/rinnovi/finalizza" method="POST"
+            onsubmit="return confirm('Finalizzare TUTTI i rinnovi PENDING di tutti i team?\n\nL\\'operazione è atomica per ciascun team ma irreversibile lato UI (resta solo il log).\n\nProcedere?');"
+            style="margin:0;">
+        <button type="submit" class="btn btn-warning">▶ Finalizza Rinnovi</button>
+      </form>
+    </div>
+    <% } else { %>
+    <div class="alert alert-info">Nessuna proposta PENDING in attesa di finalizzazione.</div>
+    <% } %>
+
+    <% if (teams.length === 0) { %>
+      <div class="alert alert-info">Nessuna proposta di rinnovo registrata per la stagione <%= sTarget %>.</div>
+    <% } else { %>
+      <% teams.forEach(function(t) {
+           const sostenibili = t.proposte.filter(p=>p.statoSimulato==='CONFERMATO').length;
+           const svincoli    = t.proposte.filter(p=>p.statoSimulato==='SVINCOLO').length;
+           const speso = t.proposte.filter(p=>p.statoSimulato==='CONFERMATO').reduce((s,p)=>s+Number(p.nuovoIngaggio),0);
+      %>
+      <div class="team-block">
+        <div class="team-head">
+          <div class="team-name"><%= t.team.nome %></div>
+          <div class="team-stats">
+            <%= t.proposte.length %> proposte ·
+            <strong style="color:#27ae60;"><%= sostenibili %> sostenibili</strong> ·
+            <strong style="color:var(--red);"><%= svincoli %> svincoli</strong> ·
+            Impegnato: <strong><%= speso.toFixed(2) %> M</strong> / <%= salaryCap.toFixed(2) %> M
+          </div>
+        </div>
+        <% t.proposte.forEach(function(p) {
+             const cls = p.status === 'PENDING' ? p.statoSimulato : p.status;
+        %>
+          <div class="prop-row <%= cls %>">
+            <div>
+              <span class="prop-prio"><%= p.ordinePriorita %></span>
+              <strong>[<%= p.giocatore.ruolo %>] <%= p.giocatore.nome %></strong>
+              <span style="color:var(--gray-400); font-size:.78rem;">· <%= p.nuovaDurata %> ann<%= p.nuovaDurata===1?'o':'i' %> · <%= Number(p.nuovoIngaggio).toFixed(2) %> M/anno · contratto #<%= p.contrattoId %></span>
+              <% if (p.motivoStato) { %><div style="font-size:.72rem; color:var(--gray-400); margin-top:3px;">↳ <%= p.motivoStato %></div><% } %>
+            </div>
+            <span class="stato-badge <%= cls %>">
+              <% if (p.status === 'PENDING') { %>
+                <%= p.statoSimulato==='CONFERMATO'?'✓ SOSTENIBILE':'⚠ SVINCOLO' %>
+              <% } else { %>
+                <%= p.status==='APPROVED' ? '✓ APPROVATO' : '✗ RIFIUTATO' %>
+              <% } %>
+            </span>
+          </div>
+        <% }) %>
+      </div>
+      <% }) %>
+    <% } %>
+  </div>
+</body>
+</html>

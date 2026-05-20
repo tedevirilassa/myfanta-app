@@ -35,6 +35,7 @@ model FantaTeam {
   user                  User?                    @relation(fields: [userId], references: [id])
   situazioniFinanziarie SituazioneFinanziaria[]
   rosaGiocatori         RosaGiocatore[]
+  propostaRinnovi       PropostaRinnovo[]
 
   @@map("fanta_teams")
 }
@@ -57,6 +58,7 @@ model SituazioneFinanziaria {
   updatedAt          DateTime   @default(now()) @updatedAt
 
   @@unique([nomePresidente, stagione])
+  @@unique([fantaTeamId, stagione])
   @@map("situazione_finanziaria")
 }
 
@@ -78,6 +80,7 @@ model Giocatore {
   contratti       Contratto[]
   rosaGiocatori   RosaGiocatore[]
   quotazioni      Quotazione[]
+  propostaRinnovi PropostaRinnovo[]
 
   @@map("giocatori")
 }
@@ -113,6 +116,7 @@ model Contratto {
   fantaTeamId       Int
   fantaTeam         FantaTeam             @relation(fields: [fantaTeamId], references: [id])
   giocatore         Giocatore             @relation(fields: [giocatoreId], references: [id])
+  propostaRinnovo   PropostaRinnovo?
 
   @@map("contratti")
 }
@@ -197,4 +201,32 @@ model RosaGiocatore {
 
   @@unique([fantaTeamId, giocatoreId, stagione])
   @@map("rosa_giocatori")
+}
+
+enum StatoRinnovo {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PropostaRinnovo {
+  id              Int          @id @default(autoincrement())
+  contrattoId     Int          @unique
+  fantaTeamId     Int
+  giocatoreId     Int
+  stagione        String       // stagione di destinazione del rinnovo (es. "2026-2027")
+  nuovaDurata     Int          // anni (1..3 secondo parametri)
+  nuovoIngaggio   Decimal      @db.Decimal(10, 2)
+  ordinePriorita  Int          // 1 = priorità massima
+  status          StatoRinnovo @default(PENDING)
+  motivoStato     String?      // testo motivazione popolato alla finalize (per APPROVED/REJECTED)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  contratto       Contratto    @relation(fields: [contrattoId], references: [id])
+  fantaTeam       FantaTeam    @relation(fields: [fantaTeamId], references: [id])
+  giocatore       Giocatore    @relation(fields: [giocatoreId], references: [id])
+
+  @@unique([fantaTeamId, stagione, ordinePriorita])
+  @@index([fantaTeamId, ordinePriorita])
+  @@map("proposte_rinnovo")
 }

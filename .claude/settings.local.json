@@ -1,7 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(\"---\")"
+      "PowerShell(\"---\")",
+      "Bash(del scripts\\\\_check-logs-prestito.js)",
+      "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{const r=await p.log.findFirst\\({where:{entita:'\\\\''contratto'\\\\'',entitaId:524,azione:'\\\\''DELETE'\\\\''},orderBy:{createdAt:'\\\\''desc'\\\\''}}\\); console.log\\(JSON.stringify\\(r,null,2\\)\\); await p.$disconnect\\(\\);}\\)\\(\\)')",
+      "Bash(node scripts/_check-degea.js)",
+      "Bash(node scripts/_check-fantateam-unique.js)",
+      "Bash(node scripts/_check-sf-dup.js)",
+      "Bash(npx prisma *)",
+      "Bash(node scripts/_apply-sf-unique.js)",
+      "Bash(node -e \"const d=new Date\\(\\);const ts=d.getUTCFullYear\\(\\).toString\\(\\)+\\(d.getUTCMonth\\(\\)+1\\).toString\\(\\).padStart\\(2,'0'\\)+d.getUTCDate\\(\\).toString\\(\\).padStart\\(2,'0'\\)+d.getUTCHours\\(\\).toString\\(\\).padStart\\(2,'0'\\)+d.getUTCMinutes\\(\\).toString\\(\\).padStart\\(2,'0'\\)+d.getUTCSeconds\\(\\).toString\\(\\).padStart\\(2,'0'\\);console.log\\(ts\\);\")",
+      "Bash(node -c src/controllers/rinnovi.controller.js)",
+      "Bash(node -c src/routes/fanta.js)",
+      "Bash(node -c src/routes/admin.js)",
+      "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{ const r=await p.propostaRinnovo.count\\(\\); console.log\\('\\\\''PropostaRinnovo table accessible, rows='\\\\'', r\\); await p.$disconnect\\(\\); }\\)\\(\\)')"
     ]
   }
 }

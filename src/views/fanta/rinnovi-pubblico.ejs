@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Rinnovi – Vista pubblica lega' }) %>
+  <style>
+    .team-block { background:#fff; border-radius:10px; padding:18px 20px; box-shadow:0 2px 10px rgba(26,58,42,.08); margin-bottom:18px; border-top:3px solid var(--green-mid); }
+    .team-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
+    .team-name { font-weight:800; color:var(--green-dark); font-size:1.05rem; }
+    .team-stats { font-size:.78rem; color:var(--gray-400); }
+    .prop-row { display:flex; justify-content:space-between; align-items:center; padding:7px 12px; border-radius:7px; margin-bottom:5px; font-size:.85rem; gap:10px; flex-wrap:wrap; }
+    .prop-row.CONFERMATO { background:#f3fcf5; border-left:3px solid #27ae60; }
+    .prop-row.SVINCOLO   { background:var(--red-light); border-left:3px solid var(--red); }
+    .prop-prio { display:inline-block; background:var(--green-dark); color:#fff; width:24px; height:24px; line-height:24px; text-align:center; border-radius:50%; font-weight:800; font-size:.72rem; margin-right:8px; }
+    .stato-badge { font-size:.7rem; font-weight:800; padding:2px 8px; border-radius:999px; }
+    .stato-badge.CONFERMATO { background:#27ae60; color:#fff; }
+    .stato-badge.SVINCOLO   { background:var(--red); color:#fff; }
+    .cap-banner { background:var(--green-dark); color:#fff; border-radius:10px; padding:14px 20px; margin-bottom:22px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .cap-banner .lbl { font-size:.78rem; text-transform:uppercase; letter-spacing:.5px; color:#a7d7b8; }
+    .cap-banner .val { font-size:1.6rem; font-weight:800; color:#fff; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>👁 Rinnovi — Vista pubblica lega</h1>
+      <a href="/fanta/rinnovi" class="btn btn-sm btn-primary">← Le mie proposte</a>
+    </div>
+
+    <div class="cap-banner">
+      <div>
+        <div class="lbl">Salary Cap rinnovi · stagione <%= sTarget %></div>
+        <div class="val"><%= salaryCap.toFixed(2) %> M</div>
+      </div>
+      <div style="font-size:.82rem; color:#a7d7b8;">
+        Formula: (max rosa + min rosa) / 2 × 25%<br>
+        Uguale per tutti i team.
+      </div>
+    </div>
+
+    <% if (teams.length === 0) { %>
+      <div class="alert alert-info">Nessuna proposta di rinnovo registrata da nessun team per la stagione <%= sTarget %>.</div>
+    <% } else { %>
+      <% teams.forEach(function(t) {
+           const speso = t.proposte.filter(p=>p.statoSimulato==='CONFERMATO').reduce((s,p)=>s+Number(p.nuovoIngaggio),0);
+           const sostenibili = t.proposte.filter(p=>p.statoSimulato==='CONFERMATO').length;
+           const svincoli    = t.proposte.filter(p=>p.statoSimulato==='SVINCOLO').length;
+      %>
+      <div class="team-block">
+        <div class="team-head">
+          <div class="team-name"><%= t.team.nome %></div>
+          <div class="team-stats">
+            <%= t.proposte.length %> proposte ·
+            <strong style="color:#27ae60;"><%= sostenibili %> sostenibili</strong> ·
+            <strong style="color:var(--red);"><%= svincoli %> svincoli</strong> ·
+            Impegnato: <strong><%= speso.toFixed(2) %> M</strong> / <%= salaryCap.toFixed(2) %> M
+          </div>
+        </div>
+        <% t.proposte.forEach(function(p) { %>
+          <div class="prop-row <%= p.statoSimulato %>">
+            <div>
+              <span class="prop-prio"><%= p.ordinePriorita %></span>
+              <strong>[<%= p.giocatore.ruolo %>] <%= p.giocatore.nome %></strong>
+              <span style="color:var(--gray-400); font-size:.78rem;">· <%= p.nuovaDurata %> ann<%= p.nuovaDurata===1?'o':'i' %> · <%= Number(p.nuovoIngaggio).toFixed(2) %> M/anno</span>
+            </div>
+            <span class="stato-badge <%= p.statoSimulato %>"><%= p.statoSimulato==='CONFERMATO'?'✓ CONFERMATO':'⚠ SVINCOLO' %></span>
+          </div>
+        <% }) %>
+      </div>
+      <% }) %>
+    <% } %>
+  </div>
+</body>
+</html>

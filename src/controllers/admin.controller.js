@@ -1336,11 +1336,14 @@ async function saveNuovoContratto(req, res) {
 
   // ── Preflight Prestito ────────────────────────────────────────────────────
   // (a) deve esistere un contratto Acquisto valido (prestito solo su giocatori con contratto)
-  // (b) il giocatore non deve essere già oggetto di un altro Prestito valido
-  // (c) spesa totale prestiti in essere del buyer + corrispettivo nuovo ≤ prestiti_spesa_max_totale
+  // (b) il presidente acquirente non può prendere in prestito un proprio giocatore
+  // (c) il giocatore non deve essere già oggetto di un altro Prestito valido
+  // (d) spesa totale prestiti in essere del buyer + corrispettivo nuovo ≤ prestiti_spesa_max_totale
   if (tipo === "Prestito") {
     if (!contrattoVenditore) {
       errors.push("Il prestito può essere stipulato solo su giocatori con un contratto di Acquisto attivo.");
+    } else if (contrattoVenditore.fantaTeamId === fantaTeam.id) {
+      errors.push("Non puoi prendere in prestito un giocatore di cui sei già proprietario.");
     }
     const prestitoEsistente = await prisma.contratto.findFirst({
       where:   { giocatoreId: parseInt(giocatoreId, 10), tipo: "Prestito", valido: true },
@@ -1575,21 +1578,33 @@ async function saveNuovoContratto(req, res) {
 
     // 4. Movimenti finanziari Prestito: corrispettivo (importoOperazione)
     //    sottratto al buyer e accreditato al presidente di provenienza.
-    //    Stipendi NON toccati (il prestito non genera stipendio).
-    if (tipo === "Prestito" && Number.isFinite(importoPrestitoNum) && importoPrestitoNum > 0
-        && contrattoVenditore && contrattoVenditore.fantaTeam?.user) {
+    //    Stipendi NON toccati (lo stipendio del giocatore continua a essere
+    //    pagato dal proprietario via il suo contratto Acquisto, che resta valido).
+    if (tipo === "Prestito") {
+      if (!Number.isFinite(importoPrestitoNum) || importoPrestitoNum <= 0) {
+        throw new Error(`Corrispettivo prestito mancante o non valido (ricevuto: ${importoOperazione}).`);
+      }
+
+      // 4a. Acquirente B (prende il giocatore in prestito): addebito = corrispettivo
       const buyerUser = await tx.user.findUnique({
         where: { id: parseInt(fantaPresidenteId, 10) },
       });
       if (!buyerUser) {
         throw new Error(`Presidente acquirente id=${fantaPresidenteId} non trovato in transazione.`);
       }
-      const sfBuyer = await tx.situazioneFinanziaria.findFirst({
-        where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
+      // Cerca prima per fantaTeamId (più robusto), poi fallback su nomePresidente
+      let sfBuyer = await tx.situazioneFinanziaria.findFirst({
+        where: { fantaTeamId: fantaTeam.id, stagione },
       });
       if (!sfBuyer) {
-        throw new Error(`SF acquirente prestito '${buyerUser.nickname || buyerUser.email}' stagione ${stagione} non trovata in transazione.`);
+        sfBuyer = await tx.situazioneFinanziaria.findFirst({
+          where: { nomePresidente: buyerUser.nickname || buyerUser.email, stagione },
+        });
       }
+      if (!sfBuyer) {
+        throw new Error(`SF acquirente prestito non trovata per fantaTeamId=${fantaTeam.id} o nome='${buyerUser.nickname || buyerUser.email}' stagione=${stagione}.`);
+      }
+      console.log(`[Prestito] Buyer SF lookup: fantaTeamId=${fantaTeam.id} stagione=${stagione} → trovata SF id=${sfBuyer.id} crediti=${sfBuyer.crediti}`);
       {
         const creditiPrima    = parseFloat(sfBuyer.crediti);
         const patrimonioPrima = parseFloat(sfBuyer.patrimonio);
@@ -1611,15 +1626,27 @@ async function saveNuovoContratto(req, res) {
           patrimonio: { prima: patrimonioPrima, dopo: nuovoPatrimonio },
           stipendi:   { prima: stipendiPrima,   dopo: stipendiPrima },
         };
+        console.log(`[Prestito] Buyer SF aggiornata id=${sfBuyer.id} crediti ${creditiPrima} → ${nuoviCrediti}`);
       }
 
+      // 4b. Provenienza A (proprietario originale): accredito = corrispettivo
+      if (!contrattoVenditore || !contrattoVenditore.fantaTeam || !contrattoVenditore.fantaTeam.user) {
+        throw new Error("Prestito: impossibile identificare il presidente di provenienza (contratto Acquisto del proprietario originale non trovato o senza user collegato).");
+      }
       const sellerUser = contrattoVenditore.fantaTeam.user;
-      const sfSeller   = await tx.situazioneFinanziaria.findFirst({
-        where: { nomePresidente: sellerUser.nickname || sellerUser.email, stagione },
+      // Cerca prima per fantaTeamId, poi fallback su nomePresidente
+      let sfSeller = await tx.situazioneFinanziaria.findFirst({
+        where: { fantaTeamId: contrattoVenditore.fantaTeamId, stagione },
       });
       if (!sfSeller) {
-        throw new Error(`SF provenienza prestito '${sellerUser.nickname || sellerUser.email}' stagione ${stagione} non trovata in transazione.`);
+        sfSeller = await tx.situazioneFinanziaria.findFirst({
+          where: { nomePresidente: sellerUser.nickname || sellerUser.email, stagione },
+        });
       }
+      if (!sfSeller) {
+        throw new Error(`SF provenienza prestito non trovata per fantaTeamId=${contrattoVenditore.fantaTeamId} o nome='${sellerUser.nickname || sellerUser.email}' stagione=${stagione}.`);
+      }
+      console.log(`[Prestito] Seller SF lookup: fantaTeamId=${contrattoVenditore.fantaTeamId} stagione=${stagione} → trovata SF id=${sfSeller.id} crediti=${sfSeller.crediti}`);
       {
         const creditiPrima    = parseFloat(sfSeller.crediti);
         const patrimonioPrima = parseFloat(sfSeller.patrimonio);
@@ -1641,6 +1668,7 @@ async function saveNuovoContratto(req, res) {
           patrimonio: { prima: patrimonioPrima, dopo: nuovoPatrimonio },
           stipendi:   { prima: stipendiPrima,   dopo: stipendiPrima },
         };
+        console.log(`[Prestito] Seller SF aggiornata id=${sfSeller.id} crediti ${creditiPrima} → ${nuoviCrediti}`);
       }
     }
 
@@ -1794,6 +1822,10 @@ async function annullaContratto(req, res) {
     return res.redirect("/admin/contratti/riepilogo?error=" + encodeURIComponent("Id non valido."));
   }
 
+  // Flag opzionale (solo Prestito): se "0" → elimina contratto SENZA ripristinare i saldi.
+  // Default "1" = rollback completo. Su Acquisto il flag viene ignorato.
+  const restituisciCrediti = (req.body && req.body.restituisciCrediti) !== "0";
+
   try {
     const contratto = await prisma.contratto.findUnique({
       where:   { id },
@@ -1833,11 +1865,17 @@ async function annullaContratto(req, res) {
     }
 
     // ── 3. PRE-FLIGHT: verifica presenza dati di rollback ──────────────────
-    // Acquisto richiede:
-    //  - logCreate con contrattiInvalidatiIds (anche array vuoto è OK).
-    //  - 1 movimento SF "acquirente" con snapshot prima completo.
-    //  - Se provenienza ≠ "Pubblico" → anche 1 movimento "venditore".
-    // Prestito: niente SF, niente preflight finanze (saveNuovoContratto non tocca finanze per Prestito).
+    // Acquisto: rollback completo SEMPRE → richiede movimenti SF acquirente
+    //   (+ venditore se provenienza ≠ "Pubblico") con snapshot 'prima' completo.
+    // Prestito + restituisciCrediti=true: richiede entrambi i movimenti SF.
+    // Prestito + restituisciCrediti=false: nessun preflight (solo delete + log).
+    function snapshotValido(m, ruolo) {
+      if (!m || m.ruolo !== ruolo) return false;
+      for (const k of ["crediti", "patrimonio", "stipendi"]) {
+        if (!m[k] || typeof m[k].prima !== "number") return false;
+      }
+      return true;
+    }
     const missing = [];
     if (contratto.tipo === "Acquisto") {
       if (!logCreate)            missing.push("log CREATE assente");
@@ -1847,13 +1885,6 @@ async function annullaContratto(req, res) {
 
       const isPrivato = contratto.provenienza && contratto.provenienza !== "Pubblico";
 
-      function snapshotValido(m, ruolo) {
-        if (!m || m.ruolo !== ruolo) return false;
-        for (const k of ["crediti", "patrimonio", "stipendi"]) {
-          if (!m[k] || typeof m[k].prima !== "number") return false;
-        }
-        return true;
-      }
       const movB = sfMovements.find(m => m.ruolo === "acquirente");
       const movA = sfMovements.find(m => m.ruolo === "venditore");
 
@@ -1863,6 +1894,13 @@ async function annullaContratto(req, res) {
         if (!movA)                          missing.push("movimento SF venditore assente (provenienza='" + contratto.provenienza + "')");
         else if (!snapshotValido(movA, "venditore"))  missing.push("snapshot SF venditore incompleto");
       }
+    } else if (contratto.tipo === "Prestito" && restituisciCrediti) {
+      const movB = sfMovements.find(m => m.ruolo === "acquirente");
+      const movA = sfMovements.find(m => m.ruolo === "venditore");
+      if (!movB)                          missing.push("movimento SF acquirente prestito assente");
+      else if (!snapshotValido(movB, "acquirente")) missing.push("snapshot SF acquirente prestito incompleto");
+      if (!movA)                          missing.push("movimento SF presidente di provenienza assente");
+      else if (!snapshotValido(movA, "venditore"))  missing.push("snapshot SF presidente di provenienza incompleto");
     }
 
     if (missing.length > 0) {
@@ -1874,18 +1912,24 @@ async function annullaContratto(req, res) {
     // contrattiInvalidatiIds ora è array (può essere vuoto)
     const idsToRevalidate = contrattiInvalidatiIds || [];
 
+    // Su Prestito + restituisciCrediti=false saltiamo il ripristino saldi:
+    // il contratto viene eliminato ma le finanze restano dove sono.
+    const skipSFRestore = contratto.tipo === "Prestito" && !restituisciCrediti;
+
     // 4. Esecuzione atomica del rollback
     await prisma.$transaction(async (tx) => {
-      // Ripristina saldi (prima → valore pre-stipula)
-      for (const m of sfMovements) {
-        await tx.situazioneFinanziaria.update({
-          where: { id: m.sfId },
-          data: {
-            crediti:    m.crediti?.prima    ?? undefined,
-            patrimonio: m.patrimonio?.prima ?? undefined,
-            stipendi:   m.stipendi?.prima   ?? undefined,
-          },
-        });
+      if (!skipSFRestore) {
+        // Ripristina saldi (prima → valore pre-stipula)
+        for (const m of sfMovements) {
+          await tx.situazioneFinanziaria.update({
+            where: { id: m.sfId },
+            data: {
+              crediti:    m.crediti?.prima    ?? undefined,
+              patrimonio: m.patrimonio?.prima ?? undefined,
+              stipendi:   m.stipendi?.prima   ?? undefined,
+            },
+          });
+        }
       }
       // Rivalida contratti chiusi dalla stipula
       if (idsToRevalidate.length > 0) {
@@ -1906,9 +1950,11 @@ async function annullaContratto(req, res) {
         tipo:                "annullamento",
         giocatoreId:         contratto.giocatoreId,
         giocatoreNome:       contratto.giocatore?.nome,
+        contrattoTipo:       contratto.tipo,
+        restituisciCrediti,
         contrattiRivalidati: idsToRevalidate,
-        movimentiAnnullati:  sfMovements.length,
-        movimenti:           sfMovements,
+        movimentiAnnullati:  skipSFRestore ? 0 : sfMovements.length,
+        movimenti:           skipSFRestore ? [] : sfMovements,
       },
       adminId: req.user.id,
     });

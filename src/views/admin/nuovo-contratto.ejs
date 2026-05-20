@@ -356,8 +356,13 @@
       }
       inputPrezzo.addEventListener("input", validatePrezzo);
 
-      // Validazione live: blocca se MM non coerente con la sessione
+      // Validazione live: blocca se MM non coerente con la sessione.
+      // Sul Prestito la stipula è libera (qualsiasi mese) → nessuna validazione.
       inputStipula.addEventListener("input", function () {
+        if (selTipo.value === "Prestito") {
+          inputStipula.setCustomValidity("");
+          return;
+        }
         const expected = meseAttesoPerSessione();
         const cur = inputStipula.value.trim();
         const m = cur.match(/^(\d{2})-(\d{4})$/);
@@ -379,7 +384,7 @@
           inputImporto.step = "0.1";
           inputImporto.placeholder = "da 0.1 a 5";
           inputImporto.required = true;
-          hintImporto.textContent = "Importo dal prestante al presidente che riceve il giocatore (0.1 – 5 M)";
+          hintImporto.textContent = "Corrispettivo: scalato dai crediti dell'acquirente, accreditato al presidente di provenienza (0.1 – 5 M)";
           grpPrezzo.style.display = "none";
           inputPrezzo.required = false;
         } else if (selTipo.value === "Acquisto") {
@@ -442,6 +447,9 @@
       function updateDurataPrestito() {
         const isPrestito = selTipo.value === "Prestito";
         filtraClausole(selTipo.value);
+        // Resetta eventuale errore di validazione lasciato da un Tipo precedente
+        // (es. utente aveva digitato mese non-07/-01 in Acquisto e ora passa a Prestito)
+        if (isPrestito) inputStipula.setCustomValidity("");
         if (isPrestito) {
           selDurata.value = "1";
           selDurata.style.pointerEvents = "none";
