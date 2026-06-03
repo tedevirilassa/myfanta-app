@@ -19,9 +19,10 @@ function stagioneSuccessiva(stagione) {
   return `${a + 1}-${a + 2}`;
 }
 
-// Salary cap globale lega: (max + min)/2 * 25% del valore rosa (somma valore
-// giocatori sotto contratto Acquisto valido), calcolato sui team con almeno
-// un contratto valido. Restituisce valore in M€.
+// Salary cap globale lega: 10% di [(max + min)/2 * 25%] del valore rosa
+// (somma valore giocatori sotto contratto Acquisto valido), calcolato sui team
+// con almeno un contratto valido. Restituisce valore in M€.
+//   cap = (max + min) / 2 * 0.25 * 0.10  =  (max + min) / 2 * 0.025
 async function calcSalaryCapGlobale() {
   const teams = await prisma.fantaTeam.findMany({ select: { id: true } });
   const valori = [];
@@ -43,7 +44,7 @@ async function calcSalaryCapGlobale() {
   if (valori.length === 0) return 0;
   const maxR = Math.max(...valori);
   const minR = Math.min(...valori);
-  return Math.round(((maxR + minR) / 2) * 0.25 * 100) / 100;
+  return Math.round(((maxR + minR) / 2) * 0.25 * 0.10 * 100) / 100;
 }
 
 // Contratti in scadenza = Acquisto valido con dataFine entro mese inizio
@@ -133,8 +134,10 @@ async function showMieProposte(req, res) {
 }
 
 // POST /fanta/rinnovi/proposte  (form)
+// L'ingaggio NON è contrattabile: viene sempre calcolato server-side come
+// stipendio_percentuale (default 10%) della quotazione corrente del giocatore.
 async function createProposta(req, res) {
-  const { contrattoId, nuovaDurata, nuovoIngaggio } = req.body;
+  const { contrattoId, nuovaDurata } = req.body;
   const params = await parametriService.getAll();
   const sCorrente = stagioneCorrente(params);
   const sTarget = stagioneSuccessiva(sCorrente.stagione);
@@ -144,7 +147,6 @@ async function createProposta(req, res) {
 
   const cId = parseInt(contrattoId, 10);
   const durata = parseInt(nuovaDurata, 10);
-  const ingaggio = parseFloat(nuovoIngaggio);
 
   const errors = [];
   if (!Number.isFinite(cId)) errors.push("Contratto non valido.");
@@ -153,8 +155,8 @@ async function createProposta(req, res) {
   if (!Number.isFinite(durata) || durata < dMin || durata > dMax) {
     errors.push(`Durata deve essere tra ${dMin} e ${dMax} anni.`);
   }
-  if (!Number.isFinite(ingaggio) || ingaggio <= 0) errors.push("Ingaggio mancante o non valido.");
 
+  let ingaggio = null;
   if (errors.length === 0) {
     const contratto = await prisma.contratto.findUnique({
       where: { id: cId }, include: { giocatore: true },
@@ -163,6 +165,15 @@ async function createProposta(req, res) {
     else if (contratto.fantaTeamId !== team.id) errors.push("Contratto non appartiene al tuo team.");
     else if (contratto.tipo !== "Acquisto")  errors.push("Rinnovo ammesso solo per contratti Acquisto.");
     else if (!contratto.valido)              errors.push("Contratto non più valido.");
+
+    if (errors.length === 0) {
+      const valore = contratto.giocatore.valore ? Number(contratto.giocatore.valore) : 0;
+      if (valore <= 0) errors.push("Quotazione del giocatore non disponibile: impossibile calcolare l'ingaggio.");
+      else {
+        const pct = parseFloat(params.stipendio_percentuale || "0.10");
+        ingaggio = Math.round(valore * pct * 100) / 100;
+      }
+    }
 
     if (errors.length === 0) {
       const dupExist = await prisma.propostaRinnovo.findUnique({
@@ -192,7 +203,7 @@ async function createProposta(req, res) {
       });
       await logAction({
         azione: "CREATE", entita: "proposta_rinnovo", entitaId: nuova.id,
-        dettaglio: { dopo: { fantaTeamId: team.id, contrattoId: cId, giocatoreId: contratto.giocatoreId, stagione: sTarget, durata, ingaggio, ordine } },
+        dettaglio: { dopo: { fantaTeamId: team.id, contrattoId: cId, giocatoreId: contratto.giocatoreId, stagione: sTarget, durata, ingaggio, ordine, formula: "valore * stipendio_percentuale" } },
         adminId: req.user.id,
       });
       return res.redirect("/fanta/rinnovi?saved=1");
@@ -358,9 +369,13 @@ async function showAdminRinnovi(req, res) {
 
 // POST /admin/rinnovi/finalizza
 // Per ogni team, itera proposte PENDING ordinePriorita asc.
+//  - Step 0 (ricalcolo reale): rilegge giocatore.valore CORRENTE (post-aggiornamento
+//    quotazioni TM di giugno) e ricalcola nuovoIngaggio = valore * stipendio_percentuale.
+//    Aggiorna anche DB così la storia della finalize è tracciabile.
 //  - Se nuovoIngaggio cumulativo ≤ cap: APPROVED → chiude vecchio + crea nuovo Acquisto + aggiorna SF.
 //  - Else: REJECTED → svincolo + rimborso crediti = giocatore.valore corrente.
-// Tutto atomico via $transaction.
+// Tutto atomico via $transaction. Il cap viene anch'esso ricalcolato sulle
+// quotazioni correnti tramite calcSalaryCapGlobale().
 async function finalizzaRinnovi(req, res) {
   const params = await parametriService.getAll();
   const sCorrente = stagioneCorrente(params);
@@ -368,6 +383,7 @@ async function finalizzaRinnovi(req, res) {
   const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
   const annoStipulaNuova = parseInt(sTarget.split("-")[0], 10); // es. 2026-2027 → 2026
   const dataStipulaNuova = `${String(meseInizio).padStart(2, "0")}-${annoStipulaNuova}`;
+  const pctStipendio = parseFloat(params.stipendio_percentuale || "0.10");
 
   try {
     const cap = await calcSalaryCapGlobale();
@@ -385,6 +401,32 @@ async function finalizzaRinnovi(req, res) {
         include: { contratto: true, giocatore: true },
       });
       if (pendenti.length === 0) continue;
+
+      // ── Step 0: ricalcola nuovoIngaggio con quotazione CORRENTE ───────────
+      // L'ingaggio storato è basato sulla quotazione al momento della proposta;
+      // qui ricalcoliamo con la quotazione aggiornata e persistiamo per audit.
+      for (const p of pendenti) {
+        const valoreCorrente = p.giocatore.valore ? Number(p.giocatore.valore) : 0;
+        const ingaggioCorrente = Math.round(valoreCorrente * pctStipendio * 100) / 100;
+        const ingaggioPrec = Number(p.nuovoIngaggio);
+        if (Math.abs(ingaggioCorrente - ingaggioPrec) > 1e-9) {
+          await prisma.propostaRinnovo.update({
+            where: { id: p.id },
+            data:  { nuovoIngaggio: ingaggioCorrente },
+          });
+          await logAction({
+            azione: "UPDATE", entita: "proposta_rinnovo", entitaId: p.id,
+            dettaglio: {
+              tipo: "ricalcolo-quotazione",
+              giocatoreId: p.giocatoreId,
+              ingaggio: { prima: ingaggioPrec, dopo: ingaggioCorrente },
+              valoreCorrente, percentuale: pctStipendio,
+            },
+            adminId: req.user.id,
+          });
+          p.nuovoIngaggio = ingaggioCorrente;
+        }
+      }
 
       let speso = 0;
       const approvati = [];

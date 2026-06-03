@@ -65,6 +65,26 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
+    <!-- ══ AZIONI GLOBALI ═══════════════════════════════════════════════ -->
+    <div style="background:#fff8e1; border:1.5px solid var(--gold); border-radius:10px; padding:18px 20px; margin-bottom:22px;">
+      <div style="font-size:.95rem; font-weight:800; color:#7d5a00; margin-bottom:8px; text-transform:uppercase; letter-spacing:.4px;">
+        ⚡ Azioni globali stagione
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;">
+        <div style="font-size:.85rem; color:#7d5a00; max-width:680px;">
+          <strong>Esegui calcolo reale rinnovi.</strong>
+          Le proposte create dai presidenti si basano sulle quotazioni pre-aggiornamento di giugno.
+          Questo tasto ricalcola gli ingaggi (10% della quotazione corrente) e il salary cap globale sulle quotazioni TM aggiornate, poi finalizza:
+          contratti rinnovati e svincoli con rimborso crediti = quotazione corrente. Operazione atomica per ciascun team, tracciata nei log.
+        </div>
+        <form action="/admin/rinnovi/finalizza" method="POST"
+              onsubmit="return confirm('Eseguire il calcolo reale dei rinnovi su TUTTI i team usando le quotazioni TM correnti?\n\nL\\'operazione applica i rinnovi sostenibili, svincola i giocatori oltre cap (con rimborso crediti) ed è irreversibile lato UI.\n\nProcedere?');"
+              style="margin:0;">
+          <button type="submit" class="btn btn-warning">▶ Esegui calcolo reale rinnovi</button>
+        </form>
+      </div>
+    </div>
+
     <%
       // Separa i parametri ruolo_tm_* dagli altri
       const ruoliTM  = parametri.filter(p => p.chiave.startsWith('ruolo_tm_'));

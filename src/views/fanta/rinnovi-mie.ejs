@@ -64,14 +64,18 @@
         <% if (contrattiDisponibili.length === 0) { %>
           <div class="alert alert-info" style="margin-bottom:18px;">Nessun contratto in scadenza disponibile per nuova proposta.</div>
         <% } else { %>
-          <% contrattiDisponibili.forEach(function(c) { %>
+          <% const pctStip = parseFloat(params.stipendio_percentuale || "0.10"); %>
+          <% contrattiDisponibili.forEach(function(c) {
+               const valoreTM = c.giocatore.valore ? Number(c.giocatore.valore) : 0;
+               const ingaggioCalc = Math.round(valoreTM * pctStip * 100) / 100;
+          %>
           <div class="scadenza-card">
             <div class="row">
               <div>
                 <div class="gname">[<%= c.giocatore.ruolo %>] <%= c.giocatore.nome %>
                   <% if (c.giocatore.squadra) { %><span class="gmeta">– <%= c.giocatore.squadra %></span><% } %>
                 </div>
-                <div class="gmeta">Stipendio attuale: <%= c.importoOperazione ? Number(c.importoOperazione).toFixed(2) : '—' %> M · Scadenza: <%= c.dataFine %> · Valore TM: <%= c.giocatore.valore ? Number(c.giocatore.valore).toFixed(2) : '—' %> M</div>
+                <div class="gmeta">Stipendio attuale: <%= c.importoOperazione ? Number(c.importoOperazione).toFixed(2) : '—' %> M · Scadenza: <%= c.dataFine %> · Valore TM: <%= valoreTM > 0 ? valoreTM.toFixed(2) : '—' %> M</div>
               </div>
               <form action="/fanta/rinnovi/proposte" method="POST" class="form-inline">
                 <input type="hidden" name="contrattoId" value="<%= c.id %>">
@@ -82,9 +86,11 @@
                     <option value="<%= d %>"><%= d %></option>
                   <% } %>
                 </select>
-                <label style="margin:0; font-size:.7rem;">Ingaggio (M)</label>
-                <input type="number" name="nuovoIngaggio" step="0.1" min="0.1" placeholder="es. 2.5" required>
-                <button type="submit" class="btn btn-sm btn-primary">+ Proponi</button>
+                <span style="font-size:.78rem; color:var(--gray-700); font-weight:600;">
+                  Ingaggio: <strong style="color:var(--green-dark);"><%= ingaggioCalc.toFixed(2) %> M</strong>
+                  <span style="color:var(--gray-400); font-weight:400;">(<%= (pctStip*100).toFixed(0) %>% di <%= valoreTM.toFixed(2) %> M)</span>
+                </span>
+                <button type="submit" class="btn btn-sm btn-primary" <%= valoreTM <= 0 ? 'disabled title="Quotazione mancante: rinnovo non calcolabile"' : '' %>>+ Proponi</button>
               </form>
             </div>
           </div>
@@ -136,7 +142,7 @@
             <span class="val" id="budget-residuo"><%= salaryCap.toFixed(2) %> M</span>
           </div>
           <div class="budget-bar-wrap"><div class="budget-bar" id="budget-bar" style="width:0%"></div></div>
-          <div class="budget-hint">Formula: (maxRosa + minRosa)/2 × 25% — uguale per tutti i team.</div>
+          <div class="budget-hint">Formula: 10% di [(maxRosa + minRosa)/2 × 25%] — uguale per tutti i team.</div>
           <hr style="margin:14px 0; border:none; border-top:1px solid var(--gray-200);">
           <div class="budget-hint">
             Trascina le proposte per modificarne la priorità. Il sistema ricalcola in tempo reale quali rientrano nel cap (verde) e quali finirebbero svincolate (rosso).
