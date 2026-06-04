@@ -12,6 +12,10 @@ router.use(requireAuth, requireAdmin);
 router.get("/rinnovi",            rinnoviCtrl.showAdminRinnovi);
 router.post("/rinnovi/finalizza", rinnoviCtrl.finalizzaRinnovi);
 
+// ── Svincoli giocatori inattivi ─────────────────────────
+router.get("/svincoli-inattivi",          ctrl.listSvincoliInattivi);
+router.post("/svincoli-inattivi/applica", ctrl.approveSvincoliInattivi);
+
 router.get("/users", ctrl.listUsers);
 router.post("/users/:id/save-fields", ctrl.saveUserFields);
 router.get("/pannello", ctrl.showPannello);

@@ -70,28 +70,18 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
 
     for (const g of giocatori) {
       try {
-        let existing = null;
-
-        // A) Match per transfermarktId (più affidabile)
-        if (g.transfermarktId) {
-          existing = await prisma.giocatore.findFirst({
-            where: { transfermarktId: g.transfermarktId },
-          });
-        }
-
-        // B) Fallback: match per nome normalizzato nella stessa squadra
-        if (!existing) {
-          const nomeNorm   = normalizeName(g.nome);
-          const candidates = await prisma.giocatore.findMany({
-            where:  { squadra: teamNome },
-            select: { id: true, nome: true, transfermarktId: true },
-          });
-          const match = candidates.find(c => normalizeName(c.nome) === nomeNorm);
-          if (match) existing = match;
-        }
+        // Match SOLO per nome normalizzato sull'intero DB (no transfermarktId,
+        // no filtro squadra): un giocatore che cambia squadra resta lo stesso
+        // record → evita duplicati post-trasferimento.
+        const nomeNorm = normalizeName(g.nome);
+        const candidates = await prisma.giocatore.findMany({
+          select: { id: true, nome: true },
+        });
+        const existing = candidates.find((c) => normalizeName(c.nome) === nomeNorm) || null;
 
         if (existing) {
           // ── Aggiorna giocatore esistente ──────────────────────────────
+          // Nota: transfermarktId NON viene più scritto.
           const updateData = {
             squadra:         g.squadra,
             valore:          g.valore,
@@ -100,7 +90,6 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
             ...(g.ruolo         && { ruolo: g.ruolo }),
             ...(g.dataNascita   && { dataNascita: g.dataNascita }),
             ...(g.eta != null    && { eta: g.eta }),
-            ...(g.transfermarktId && { transfermarktId: g.transfermarktId }),
           };
           await prisma.giocatore.update({ where: { id: existing.id }, data: updateData });
 
@@ -121,6 +110,7 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
 
         } else {
           // ── Crea nuovo giocatore + prima quotazione ───────────────────
+          // Nota: transfermarktId NON viene più scritto.
           const nuovo = await prisma.giocatore.create({
             data: {
               nome:            g.nome,
@@ -130,7 +120,6 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
               valore:          g.valore,
               dataNascita:     g.dataNascita   || null,
               eta:             g.eta           ?? null,
-              transfermarktId: g.transfermarktId || null,
               active:          true,
             },
           });

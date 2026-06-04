@@ -102,6 +102,77 @@
       </table>
     </div>
 
+    <!-- ── Admin: dettaglio rosa per team ── -->
+    <% if (currentUser && currentUser.role === 'ADMIN' && typeof teamsPerCombobox !== 'undefined' && teamsPerCombobox && teamsPerCombobox.length > 0) { %>
+    <div class="card" style="margin-top:24px; padding:18px 22px;">
+      <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
+        <h2 style="margin:0; font-size:1rem;">🔍 Dettaglio rosa (admin)</h2>
+        <form method="GET" action="/fanta/classifica" style="margin:0; display:flex; gap:8px; align-items:center;">
+          <% if (stagioneFiltro) { %><input type="hidden" name="stagione" value="<%= stagioneFiltro %>"><% } %>
+          <select name="teamDetail" onchange="this.form.submit()" style="padding:7px 10px; border-radius:6px; border:1.5px solid var(--gray-200);">
+            <option value="">— Seleziona team —</option>
+            <% teamsPerCombobox.forEach(function(t) { %>
+              <option value="<%= t.id %>" <%= (teamDetail && teamDetail.team && teamDetail.team.id === t.id) ? 'selected' : '' %>>
+                <%= t.nome %> (<%= t.nomePresidente %>)
+              </option>
+            <% }) %>
+          </select>
+          <% if (teamDetail) { %>
+            <a href="/fanta/classifica<%= stagioneFiltro ? '?stagione=' + encodeURIComponent(stagioneFiltro) : '' %>"
+               class="btn btn-sm" style="background:var(--gray-200); color:var(--gray-700);">Chiudi</a>
+          <% } %>
+        </form>
+      </div>
+
+      <% if (teamDetail) { %>
+        <div style="margin-bottom:10px; font-size:.88rem; color:var(--gray-700);">
+          Team: <strong><%= teamDetail.team.nome %></strong> ·
+          Presidente: <strong><%= teamDetail.team.user ? (teamDetail.team.user.nickname || teamDetail.team.user.email) : '—' %></strong> ·
+          Giocatori: <strong><%= teamDetail.giocatori.length %></strong> ·
+          Valore rosa totale: <strong style="color:var(--green-dark);"><%= teamDetail.totaleValore.toFixed(2) %> M</strong>
+        </div>
+        <div class="table-wrap">
+          <table style="width:100%;">
+            <thead>
+              <tr>
+                <th>Ruolo</th>
+                <th>Giocatore</th>
+                <th>Squadra</th>
+                <th style="text-align:center;">Età</th>
+                <th style="text-align:right;">Valore TM (M)</th>
+                <th style="text-align:right;">Stipendio (M)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% teamDetail.giocatori.forEach(function(g) { %>
+                <tr>
+                  <td><span style="display:inline-block; width:24px; height:24px; line-height:24px; text-align:center; border-radius:50%; font-weight:800; color:#fff; font-size:.72rem;
+                    <%= g.ruolo==='P'?'background:#64748b;':g.ruolo==='D'?'background:#2563eb;':g.ruolo==='C'?'background:#16a34a;':'background:#dc2626;' %>"><%= g.ruolo %></span></td>
+                  <td><strong><%= g.nome %></strong></td>
+                  <td style="color:var(--gray-700);"><%= g.squadra || '—' %></td>
+                  <td style="text-align:center;"><%= g.eta != null ? g.eta : '—' %></td>
+                  <td style="text-align:right; font-weight:700;"><%= g.valore.toFixed(2) %></td>
+                  <td style="text-align:right; color:var(--gray-700);"><%= g.stipendio > 0 ? g.stipendio.toFixed(2) : '—' %></td>
+                </tr>
+              <% }) %>
+              <tr style="background:var(--green-pale); font-weight:800;">
+                <td colspan="4" style="text-align:right;">TOTALE</td>
+                <td style="text-align:right; color:var(--green-dark);"><%= teamDetail.totaleValore.toFixed(2) %> M</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="margin-top:10px; font-size:.75rem; color:var(--gray-400);">
+          Somma dei <code>giocatore.valore</code> (ultima quotazione TM) di tutti i giocatori <code>active=true</code>
+          sotto contratto Acquisto <code>valido=true</code> del team. Dedotti per giocatoreId.
+        </div>
+      <% } else { %>
+        <div style="font-size:.85rem; color:var(--gray-400);">Seleziona una rosa per visualizzare la composizione e i valori che compongono il "Valore rosa" della classifica.</div>
+      <% } %>
+    </div>
+    <% } %>
+
     <!-- stat cards -->
     <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-top:24px;">
       <% 

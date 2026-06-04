@@ -13,7 +13,14 @@
       "Bash(node -c src/controllers/rinnovi.controller.js)",
       "Bash(node -c src/routes/fanta.js)",
       "Bash(node -c src/routes/admin.js)",
-      "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{ const r=await p.propostaRinnovo.count\\(\\); console.log\\('\\\\''PropostaRinnovo table accessible, rows='\\\\'', r\\); await p.$disconnect\\(\\); }\\)\\(\\)')"
+      "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{ const r=await p.propostaRinnovo.count\\(\\); console.log\\('\\\\''PropostaRinnovo table accessible, rows='\\\\'', r\\); await p.$disconnect\\(\\); }\\)\\(\\)')",
+      "Bash(node -c src/controllers/fanta.controller.js)",
+      "Bash(node scripts/_check-venturino.js)",
+      "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{const u=await p.user.findFirst\\({where:{role:'\\\\''ADMIN'\\\\''},select:{id:true,email:true}}\\);console.log\\(u\\);await p.$disconnect\\(\\);}\\)\\(\\)')",
+      "Bash(node scripts/_merge-venturino.js)",
+      "Bash(node scripts/_check-duplicati-rose.js)",
+      "Bash(node scripts/_merge-duplicati.js)",
+      "Bash(node -c src/services/sync-quotazioni.service.js)"
     ]
   }
 }

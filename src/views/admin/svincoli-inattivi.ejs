@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Svincoli giocatori inattivi' }) %>
+  <style>
+    .info-banner { background:#fff8e1; border:1.5px solid var(--gold); border-radius:10px; padding:14px 20px; margin-bottom:22px; font-size:.88rem; color:#7d5a00; }
+    .table-svincoli { width:100%; }
+    .table-svincoli th { background: var(--green-dark); color:#a7d7b8; font-size:.72rem; }
+    .table-svincoli td { padding:9px 12px; font-size:.85rem; }
+    .row-acquisto { background: #fff; }
+    .row-prestito { background: #f8fafc; }
+    .row-sf-miss  { background: var(--red-light); }
+    .pill-tipo { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:800; }
+    .pill-acquisto { background:#eafaf1; color:#145a32; border:1px solid #58d68d; }
+    .pill-prestito { background:#e0f2fe; color:#075985; border:1px solid #38bdf8; }
+    .rimborso { font-weight:800; color: var(--green-dark); }
+    .rimborso-zero { color: var(--gray-400); }
+    .totale-block { background:#fff; border-radius:10px; padding:14px 18px; margin-top:14px; box-shadow:0 2px 10px rgba(26,58,42,.08); display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px; }
+    .totale-block .lbl { font-size:.78rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.4px; }
+    .totale-block .val { font-size:1.3rem; font-weight:800; color: var(--green-dark); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1200px;">
+    <div class="page-header">
+      <h1>🚪 Svincoli giocatori inattivi</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200); color:var(--gray-700);">← Pannello</a>
+    </div>
+
+    <% if (message) { %><div class="alert alert-success">✔ <%= message %></div><% } %>
+    <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+
+    <div class="info-banner">
+      <strong>Riepilogo candidati allo svincolo automatico.</strong>
+      Giocatori marcati <code>active=false</code> dopo l'ultimo scraping Transfermarkt (non più in alcuna rosa di Serie A)
+      ma ancora sotto contratto <code>valido=true</code> con un FantaTeam. Stagione di destinazione SF: <strong><%= stagione %></strong>.
+      <br>
+      Solo contratti di tipo <strong>Acquisto</strong> generano rimborso crediti pari all'ultimo valore Transfermarkt del giocatore.
+      Contratti <strong>Prestito</strong> vengono chiusi senza movimenti finanziari.
+      <br>
+      Seleziona i contratti da approvare e premi <strong>Applica selezionati</strong>. L'operazione è atomica per ciascun contratto e tracciata in log.
+    </div>
+
+    <% if (candidati.length === 0) { %>
+      <div class="alert alert-info">Nessun giocatore inattivo con contratto valido. Nulla da fare.</div>
+    <% } else {
+         const totaleRimborsi = candidati.reduce((s, c) => s + c.rimborso, 0);
+    %>
+    <form action="/admin/svincoli-inattivi/applica" method="POST"
+          onsubmit="return confirm('Applicare lo svincolo ai contratti selezionati?\n\nOperazione atomica per ciascun contratto: chiude il contratto e (solo Acquisto) accredita i crediti del team. Irreversibile lato UI, resta solo nei log.');"
+    >
+      <div style="margin-bottom:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button type="button" class="btn btn-sm" id="select-all" style="background:var(--gray-200);color:var(--gray-700);">Seleziona tutti</button>
+        <button type="button" class="btn btn-sm" id="select-none" style="background:var(--gray-200);color:var(--gray-700);">Deseleziona tutti</button>
+        <button type="button" class="btn btn-sm" id="select-acquisti" style="background:#eafaf1;color:#145a32;">Solo Acquisti</button>
+        <span style="margin-left:auto; font-size:.85rem; color: var(--gray-700);">
+          Selezionati: <strong id="count-sel">0</strong> · Rimborso totale stimato: <strong id="total-rimborso">0.00 M</strong>
+        </span>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table-svincoli">
+          <thead>
+            <tr>
+              <th style="width:32px;"></th>
+              <th>Giocatore</th>
+              <th>Squadra TM</th>
+              <th>Ruolo</th>
+              <th>FantaTeam</th>
+              <th>Tipo</th>
+              <th>Scadenza contratto</th>
+              <th style="text-align:right;">Ultimo valore</th>
+              <th style="text-align:right;">Rimborso crediti</th>
+              <th>SF target</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% candidati.forEach(function(cand) {
+                 const c = cand.contratto;
+                 const isAcq = c.tipo === 'Acquisto';
+                 const rowClass = cand.sfMancante && isAcq && cand.rimborso > 0 ? 'row-sf-miss' : (isAcq ? 'row-acquisto' : 'row-prestito');
+            %>
+            <tr class="<%= rowClass %>">
+              <td>
+                <input type="checkbox" name="contrattiIds" value="<%= c.id %>"
+                       class="chk-svincolo" data-rimborso="<%= cand.rimborso %>" data-tipo="<%= c.tipo %>"
+                       <%= (cand.sfMancante && isAcq && cand.rimborso > 0) ? 'disabled title="SF stagione mancante: impossibile accreditare"' : '' %>>
+              </td>
+              <td><strong><%= c.giocatore.nome %></strong> <span style="color:var(--gray-400); font-size:.75rem;">#<%= c.giocatore.id %></span></td>
+              <td style="color:var(--gray-700);"><%= c.giocatore.squadra || '—' %></td>
+              <td><%= c.giocatore.ruolo %></td>
+              <td><strong><%= c.fantaTeam.nome %></strong></td>
+              <td><span class="pill-tipo pill-<%= c.tipo.toLowerCase() %>"><%= c.tipo %></span></td>
+              <td><%= c.dataFine || '—' %></td>
+              <td style="text-align:right;"><%= c.giocatore.valore ? Number(c.giocatore.valore).toFixed(2) : '—' %> M</td>
+              <td style="text-align:right;" class="<%= cand.rimborso === 0 ? 'rimborso-zero' : 'rimborso' %>">
+                <%= cand.rimborso > 0 ? '+' + cand.rimborso.toFixed(2) + ' M' : '— (no rimborso)' %>
+              </td>
+              <td style="font-size:.78rem;">
+                <% if (cand.sfTarget) { %>
+                  <span style="color: var(--green-dark);">SF#<%= cand.sfTarget.id %> ✓</span>
+                <% } else if (isAcq && cand.rimborso > 0) { %>
+                  <span style="color: var(--red);">⚠ mancante</span>
+                <% } else { %>
+                  <span style="color: var(--gray-400);">n/a</span>
+                <% } %>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="totale-block">
+        <div>
+          <div class="lbl">Candidati totali</div>
+          <div class="val"><%= candidati.length %></div>
+        </div>
+        <div>
+          <div class="lbl">Acquisti (con rimborso)</div>
+          <div class="val"><%= candidati.filter(c => c.contratto.tipo === 'Acquisto').length %></div>
+        </div>
+        <div>
+          <div class="lbl">Rimborso massimo cumulato</div>
+          <div class="val"><%= totaleRimborsi.toFixed(2) %> M</div>
+        </div>
+        <div>
+          <button type="submit" class="btn btn-warning">▶ Applica selezionati</button>
+        </div>
+      </div>
+    </form>
+
+    <script>
+      (function () {
+        const boxes = Array.from(document.querySelectorAll('.chk-svincolo'));
+        const countEl = document.getElementById('count-sel');
+        const totalEl = document.getElementById('total-rimborso');
+        function recompute() {
+          let n = 0, tot = 0;
+          boxes.forEach(b => { if (b.checked && !b.disabled) { n++; tot += parseFloat(b.dataset.rimborso) || 0; } });
+          countEl.textContent = n;
+          totalEl.textContent = tot.toFixed(2) + ' M';
+        }
+        boxes.forEach(b => b.addEventListener('change', recompute));
+        document.getElementById('select-all').addEventListener('click', () => { boxes.forEach(b => { if (!b.disabled) b.checked = true; }); recompute(); });
+        document.getElementById('select-none').addEventListener('click', () => { boxes.forEach(b => b.checked = false); recompute(); });
+        document.getElementById('select-acquisti').addEventListener('click', () => { boxes.forEach(b => { b.checked = !b.disabled && b.dataset.tipo === 'Acquisto'; }); recompute(); });
+        recompute();
+      })();
+    </script>
+    <% } %>
+  </div>
+</body>
+</html>

@@ -61,8 +61,14 @@ async function showClassifica(req, res) {
       return null;
     }
 
+    // Risolvi fantaTeamId effettivo per ciascun record SF: usa quello esplicito
+    // se presente, altrimenti tenta resolveTeam(nomePresidente). Indispensabile
+    // perché molti record SF storici hanno fantaTeamId=null e senza questo
+    // mapping il fallback usa il valoreRose STORATO (stale, pre-scraping).
+    const effectiveTeamIdByRow = rawRecords.map((r) => r.fantaTeamId || resolveTeam(r.nomePresidente)?.id || null);
+
     // Calcola valori dinamicamente dai contratti validi e giocatori attivi
-    const teamIds = rawRecords.filter(r => r.fantaTeamId).map(r => r.fantaTeamId);
+    const teamIds = effectiveTeamIdByRow.filter((id) => id != null);
     const contrattiValidi = teamIds.length > 0
       ? await prisma.contratto.findMany({
           where: {
@@ -103,8 +109,9 @@ async function showClassifica(req, res) {
     }
 
     // Converte Decimal → Number e sovrascrive con valori calcolati
-    const classifica = rawRecords.map((p) => {
-      const s = p.fantaTeamId && statsMap[p.fantaTeamId] ? statsMap[p.fantaTeamId] : null;
+    const classifica = rawRecords.map((p, idx) => {
+      const effId = effectiveTeamIdByRow[idx];
+      const s = effId && statsMap[effId] ? statsMap[effId] : null;
       const valoreRoseCalcolato = s ? Math.round(s.valoreRose * 100) / 100 : +p.valoreRose;
       const crediti = +p.crediti;
       const giocatoriTesserati = s ? s.giocatoriIds.size : p.giocatoriTesserati;
@@ -129,11 +136,70 @@ async function showClassifica(req, res) {
     // Riordina per patrimonio (ora ricalcolato)
     classifica.sort((a, b) => b.patrimonio - a.patrimonio);
 
+    // ── Dettaglio rosa admin-only ──────────────────────────────────────────
+    // Se ?teamDetail=<fantaTeamId> e utente ADMIN: carica i giocatori che
+    // compongono il valoreRose della classifica per quel team (Acquisto
+    // valido + active). Lista usata per popolare combobox = teams in classifica.
+    // NB: usa p.fantaTeam direttamente (già risolto via resolveTeam) per
+    // evitare disallineamenti di indici dopo classifica.sort().
+    const teamsPerCombobox = classifica
+      .map((p) => ({
+        id: p.fantaTeam && p.fantaTeam.id ? p.fantaTeam.id : null,
+        nome: p.fantaTeam ? p.fantaTeam.nome : p.nomePresidente,
+        nomePresidente: p.nomePresidente,
+      }))
+      .filter((t) => t.id != null)
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+
+    let teamDetail = null;
+    if (req.user && req.user.role === "ADMIN" && req.query.teamDetail) {
+      const tid = parseInt(req.query.teamDetail, 10);
+      if (Number.isFinite(tid)) {
+        const teamInfo = await prisma.fantaTeam.findUnique({
+          where: { id: tid }, include: { user: true },
+        });
+        const contratti = await prisma.contratto.findMany({
+          where: { fantaTeamId: tid, valido: true, tipo: "Acquisto" },
+          include: { giocatore: { select: { id: true, nome: true, ruolo: true, squadra: true, valore: true, active: true, eta: true } } },
+          orderBy: [{ giocatore: { ruolo: "asc" } }, { giocatore: { nome: "asc" } }],
+        });
+        const seen = new Set();
+        const giocatoriDett = [];
+        let totale = 0;
+        for (const c of contratti) {
+          if (!c.giocatore.active) continue;
+          if (seen.has(c.giocatore.id)) continue;
+          seen.add(c.giocatore.id);
+          const val = c.giocatore.valore ? Number(c.giocatore.valore) : 0;
+          totale += val;
+          giocatoriDett.push({
+            id:        c.giocatore.id,
+            nome:      c.giocatore.nome,
+            ruolo:     c.giocatore.ruolo,
+            squadra:   c.giocatore.squadra,
+            eta:       c.giocatore.eta,
+            valore:    val,
+            stipendio: c.importoOperazione ? Number(c.importoOperazione) : 0,
+            contrattoId: c.id,
+          });
+        }
+        // Ordina alfabeticamente per nome giocatore crescente
+        giocatoriDett.sort((a, b) => a.nome.localeCompare(b.nome, "it", { sensitivity: "base" }));
+        teamDetail = {
+          team: teamInfo,
+          giocatori: giocatoriDett,
+          totaleValore: Math.round(totale * 100) / 100,
+        };
+      }
+    }
+
     res.render("fanta/classifica", {
       classifica,
       stagioneFiltro,
       stagioni: stagioni.map((s) => s.stagione),
       currentUser: req.user,
+      teamsPerCombobox,
+      teamDetail,
       error: null,
     });
   } catch (err) {
@@ -143,6 +209,8 @@ async function showClassifica(req, res) {
       stagioneFiltro: null,
       stagioni: [],
       currentUser: req.user,
+      teamsPerCombobox: [],
+      teamDetail: null,
       error: "Errore nel caricamento dei dati: " + err.message,
     });
   }

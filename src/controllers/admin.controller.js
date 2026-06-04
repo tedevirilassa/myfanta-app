@@ -498,26 +498,23 @@ async function runScrapeTransfermarkt(req, res) {
     const preview = [];
     const STAGIONE_CORRENTE = "2025-2026";
 
-    // Normalizza nome per matching
+    // Normalizza nome (lowercase, no accenti, no punteggiatura) per matching.
+    // Match SOLO per nome (no transfermarktId, no squadra): un giocatore che
+    // cambia squadra resta lo stesso record DB \u2192 evita duplicati post-trasferimento.
     function normName(s) {
       return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
     }
 
-    // Giocatori DB per squadre coinvolte
-    const squadreCoinvolte = [...new Set(allScraped.map(p => p.squadra))];
+    // Carica TUTTI i giocatori (non filtrati per squadra) perch\u00e9 un giocatore
+    // scraped pu\u00f2 essere migrato da una squadra all'altra.
     const dbGiocatori = await prisma.giocatore.findMany({
-      where: { squadra: { in: squadreCoinvolte } },
-      select: { id: true, nome: true, squadra: true, valore: true, active: true, transfermarktId: true },
+      select: { id: true, nome: true, squadra: true, valore: true, active: true },
     });
-
-    const dbByTmId   = new Map(dbGiocatori.filter(g => g.transfermarktId).map(g => [g.transfermarktId, g]));
-    const dbByNomeSq = new Map(dbGiocatori.map(g => [`${normName(g.nome)}|${g.squadra}`, g]));
+    const dbByNome = new Map(dbGiocatori.map((g) => [normName(g.nome), g]));
     const scrapatiIds = new Set();
 
     for (const p of allScraped) {
-      let existing = p.transfermarktId ? dbByTmId.get(p.transfermarktId) : null;
-      if (!existing) existing = dbByNomeSq.get(`${normName(p.nome)}|${p.squadra}`);
-
+      const existing = dbByNome.get(normName(p.nome));
       if (existing) {
         scrapatiIds.add(existing.id);
         preview.push({ tipo: "update", dbId: existing.id, ...p, stagione: STAGIONE_CORRENTE });
@@ -526,12 +523,12 @@ async function runScrapeTransfermarkt(req, res) {
       }
     }
 
-    // Inattivi: in DB attivi per questa squadra ma non trovati oggi
-    for (const team of teamsFiltrati) {
-      const attivi = dbGiocatori.filter(g => g.squadra === team.nome && g.active && !scrapatiIds.has(g.id));
-      for (const g of attivi) {
-        preview.push({ tipo: "inattivo", dbId: g.id, nome: g.nome, squadra: g.squadra, valore: g.valore ? Number(g.valore) : null, stagione: STAGIONE_CORRENTE });
-      }
+    // Inattivi: in DB active=true ma non trovati in nessuna rosa scraped oggi.
+    // Calcolato sull'intera base, non per squadra (perch\u00e9 squadra DB potrebbe
+    // essere stale rispetto allo scraping corrente).
+    const attiviNonTrovati = dbGiocatori.filter((g) => g.active && !scrapatiIds.has(g.id));
+    for (const g of attiviNonTrovati) {
+      preview.push({ tipo: "inattivo", dbId: g.id, nome: g.nome, squadra: g.squadra, valore: g.valore ? Number(g.valore) : null, stagione: STAGIONE_CORRENTE });
     }
 
     send({ type: "done", preview });
@@ -573,6 +570,8 @@ async function importTransfermarkt(req, res) {
       }
 
       if (p.tipo === "update" && p.dbId) {
+        // Nota: transfermarktId NON viene più aggiornato. Il match avviene
+        // esclusivamente per nome normalizzato (vedi runScrapeTransfermarkt).
         const updateData = {
           squadra:         p.squadra,
           valore:          p.valore,
@@ -581,7 +580,6 @@ async function importTransfermarkt(req, res) {
           ...(p.ruoloEsteso    && { ruoloEsteso: p.ruoloEsteso }),
           ...(p.dataNascita    && { dataNascita: p.dataNascita }),
           ...(p.eta != null     && { eta: p.eta }),
-          ...(p.transfermarktId && { transfermarktId: p.transfermarktId }),
         };
         await prisma.giocatore.update({ where: { id: p.dbId }, data: updateData });
         await prisma.quotazione.create({
@@ -592,6 +590,7 @@ async function importTransfermarkt(req, res) {
         stats.quotazioni++;
 
       } else if (p.tipo === "nuovo") {
+        // Nota: transfermarktId NON viene più scritto: match solo per nome.
         const g = await prisma.giocatore.create({
           data: {
             nome:            p.nome,
@@ -601,7 +600,6 @@ async function importTransfermarkt(req, res) {
             valore:          p.valore,
             dataNascita:     p.dataNascita   || null,
             eta:             p.eta           ?? null,
-            transfermarktId: p.transfermarktId || null,
             active:          true,
           },
         });
@@ -707,7 +705,162 @@ async function applyRealignRuoli(req, res) {
   }
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi };
+
+// ── GET /admin/svincoli-inattivi ─────────────────────────────────────────────
+// Riepilogo contratti validi su giocatori diventati inattivi (active=false)
+// dopo lo scraping Transfermarkt: non sono più in nessuna rosa di Serie A.
+// Pagina readonly con preview rimborsi: admin sceglie quali approvare.
+async function listSvincoliInattivi(req, res) {
+  // Helper: stagione corrente da params
+  const params = await parametriService.getAll();
+  const stagioneInizio = params.stagione_inizio || "01-07";
+  const meseInizio = parseInt(stagioneInizio.split("-")[1], 10) || 7;
+  const oggi = new Date();
+  const meseOggi = oggi.getMonth() + 1;
+  const annoStagione = meseOggi >= meseInizio ? oggi.getFullYear() : oggi.getFullYear() - 1;
+  const stagione = `${annoStagione}-${annoStagione + 1}`;
+
+  const contratti = await prisma.contratto.findMany({
+    where: { valido: true, giocatore: { active: false } },
+    include: {
+      giocatore:  { select: { id: true, nome: true, ruolo: true, squadra: true, valore: true, updatedAt: true } },
+      fantaTeam:  { select: { id: true, nome: true, user: { select: { nickname: true, email: true } } } },
+    },
+    orderBy: [{ fantaTeamId: "asc" }, { id: "asc" }],
+  });
+
+  // Annota rimborso preview e SF target
+  const candidati = [];
+  for (const c of contratti) {
+    const rimborso = (c.tipo === "Acquisto" && c.giocatore.valore)
+      ? Number(c.giocatore.valore)
+      : 0;
+    const presNome = c.fantaTeam.user ? (c.fantaTeam.user.nickname || c.fantaTeam.user.email) : null;
+    let sf = await prisma.situazioneFinanziaria.findFirst({
+      where: { fantaTeamId: c.fantaTeam.id, stagione },
+    });
+    if (!sf && presNome) {
+      sf = await prisma.situazioneFinanziaria.findFirst({
+        where: { nomePresidente: presNome, stagione },
+      });
+    }
+    candidati.push({
+      contratto: c,
+      rimborso,
+      sfTarget: sf,
+      sfMancante: !sf,
+    });
+  }
+
+  res.render("admin/svincoli-inattivi", {
+    currentUser: req.user,
+    candidati, stagione, params,
+    message: req.query.applied ? `Applicati ${req.query.applied} svincoli.` : null,
+    error:   req.query.error ? decodeURIComponent(req.query.error) : null,
+  });
+}
+
+// ── POST /admin/svincoli-inattivi/applica ────────────────────────────────────
+// Body: contrattiIds[] = lista id contratti selezionati.
+// Per ciascuno (transazione per contratto):
+//  - Contratto.valido = false.
+//  - Se Acquisto: SF (stagione corrente) crediti += giocatore.valore, patrimonio += giocatore.valore.
+//  - Log SVINCOLO_INATTIVO con prima/dopo.
+async function approveSvincoliInattivi(req, res) {
+  const params = await parametriService.getAll();
+  const stagioneInizio = params.stagione_inizio || "01-07";
+  const meseInizio = parseInt(stagioneInizio.split("-")[1], 10) || 7;
+  const oggi = new Date();
+  const meseOggi = oggi.getMonth() + 1;
+  const annoStagione = meseOggi >= meseInizio ? oggi.getFullYear() : oggi.getFullYear() - 1;
+  const stagione = `${annoStagione}-${annoStagione + 1}`;
+
+  const raw = req.body.contrattiIds;
+  const ids = (Array.isArray(raw) ? raw : raw ? [raw] : [])
+    .map((x) => parseInt(x, 10))
+    .filter((x) => Number.isFinite(x));
+
+  if (ids.length === 0) {
+    return res.redirect("/admin/svincoli-inattivi?error=" + encodeURIComponent("Nessun contratto selezionato."));
+  }
+
+  let applicati = 0;
+  const errori = [];
+
+  for (const cid of ids) {
+    try {
+      const c = await prisma.contratto.findUnique({
+        where: { id: cid },
+        include: { giocatore: true, fantaTeam: { include: { user: true } } },
+      });
+      if (!c)               { errori.push(`#${cid}: non trovato`); continue; }
+      if (!c.valido)        { errori.push(`#${cid}: già scaduto`); continue; }
+      if (c.giocatore.active) { errori.push(`#${cid}: giocatore tornato attivo`); continue; }
+
+      const isAcquisto = c.tipo === "Acquisto";
+      const rimborso = isAcquisto && c.giocatore.valore ? Number(c.giocatore.valore) : 0;
+
+      const presNome = c.fantaTeam.user ? (c.fantaTeam.user.nickname || c.fantaTeam.user.email) : null;
+      let sf = await prisma.situazioneFinanziaria.findFirst({
+        where: { fantaTeamId: c.fantaTeam.id, stagione },
+      });
+      if (!sf && presNome) {
+        sf = await prisma.situazioneFinanziaria.findFirst({
+          where: { nomePresidente: presNome, stagione },
+        });
+      }
+      if (isAcquisto && rimborso > 0 && !sf) {
+        errori.push(`#${cid}: SF stagione ${stagione} mancante per ${c.fantaTeam.nome}`);
+        continue;
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.contratto.update({
+          where: { id: cid },
+          data:  { valido: false },
+        });
+        let creditiPrima = null, creditiDopo = null, patrimonioPrima = null, patrimonioDopo = null;
+        if (isAcquisto && rimborso > 0 && sf) {
+          creditiPrima    = Number(sf.crediti);
+          patrimonioPrima = Number(sf.patrimonio);
+          creditiDopo     = Math.round((creditiPrima    + rimborso) * 100) / 100;
+          patrimonioDopo  = Math.round((patrimonioPrima + rimborso) * 100) / 100;
+          await tx.situazioneFinanziaria.update({
+            where: { id: sf.id },
+            data:  { crediti: creditiDopo, patrimonio: patrimonioDopo },
+          });
+        }
+        await logAction({
+          azione: "DELETE", entita: "contratto", entitaId: cid,
+          dettaglio: {
+            tipo: "svincolo-giocatore-inattivo",
+            stagione,
+            contrattoTipo: c.tipo,
+            giocatoreId:   c.giocatoreId,
+            giocatoreNome: c.giocatore.nome,
+            fantaTeamId:   c.fantaTeamId,
+            fantaTeamNome: c.fantaTeam.nome,
+            rimborso,
+            sfAggiornata: sf ? {
+              sfId: sf.id,
+              crediti:    { prima: creditiPrima,    dopo: creditiDopo },
+              patrimonio: { prima: patrimonioPrima, dopo: patrimonioDopo },
+            } : null,
+          },
+          adminId: req.user.id,
+        });
+      });
+      applicati++;
+    } catch (err) {
+      errori.push(`#${cid}: ${err.message}`);
+    }
+  }
+
+  let url = `/admin/svincoli-inattivi?applied=${applicati}`;
+  if (errori.length > 0) url += `&error=${encodeURIComponent("Errori: " + errori.join("; "))}`;
+  res.redirect(url);
+}
 
 // ── POST /admin/users/:id/save-fields ─────────────────────────────────────────────
 async function saveUserFields(req, res) {
