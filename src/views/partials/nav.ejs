@@ -60,6 +60,19 @@
     .nav-hamburger { display:flex; }
   }
 </style>
+<% if (typeof impersonator !== 'undefined' && impersonator) { %>
+<div style="background:#7d5a00; color:#fff; padding:10px 20px; text-align:center; font-size:.88rem; font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; position:sticky; top:0; z-index:200;">
+  <span>
+    🎭 Stai impersonificando <strong><%= typeof currentUser !== 'undefined' && currentUser ? (currentUser.nickname || currentUser.email) : '—' %></strong>
+    come admin <strong><%= impersonator.nickname || impersonator.email %></strong>. Tutte le azioni sono tracciate.
+  </span>
+  <form action="/admin/stop-impersonate" method="POST" style="margin:0;">
+    <button type="submit" style="background:#fff; color:#7d5a00; border:none; padding:6px 14px; border-radius:6px; font-weight:700; cursor:pointer; font-size:.82rem;">
+      ⏎ Torna admin
+    </button>
+  </form>
+</div>
+<% } %>
 <nav>
   <span class="brand">MyFanta</span>
   <% if (typeof currentUser !== 'undefined' && currentUser) { %>
@@ -107,6 +120,7 @@
           <a href="/admin/rosa">📋 Gestione Rose</a>
           <a href="/admin/rinnovi">🔄 Rinnovi (finalize)</a>
           <a href="/admin/svincoli-inattivi">🚪 Svincoli inattivi</a>
+          <a href="/admin/fine-stagione">🗓 Fine stagione</a>
           <a href="/admin/parametri">⚙️ Parametri</a>
           <a href="/admin/log">📝 Log Azioni</a>
         </div>
@@ -153,6 +167,7 @@
   <a href="/admin/rosa">📋 Gestione Rose</a>
   <a href="/admin/rinnovi">🔄 Rinnovi (finalize)</a>
   <a href="/admin/svincoli-inattivi">🚪 Svincoli inattivi</a>
+  <a href="/admin/fine-stagione">🗓 Fine stagione</a>
   <a href="/admin/parametri">⚙️ Parametri</a>
   <a href="/admin/log">📝 Log Azioni</a>
   <% } %>

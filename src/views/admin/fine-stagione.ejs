@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Fine Stagione' }) %>
+  <style>
+    .danger-card { background:#fef3c7; border:2px solid #f59e0b; border-radius:10px; padding:20px 24px; margin-bottom:24px; }
+    .danger-card h2 { color:#92400e; margin:0 0 10px; font-size:1.1rem; }
+    .step-card { background:#fff; border-radius:10px; padding:16px 20px; box-shadow:0 2px 10px rgba(26,58,42,.08); margin-bottom:14px; border-left:4px solid var(--green-mid); }
+    .step-num { display:inline-block; width:26px; height:26px; line-height:26px; text-align:center; border-radius:50%; background:var(--green-dark); color:#fff; font-weight:800; font-size:.78rem; margin-right:8px; }
+    .preview-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px; }
+    .preview-grid .card { padding:14px 18px; }
+    .preview-grid .num { font-size:1.6rem; font-weight:800; color:var(--green-dark); }
+    .preview-grid .lbl { font-size:.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>🗓 Fine Stagione – Rollover 30 giugno</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">← Pannello</a>
+    </div>
+
+    <% if (message) { %><div class="alert alert-success">✔ <%= message %></div><% } %>
+    <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+
+    <div class="preview-grid">
+      <div class="card">
+        <div class="lbl">Stagione corrente</div>
+        <div class="num"><%= stagioneOld %></div>
+      </div>
+      <div class="card">
+        <div class="lbl">Stagione successiva</div>
+        <div class="num"><%= stagioneNew %></div>
+      </div>
+      <div class="card">
+        <div class="lbl">Contratti validi</div>
+        <div class="num"><%= contrattiValidi %></div>
+      </div>
+      <div class="card">
+        <div class="lbl">Proposte rinnovo</div>
+        <div class="num"><%= proposteAttese %></div>
+      </div>
+      <div class="card">
+        <div class="lbl">Scadenze naturali</div>
+        <div class="num"><%= scadenzeNaturali %></div>
+      </div>
+    </div>
+
+    <div class="step-card"><span class="step-num">1</span><strong>Decremento temporale</strong> — su <code>Contratto</code> validi: <code>durataContratto -= 1</code>.</div>
+    <div class="step-card"><span class="step-num">2</span><strong>Simulazione rinnovi</strong> — proposte PENDING per <%= stagioneNew %> ordinate per priorità, ingaggi ricalcolati su ultima <code>Quotazione.valore × 10%</code>, marcate APPROVED/REJECTED in base al salary cap.</div>
+    <div class="step-card"><span class="step-num">3</span><strong>Svincoli</strong> — contratti con <code>durataContratto ≤ 0</code> non rinnovati + proposte REJECTED. SF: <code>crediti += quot</code>, <code>valoreRose -= quot</code>, <code>giocatoriTesserati -= 1</code>, <code>stipendi -= stipendio_old</code>. Riga <code>RosaGiocatore</code> stagione vecchia eliminata.</div>
+    <div class="step-card"><span class="step-num">4</span><strong>Rinnovi APPROVED</strong> — nuovo contratto Acquisto con <code>dataStipula = "07-<%= (parseInt(stagioneOld.split('-')[1],10)) %>"</code>, <code>durataContratto = nuovaDurata</code>, <code>importoOperazione = quot × 10%</code>, <code>prezzoAcquisto = quot</code>, <code>valido = true</code>. <code>RosaGiocatore.stagione → <%= stagioneNew %></code>.</div>
+    <div class="step-card"><span class="step-num">5</span><strong>Log</strong> — ogni svincolo SF e nuovo contratto generano un record in <code>log_azioni</code> con <code>dettaglio.pre</code> / <code>dettaglio.post</code> + batch riepilogativo finale.</div>
+
+    <div class="danger-card">
+      <h2>⚠ Operazione transazionale e irreversibile</h2>
+      <p style="font-size:.9rem; line-height:1.5; color:#7d5a00; margin-bottom:14px;">
+        L'intero rollover gira in una <strong>transazione ACID</strong>. Se uno qualsiasi degli step fallisce
+        viene eseguito <strong>ROLLBACK completo</strong> del DB.
+        L'esecuzione corretta è invece <strong>NON annullabile</strong> dalla UI (resta solo nei log).
+      </p>
+      <form action="/admin/fine-stagione/esegui" method="POST"
+            onsubmit="return confirm('Eseguire il rollover fine stagione per TUTTI i team?\n\nDecrementa durata, svincola scaduti/bocciati, rinnova approvati. Transazione atomica.\n\nProcedere?');"
+            style="margin:0;">
+        <button type="submit" class="btn btn-danger">▶ Esegui rollover <%= stagioneOld %> → <%= stagioneNew %></button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

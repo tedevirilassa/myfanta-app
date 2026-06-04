@@ -33,18 +33,6 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
-    <% if (stagioni.length > 0) { %>
-    <div style="margin-bottom:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-      <label style="font-weight:700; font-size:.85rem;">Stagione:</label>
-      <% stagioni.forEach(function(s) { %>
-        <a href="/fanta/classifica?stagione=<%= encodeURIComponent(s) %>"
-           class="btn btn-sm <%= s === stagioneFiltro ? 'btn-primary' : '' %>"
-           style="<%= s !== stagioneFiltro ? 'background:var(--gray-100);color:var(--gray-700);border:1.5px solid var(--gray-200);' : '' %>">
-          <%= s %>
-        </a>
-      <% }) %>
-    </div>
-    <% } %>
 
     <% if (classifica.length > 0) {
       const maxPat = classifica[0].patrimonio;
@@ -108,7 +96,6 @@
       <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:14px;">
         <h2 style="margin:0; font-size:1rem;">🔍 Dettaglio rosa (admin)</h2>
         <form method="GET" action="/fanta/classifica" style="margin:0; display:flex; gap:8px; align-items:center;">
-          <% if (stagioneFiltro) { %><input type="hidden" name="stagione" value="<%= stagioneFiltro %>"><% } %>
           <select name="teamDetail" onchange="this.form.submit()" style="padding:7px 10px; border-radius:6px; border:1.5px solid var(--gray-200);">
             <option value="">— Seleziona team —</option>
             <% teamsPerCombobox.forEach(function(t) { %>
@@ -118,8 +105,7 @@
             <% }) %>
           </select>
           <% if (teamDetail) { %>
-            <a href="/fanta/classifica<%= stagioneFiltro ? '?stagione=' + encodeURIComponent(stagioneFiltro) : '' %>"
-               class="btn btn-sm" style="background:var(--gray-200); color:var(--gray-700);">Chiudi</a>
+            <a href="/fanta/classifica" class="btn btn-sm" style="background:var(--gray-200); color:var(--gray-700);">Chiudi</a>
           <% } %>
         </form>
       </div>
@@ -212,9 +198,6 @@
     </div>
     <% } %>
 
-    <p style="margin-top:20px; font-size:.78rem; color:var(--gray-400); text-align:right;">
-      Stagione: <strong><%= stagioneFiltro %></strong> · Dati importati dal foglio riepilogoEx
-    </p>
   </div>
 
   <script>

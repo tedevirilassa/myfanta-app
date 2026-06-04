@@ -137,6 +137,12 @@
                 onsubmit="return confirm('Sei sicuro di voler ELIMINARE definitivamente l\'utente <%= u.email %>?') && confirm('ATTENZIONE: questa operazione è irreversibile. Confermi?')">
             <button type="submit" class="btn btn-sm btn-danger">🗑️ Elimina</button>
           </form>
+          <% if (u.isActive) { %>
+          <form action="/admin/users/<%= u.id %>/impersonate" method="POST"
+                onsubmit="return confirm('Impersonificare <%= u.email %>?\n\nVedrai il sistema come questo utente. Tutte le azioni saranno tracciate nei log con il tuo id admin.');">
+            <button type="submit" class="btn btn-sm" style="background:#7d5a00; color:#fff;">🎭 Impersonifica</button>
+          </form>
+          <% } %>
           <% } else { %>
             <span style="font-size:.8rem; color:#94a3b8;">(tu)</span>
           <% } %>

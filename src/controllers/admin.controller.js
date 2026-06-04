@@ -709,7 +709,87 @@ async function applyRealignRuoli(req, res) {
   }
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate };
+
+// ── POST /admin/users/:id/impersonate ─────────────────────────────────────
+// Genera un JWT in cui `sub` = utente target e `impersonator` = admin reale.
+// Durante l'impersonificazione tutti i logAction taggano automaticamente
+// `impersonatedBy` con i dati dell'admin (via AsyncLocalStorage).
+async function startImpersonate(req, res) {
+  const jwt = require("jsonwebtoken");
+  const { COOKIE_NAME } = require("../middleware/auth.middleware");
+  const targetId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(targetId)) return res.redirect("/admin/users?error=" + encodeURIComponent("Id non valido."));
+  if (targetId === req.user.id)   return res.redirect("/admin/users?error=" + encodeURIComponent("Non puoi impersonificare te stesso."));
+
+  const target = await prisma.user.findUnique({ where: { id: targetId } });
+  if (!target || !target.isActive) {
+    return res.redirect("/admin/users?error=" + encodeURIComponent("Utente non trovato o non attivo."));
+  }
+
+  const token = jwt.sign(
+    { sub: target.id, role: target.role, impersonator: req.user.id },
+    process.env.JWT_SECRET,
+    { expiresIn: "8h" },
+  );
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 8 * 60 * 60 * 1000,
+  });
+
+  await logAction({
+    azione: "IMPERSONATE_START", entita: "utente", entitaId: target.id,
+    dettaglio: {
+      impersonatore: { id: req.user.id, email: req.user.email, nickname: req.user.nickname },
+      target:        { id: target.id, email: target.email, nickname: target.nickname },
+    },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/");
+}
+
+// ── POST /admin/stop-impersonate ──────────────────────────────────────────
+// Ripristina il JWT all'admin originale (req.impersonatorId).
+// Non richiede requireAdmin: l'utente effettivo è l'impersonato, che potrebbe
+// non essere admin. È sufficiente che la sessione abbia un impersonator.
+async function stopImpersonate(req, res) {
+  if (!req.impersonatorId) {
+    return res.redirect("/?error=" + encodeURIComponent("Nessuna impersonificazione attiva."));
+  }
+  const jwt = require("jsonwebtoken");
+  const { COOKIE_NAME } = require("../middleware/auth.middleware");
+  const admin = await prisma.user.findUnique({ where: { id: req.impersonatorId } });
+  if (!admin || !admin.isActive) {
+    res.clearCookie(COOKIE_NAME);
+    return res.redirect("/auth/login");
+  }
+
+  const token = jwt.sign(
+    { sub: admin.id, role: admin.role },
+    process.env.JWT_SECRET,
+    { expiresIn: "8h" },
+  );
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 8 * 60 * 60 * 1000,
+  });
+
+  await logAction({
+    azione: "IMPERSONATE_STOP", entita: "utente", entitaId: req.user.id,
+    dettaglio: {
+      impersonatore: { id: admin.id, email: admin.email, nickname: admin.nickname },
+      target:        { id: req.user.id, email: req.user.email, nickname: req.user.nickname },
+    },
+    adminId: admin.id,
+  });
+
+  res.redirect("/admin/users");
+}
 
 // ── GET /admin/svincoli-inattivi ─────────────────────────────────────────────
 // Riepilogo contratti validi su giocatori diventati inattivi (active=false)

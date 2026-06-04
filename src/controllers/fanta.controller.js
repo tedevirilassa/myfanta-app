@@ -11,19 +11,18 @@ async function showClassifica(req, res) {
       select: { stagione: true },
     });
 
-    // Default = stagione corrente derivata da oggi + parametro stagione_inizio (GG-MM).
-    // Se la stagione corrente non ha record SF, fallback alla più recente in tabella.
+    // Concetto di stagione temporaneamente nascosto: usa la stagione CORRENTE
+    // derivata da data odierna + parametro stagione_inizio (GG-MM). Es. oggi
+    // giugno 2026 con stagione_inizio luglio → stagione corrente "2025-2026".
+    // Fallback alla più recente in DB se la stagione corrente non ha record.
     const params = await parametriService.getAll();
-    const stagioneInizio = params.stagione_inizio || "01-07";
-    const meseInizio = parseInt(stagioneInizio.split("-")[1], 10) || 7;
+    const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
     const oggi = new Date();
     const meseOggi = oggi.getMonth() + 1;
     const annoStagione = meseOggi >= meseInizio ? oggi.getFullYear() : oggi.getFullYear() - 1;
-    const stagioneCorrente = `${annoStagione}-${annoStagione + 1}`;
-    const stagioneEsiste = stagioni.some((s) => s.stagione === stagioneCorrente);
-    const defaultStagione = stagioneEsiste ? stagioneCorrente : stagioni[0]?.stagione || null;
-
-    const stagioneFiltro = req.query.stagione || defaultStagione;
+    const stagioneCorrenteCalc = `${annoStagione}-${annoStagione + 1}`;
+    const stagioneEsiste = stagioni.some((s) => s.stagione === stagioneCorrenteCalc);
+    const stagioneFiltro = stagioneEsiste ? stagioneCorrenteCalc : stagioni[0]?.stagione || null;
 
     const rawRecords = stagioneFiltro
       ? await prisma.situazioneFinanziaria.findMany({

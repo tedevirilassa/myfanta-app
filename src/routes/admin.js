@@ -5,8 +5,16 @@ const { requireAuth, requireAdmin } = require("../middleware/auth.middleware");
 const ctrl = require("../controllers/admin.controller");
 const rinnoviCtrl = require("../controllers/rinnovi.controller");
 
-// Tutte le rotte admin richiedono autenticazione + ruolo ADMIN
+// ── Stop impersonate (PRIMA di requireAdmin!) ────────────
+// Accessibile anche all'utente impersonato (potrebbe non essere admin):
+// basta requireAuth. Necessaria per uscire dall'impersonificazione.
+router.post("/stop-impersonate", requireAuth, ctrl.stopImpersonate);
+
+// Tutte le altre rotte admin richiedono autenticazione + ruolo ADMIN
 router.use(requireAuth, requireAdmin);
+
+// ── Impersonificazione ─────────────────────────────────
+router.post("/users/:id/impersonate", ctrl.startImpersonate);
 
 // ── Rinnovi (admin) ──────────────────────────────────────
 router.get("/rinnovi",            rinnoviCtrl.showAdminRinnovi);
@@ -15,6 +23,11 @@ router.post("/rinnovi/finalizza", rinnoviCtrl.finalizzaRinnovi);
 // ── Svincoli giocatori inattivi ─────────────────────────
 router.get("/svincoli-inattivi",          ctrl.listSvincoliInattivi);
 router.post("/svincoli-inattivi/applica", ctrl.approveSvincoliInattivi);
+
+// ── Fine stagione (rollover 30 giugno) ──────────────────
+const fineStagioneCtrl = require("../controllers/fine-stagione.controller");
+router.get("/fine-stagione",         fineStagioneCtrl.showFineStagione);
+router.post("/fine-stagione/esegui", fineStagioneCtrl.eseguiFineStagione);
 
 router.get("/users", ctrl.listUsers);
 router.post("/users/:id/save-fields", ctrl.saveUserFields);

@@ -33,7 +33,12 @@
       "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{const c=await p.contratto.findUnique\\({where:{id:364}}\\);console.log\\('\\\\''C#364: tipo='\\\\''+c.tipo,'\\\\''dataFine='\\\\''+c.dataFine\\); await p.$disconnect\\(\\);}\\)\\(\\)')",
       "Bash(node scripts/_merge-residui.js)",
       "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{const g=await p.giocatore.findMany\\({where:{nome:{contains:'\\\\''Heggem'\\\\'',mode:'\\\\''insensitive'\\\\''}},include:{contratti:{where:{valido:true},include:{fantaTeam:{select:{nome:true}}}}}}\\);console.log\\(JSON.stringify\\(g,null,2\\)\\); await p.$disconnect\\(\\);}\\)\\(\\)')",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node -c src/middleware/auth.middleware.js)",
+      "Bash(node -c src/services/log.service.js)",
+      "Bash(node -c src/controllers/fine-stagione.controller.js)",
+      "Bash(node scripts/_check-classifica-live.js)",
+      "Bash(node -e 'require\\('\\\\''dotenv'\\\\''\\).config\\(\\); const p=require\\('\\\\''./src/lib/prisma'\\\\''\\); \\(async\\(\\)=>{const sfs=await p.situazioneFinanziaria.findMany\\({where:{stagione:'\\\\''2025-2026'\\\\''},orderBy:{nomePresidente:'\\\\''asc'\\\\''}}\\); for\\(const s of sfs\\)console.log\\(s.nomePresidente.padEnd\\(12\\),'\\\\''crediti='\\\\''+Number\\(s.crediti\\),'\\\\''valoreRose\\(stored\\)='\\\\''+Number\\(s.valoreRose\\),'\\\\''stipendi\\(stored\\)='\\\\''+Number\\(s.stipendi\\)\\); await p.$disconnect\\(\\);}\\)\\(\\)')"
     ]
   }
 }
