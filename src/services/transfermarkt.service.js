@@ -47,6 +47,27 @@ const SERIE_A_TEAMS = [
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
+ * Normalizza il nome di un giocatore proveniente dallo scraping:
+ *  - sostituisce caratteri accentati con la lettera base (è→e, Ä→A, ÿ→y)
+ *  - normalizza lettere estese non decomponibili in NFD (Ø→O, ı→i, ł→l, æ→ae…)
+ *  - rimuove trattini (-), apici (') e apostrofi tipografici (' ` ´ ʼ)
+ *  - collassa spazi multipli
+ * Preserva maiuscole/minuscole e gli spazi tra parole.
+ */
+const EXTRA_LATIN_MAP = {
+  "Ø":"O","ø":"o","Ł":"L","ł":"l","Đ":"D","đ":"d",
+  "Æ":"AE","æ":"ae","Œ":"OE","œ":"oe",
+  "ı":"i","İ":"I","ß":"ss","Þ":"Th","þ":"th",
+};
+function cleanName(s) {
+  if (!s) return s;
+  let out = s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  out = out.replace(/[ØøŁłĐđÆæŒœıİßÞþ]/g, (ch) => EXTRA_LATIN_MAP[ch] || ch);
+  out = out.replace(/[-'`´ʼʻ]/g, "").replace(/\s+/g, " ").trim();
+  return out;
+}
+
+/**
  * Converte il testo del valore di mercato Transfermarkt in float (milioni).
  * "€ 25,00 Mln" → 25.0  |  "€ 1,00 Mrd." → 1000.0  |  "€ 500 Tsd." → 0.5
  */
@@ -282,7 +303,7 @@ async function scrapSquad(browser, team, onLog, ruoliMap = null) {
       }
       return {
         transfermarktId: p.transfermarktId,
-        nome:            p.nomeCompleto,
+        nome:            cleanName(p.nomeCompleto),
         ruoloEsteso:     p.ruoloEsteso || null,
         ruolo:           mapRuolo(p.ruoloEsteso, ruoliMap),
         dataNascita,

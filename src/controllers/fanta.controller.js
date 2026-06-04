@@ -82,7 +82,10 @@ async function showClassifica(req, res) {
     // Mappa fantaTeamId → statistiche calcolate
     const statsMap = {};
     for (const c of contrattiValidi) {
-      if (!c.giocatore.active) continue;
+      // NON filtrare per giocatore.active: finché esiste un contratto valido,
+      // il giocatore concorre alla rosa del team. Lo svincolo definitivo
+      // (active=false E rimborso crediti) si applica solo via
+      // /admin/svincoli-inattivi, che setta contratto.valido=false.
       if (!statsMap[c.fantaTeamId]) {
         statsMap[c.fantaTeamId] = {
           valoreRose: 0, giocatoriIds: new Set(), etaSomma: 0, etaCount: 0,
@@ -167,7 +170,8 @@ async function showClassifica(req, res) {
         const giocatoriDett = [];
         let totale = 0;
         for (const c of contratti) {
-          if (!c.giocatore.active) continue;
+          // Include anche giocatori active=false con contratto valido (svincolo
+          // non ancora applicato → giocatore conta ancora come sotto contratto).
           if (seen.has(c.giocatore.id)) continue;
           seen.add(c.giocatore.id);
           const val = c.giocatore.valore ? Number(c.giocatore.valore) : 0;
@@ -180,6 +184,7 @@ async function showClassifica(req, res) {
             eta:       c.giocatore.eta,
             valore:    val,
             stipendio: c.importoOperazione ? Number(c.importoOperazione) : 0,
+            active:    c.giocatore.active,
             contrattoId: c.id,
           });
         }
@@ -219,6 +224,12 @@ async function showClassifica(req, res) {
 async function showRiepilogo(req, res) {
   try {
     const data = await sheets.getRiepilogo();
+    // Override quotaRinnovi con calcolo live da DB (la versione da Sheets è
+    // statica). Stessa formula di /fanta/classifica: (max+min)/2 * 25%.
+    try {
+      const live = await calcQuotaRinnoviLive();
+      if (live != null) data.quotaRinnovi = live;
+    } catch (e) { /* fallback: mantieni quotaRinnovi da sheet */ }
     res.render("fanta/riepilogo", { ...data, currentUser: req.user, error: null });
   } catch (err) {
     console.error("Sheets error:", err.message);
@@ -228,6 +239,61 @@ async function showRiepilogo(req, res) {
       currentUser: req.user, error: err.message,
     });
   }
+}
+
+// Calcola quotaRinnovi = (max + min)/2 * 25% sulle rose live della stagione
+// corrente. Stessa logica usata da showClassifica.
+async function calcQuotaRinnoviLive() {
+  const params = await parametriService.getAll();
+  const meseInizio = parseInt((params.stagione_inizio || "01-07").split("-")[1], 10) || 7;
+  const oggi = new Date();
+  const meseOggi = oggi.getMonth() + 1;
+  const anno = meseOggi >= meseInizio ? oggi.getFullYear() : oggi.getFullYear() - 1;
+  const stagione = `${anno}-${anno + 1}`;
+
+  const sfs = await prisma.situazioneFinanziaria.findMany({ where: { stagione } });
+  if (sfs.length === 0) return null;
+
+  const users = await prisma.user.findMany({
+    where:  { fantaTeam: { isNot: null } },
+    select: { nickname: true, email: true, fantaTeam: { select: { id: true } } },
+  });
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const isValid = (n) => n && norm(n) !== "null" && norm(n) !== "";
+  function resolveTeamId(nomePresidente) {
+    const nN = norm(nomePresidente);
+    if (!nN) return null;
+    for (const u of users) if (isValid(u.nickname) && norm(u.nickname) === nN) return u.fantaTeam.id;
+    for (const u of users) if (u.email && norm(u.email.split("@")[0]) === nN) return u.fantaTeam.id;
+    for (const u of users) if (u.email && norm(u.email).includes(nN)) return u.fantaTeam.id;
+    return null;
+  }
+
+  const valori = [];
+  for (const s of sfs) {
+    const tid = s.fantaTeamId || resolveTeamId(s.nomePresidente);
+    let valore;
+    if (tid) {
+      const contratti = await prisma.contratto.findMany({
+        where: { fantaTeamId: tid, valido: true, tipo: "Acquisto" },
+        include: { giocatore: { select: { id: true, valore: true } } },
+      });
+      const seen = new Set();
+      let rosa = 0;
+      for (const c of contratti) {
+        if (seen.has(c.giocatoreId)) continue;
+        seen.add(c.giocatoreId);
+        rosa += c.giocatore.valore ? Number(c.giocatore.valore) : 0;
+      }
+      valore = Math.round(rosa * 100) / 100;
+    } else {
+      valore = Number(s.valoreRose);
+    }
+    valori.push(valore);
+  }
+  const max = Math.max(...valori);
+  const min = Math.min(...valori);
+  return Math.round(((max + min) / 2) * 0.25 * 100) / 100;
 }
 
 async function showPresidente(req, res) {

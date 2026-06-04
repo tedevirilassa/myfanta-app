@@ -16,13 +16,14 @@ const STAGIONE_CORRENTE = '2025-2026';
  * Rimuove diacritici e caratteri speciali per il matching by-nome.
  * "Lautaró Martínez" → "lautaro martinez"
  */
+// Normalizza il nome: lowercase, strip accenti + lettere latine estese
+// (\u00d8\u2192o, \u0131\u2192i, \u0142\u2192l, \u00e6\u2192ae\u2026), separatori non-alfanumerici \u2192 spazi, collassa.
+const EXTRA_NORM = {"\u00d8":"O","\u00f8":"o","\u0141":"L","\u0142":"l","\u0110":"D","\u0111":"d","\u00c6":"AE","\u00e6":"ae","\u0152":"OE","\u0153":"oe","\u0131":"i","\u0130":"I","\u00df":"ss","\u00de":"Th","\u00fe":"th"};
 function normalizeName(str) {
-  return (str || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 ]/g, '')
-    .trim();
+  if (!str) return '';
+  let out = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  out = out.replace(/[\u00d8\u00f8\u0141\u0142\u0110\u0111\u00c6\u00e6\u0152\u0153\u0131\u0130\u00df\u00de\u00fe]/g, (ch) => EXTRA_NORM[ch] || ch);
+  return out.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // ── Sync principale ──────────────────────────────────────────────────────────

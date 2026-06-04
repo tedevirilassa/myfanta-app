@@ -498,11 +498,15 @@ async function runScrapeTransfermarkt(req, res) {
     const preview = [];
     const STAGIONE_CORRENTE = "2025-2026";
 
-    // Normalizza nome (lowercase, no accenti, no punteggiatura) per matching.
-    // Match SOLO per nome (no transfermarktId, no squadra): un giocatore che
-    // cambia squadra resta lo stesso record DB \u2192 evita duplicati post-trasferimento.
+    // Normalizza nome per matching. Match SOLO per nome (no transfermarktId,
+    // no squadra). Gestisce: NFD strip diacritici, lettere estese non
+    // decomponibili (\u00d8\u2192o, \u0131\u2192i, \u0142\u2192l, \u00e6\u2192ae\u2026), separatori (- ' . /) \u2192 spazi.
+    const EXTRA = {"\u00d8":"O","\u00f8":"o","\u0141":"L","\u0142":"l","\u0110":"D","\u0111":"d","\u00c6":"AE","\u00e6":"ae","\u0152":"OE","\u0153":"oe","\u0131":"i","\u0130":"I","\u00df":"ss","\u00de":"Th","\u00fe":"th"};
     function normName(s) {
-      return (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
+      if (!s) return "";
+      let out = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      out = out.replace(/[\u00d8\u00f8\u0141\u0142\u0110\u0111\u00c6\u00e6\u0152\u0153\u0131\u0130\u00df\u00de\u00fe]/g, (ch) => EXTRA[ch] || ch);
+      return out.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
     }
 
     // Carica TUTTI i giocatori (non filtrati per squadra) perch\u00e9 un giocatore
