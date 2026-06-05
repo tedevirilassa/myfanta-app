@@ -709,13 +709,200 @@ async function applyRealignRuoli(req, res) {
   }
 }
 
+// ── Premi classifica (fine stagione) ─────────────────────────────────────────
+const PERCENTUALI_CLASSIFICA = {
+  10: 1.23,
+  9:  1.16,
+  8:  0.93,
+  7:  0.91,
+  6:  0.76,
+  5:  0.73,
+  4:  0.71,
+  3:  0.67,
+  2:  0.61,
+  1:  0.53,
+};
+
+// GET /admin/premi/classifica
+async function showPremiClassifica(req, res) {
+  // Giocatore più costoso dall'ultimo scraping
+  const topQuotazione = await prisma.quotazione.findFirst({
+    orderBy: { valore: "desc" },
+    where: { valore: { not: null } },
+    select: { valore: true, giocatore: { select: { nome: true } }, createdAt: true },
+  });
+  const maxValore = topQuotazione ? Number(topQuotazione.valore) : 0;
+
+  // Mappa nickname → nome fantateam
+  const utenti = await prisma.user.findMany({
+    select: { nickname: true, fantaTeam: { select: { nome: true } } },
+    where: { fantaTeam: { isNot: null } },
+  });
+  const teamByNickname = new Map(utenti.map(u => [u.nickname, u.fantaTeam?.nome]));
+
+  // Tutti i record SF, uno per presidente (il più recente per data di aggiornamento)
+  const tuttiSf = await prisma.situazioneFinanziaria.findMany({
+    orderBy: [{ nomePresidente: "asc" }, { updatedAt: "desc" }],
+    select: { id: true, nomePresidente: true, fantaTeamId: true, crediti: true, stagione: true, updatedAt: true },
+  });
+  // Dedup: tieni solo il più recente per nomePresidente, aggiungi nomeTeam
+  const seen = new Set();
+  const sfList = tuttiSf
+    .filter(r => {
+      if (seen.has(r.nomePresidente)) return false;
+      seen.add(r.nomePresidente);
+      return true;
+    })
+    .map(r => ({ ...r, nomeTeam: teamByNickname.get(r.nomePresidente) || null }));
+
+  // Ultimi premi classifica erogati (per mostrare info)
+  let ultimiPremi = [];
+  try {
+    ultimiPremi = await prisma.premioErogato.findMany({
+      where: { tipo: "Classifica" },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    });
+  } catch { /* tabella potrebbe non esistere */ }
+
+  // Blocco soft: erogato negli ultimi 30 giorni?
+  const soglia30gg = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const giaErogato = ultimiPremi.find(p => new Date(p.createdAt) > soglia30gg) || null;
+
+  res.render("admin/premi-classifica", {
+    currentUser: req.user,
+    sfList,
+    maxValore,
+    topGiocatore: topQuotazione ? topQuotazione.giocatore.nome : null,
+    percentuali: PERCENTUALI_CLASSIFICA,
+    ultimiPremi,
+    giaErogato,
+    error:   req.query.error ? decodeURIComponent(req.query.error) : null,
+    success: req.query.success === "1",
+  });
+}
+
+// POST /admin/premi/classifica
+async function savePremiClassifica(req, res) {
+  // Blocco soft: già erogato negli ultimi 30 giorni?
+  try {
+    const soglia30gg = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recente = await prisma.premioErogato.findFirst({
+      where: { tipo: "Classifica", createdAt: { gte: soglia30gg } },
+    });
+    if (recente) {
+      return res.redirect("/admin/premi/classifica?error=" +
+        encodeURIComponent(`Premi classifica già erogati il ${new Date(recente.createdAt).toLocaleDateString("it-IT")}. Attendi 30 giorni o rimuovi il blocco manualmente.`));
+    }
+  } catch { /* ignore */ }
+
+  // Giocatore più costoso
+  const topQuotazione = await prisma.quotazione.findFirst({
+    orderBy: { valore: "desc" },
+    where: { valore: { not: null } },
+    select: { valore: true },
+  });
+  const maxValore = topQuotazione ? Number(topQuotazione.valore) : 0;
+  if (maxValore <= 0) {
+    return res.redirect("/admin/premi/classifica?error=" +
+      encodeURIComponent("Nessuna quotazione trovata. Eseguire prima il sync Transfermarkt."));
+  }
+
+  // Parse classifica: req.body.classifica = { [sfId]: posizione }
+  const classificaBody = req.body.classifica || {};
+  const posizioni = [];
+  const usedPositions = new Set();
+
+  for (const [sfIdStr, posStr] of Object.entries(classificaBody)) {
+    const sfId = parseInt(sfIdStr, 10);
+    const pos = parseInt(posStr, 10);
+    if (!Number.isFinite(sfId) || !Number.isFinite(pos) || pos < 1 || pos > 10) continue;
+    if (usedPositions.has(pos)) {
+      return res.redirect("/admin/premi/classifica?error=" +
+        encodeURIComponent(`Posizione ${pos} assegnata a più di un presidente.`));
+    }
+    usedPositions.add(pos);
+    posizioni.push({ sfId, pos });
+  }
+
+  if (posizioni.length === 0) {
+    return res.redirect("/admin/premi/classifica?error=" +
+      encodeURIComponent("Nessuna posizione assegnata."));
+  }
+
+  // Fetch SF records
+  const sfIds = posizioni.map(p => p.sfId);
+  const sfList = await prisma.situazioneFinanziaria.findMany({
+    where: { id: { in: sfIds } },
+  });
+  const sfById = new Map(sfList.map(s => [s.id, s]));
+
+  // Calcola premi
+  let totale = 0;
+  const movimenti = [];
+
+  await prisma.$transaction(async (tx) => {
+    for (const { sfId, pos } of posizioni) {
+      const percentuale = PERCENTUALI_CLASSIFICA[pos];
+      if (!percentuale) continue;
+      const premio = Math.round(maxValore * percentuale * 100) / 100;
+      totale = Math.round((totale + premio) * 100) / 100;
+
+      const sf = sfById.get(sfId);
+      if (!sf) continue;
+      const creditiPre = parseFloat(sf.crediti);
+      const patrimonioPre = parseFloat(sf.patrimonio);
+      const creditiNuovi = Math.round((creditiPre + premio) * 100) / 100;
+      const patrimonioNuovo = Math.round((patrimonioPre + premio) * 100) / 100;
+
+      await tx.situazioneFinanziaria.update({
+        where: { id: sf.id },
+        data: { crediti: creditiNuovi, patrimonio: patrimonioNuovo },
+      });
+
+      movimenti.push({
+        sfId: sf.id,
+        presidente: sf.nomePresidente,
+        posizione: pos,
+        percentuale: Math.round(percentuale * 100) + "%",
+        premio,
+        prima: { crediti: creditiPre, patrimonio: patrimonioPre },
+        dopo: { crediti: creditiNuovi, patrimonio: patrimonioNuovo },
+      });
+    }
+
+    await tx.premioErogato.create({
+      data: {
+        tipo: "Classifica",
+        totale,
+        numBenef: posizioni.length,
+        adminId: req.user.id,
+      },
+    });
+  });
+
+  await logAction({
+    azione: "CREATE",
+    entita: "premi_erogati",
+    entitaId: null,
+    dettaglio: {
+      tipo: "Classifica",
+      totale,
+      maxValore,
+      numBenef: posizioni.length,
+      movimenti,
+    },
+    adminId: req.user.id,
+  });
+
+  res.redirect("/admin/premi/classifica?success=1");
+}
+
 // ── GET /admin/calendario-azioni ──────────────────────────────────────────────
 async function showCalendarioAzioni(req, res, next) {
   try {
     const params = await parametriService.getAll();
-    console.log("[calendario-azioni] params loaded, keys:", Object.keys(params).length);
     const stagione = getStagioneCorrente(params);
-    console.log("[calendario-azioni] stagione:", stagione);
 
     // Stato apertura mercati
     const oggi = new Date();
@@ -723,8 +910,10 @@ async function showCalendarioAzioni(req, res, next) {
     const mm = oggi.getMonth() + 1;
 
     function isOpen(inizio, fine) {
-      const [gi, mi] = (inizio || "01-07").split("-").map(Number);
-      const [gf, mf] = (fine || "15-09").split("-").map(Number);
+      const inizioStr = String(inizio || "01-07");
+      const fineStr = String(fine || "15-09");
+      const [gi, mi] = inizioStr.split("-").map(Number);
+      const [gf, mf] = fineStr.split("-").map(Number);
       const now = mm * 100 + dd;
       const start = mi * 100 + gi;
       const end = mf * 100 + gf;
@@ -738,13 +927,26 @@ async function showCalendarioAzioni(req, res, next) {
       mercatoPrivato: isOpen(params.mercato_privato_inizio, params.mercato_privato_fine),
     };
 
-    const [premiInizioErogato, premiGennaioErogato, proposteRinnovoPending, contrattiValidi, ultimaQuotazione] = await Promise.all([
+    let premiInizioErogato = null;
+    let premiGennaioErogato = null;
+    let proposteRinnovoPending = 0;
+    let contrattiValidi = 0;
+    let ultimaQuotazione = null;
+
+    // Query con fallback per tabelle che potrebbero non esistere
+    const results = await Promise.allSettled([
       prisma.premioErogato.findFirst({ where: { tipo: "InizioStagione", stagione } }),
       prisma.premioErogato.findFirst({ where: { tipo: "Gennaio", stagione } }),
       prisma.propostaRinnovo.count({ where: { status: "PENDING", stagione } }),
       prisma.contratto.count({ where: { valido: true } }),
       prisma.quotazione.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
     ]);
+
+    if (results[0].status === "fulfilled") premiInizioErogato = results[0].value;
+    if (results[1].status === "fulfilled") premiGennaioErogato = results[1].value;
+    if (results[2].status === "fulfilled") proposteRinnovoPending = results[2].value;
+    if (results[3].status === "fulfilled") contrattiValidi = results[3].value;
+    if (results[4].status === "fulfilled") ultimaQuotazione = results[4].value;
 
     const message = req.query.saved ? "Date aggiornate con successo." : null;
     const error = req.query.error ? decodeURIComponent(req.query.error) : null;
@@ -763,7 +965,7 @@ async function showCalendarioAzioni(req, res, next) {
       error,
     });
   } catch (err) {
-    console.error("[calendario-azioni] ERROR:", err);
+    console.error("[calendario-azioni] ERROR:", err.message);
     next(err);
   }
 }
@@ -802,7 +1004,7 @@ async function saveCalendarioDate(req, res) {
   res.redirect("/admin/calendario-azioni?saved=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showPremiClassifica, savePremiClassifica, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
 
 // ── POST /admin/users/:id/impersonate ─────────────────────────────────────
 // Genera un JWT in cui `sub` = utente target e `impersonator` = admin reale.

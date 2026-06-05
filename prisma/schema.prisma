@@ -143,18 +143,18 @@ enum ClausolaContratto {
 enum TipoPremio {
   InizioStagione
   Gennaio
+  Classifica
 }
 
 model PremioErogato {
   id          Int        @id @default(autoincrement())
   tipo        TipoPremio
-  stagione    String     // es. "2025-2026"
+  stagione    String?    // opzionale, dedotta a posteriori dalla data
   totale      Decimal    @db.Decimal(10, 2)
   numBenef    Int        // numero presidenti che hanno ricevuto qualcosa
   createdAt   DateTime   @default(now())
   adminId     Int
 
-  @@unique([tipo, stagione])
   @@map("premi_erogati")
 }
 

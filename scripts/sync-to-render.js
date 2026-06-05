@@ -293,6 +293,18 @@ async function main() {
     });
     await resetSequence(remotePool, "parametri");
 
+    // ── premi_erogati ──
+    logSection("Sync tabella: premi_erogati");
+    await syncTable({
+      localPool, remotePool,
+      table: "premi_erogati",
+      columns: [
+        '"id"', '"tipo"', '"stagione"', '"totale"',
+        '"numBenef"', '"createdAt"', '"adminId"',
+      ],
+    });
+    await resetSequence(remotePool, "premi_erogati");
+
     logSection("Sincronizzazione completata con successo");
   } catch (err) {
     console.error("\nERRORE durante la sincronizzazione:", err.message);

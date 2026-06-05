@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Premi Classifica' }) %>
+  <style>
+    .classifica-table { width: 100%; border-collapse: collapse; }
+    .classifica-table th, .classifica-table td {
+      padding: 12px 14px; font-size: .9rem; text-align: left;
+    }
+    .classifica-table th {
+      background: var(--gray-100); font-weight: 700; color: var(--gray-700);
+      font-size: .78rem; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .classifica-table tr:not(:last-child) td { border-bottom: 1px solid var(--gray-200); }
+    .classifica-table tr:hover td { background: #f8fafc; }
+    .pos-select {
+      padding: 8px 12px; border: 1.5px solid var(--gray-200);
+      border-radius: 7px; font-size: .9rem; background: #fafdfa;
+      min-width: 70px; outline: none;
+    }
+    .pos-select:focus { border-color: var(--green-mid); box-shadow: 0 0 0 2px rgba(45,106,79,.15); }
+    .premio-cell { font-weight: 700; color: var(--green-dark); }
+    .info-card {
+      background: #f0fdf4; border: 1.5px solid var(--green-light);
+      border-radius: 10px; padding: 16px 20px; margin-bottom: 22px;
+    }
+    .info-card .label { font-size: .72rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: .3px; }
+    .info-card .value { font-size: 1.2rem; font-weight: 800; color: var(--green-dark); }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+    .totale-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 20px; margin-top: 18px;
+      background: #f0faf4; border-radius: 8px;
+      font-size: 1rem; font-weight: 700; color: var(--green-dark);
+    }
+    .perc-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 12px;
+      font-size: .72rem; font-weight: 700; background: var(--gray-100); color: var(--gray-600);
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width: 900px;">
+    <div class="page-header">
+      <h1>🏆 Premi Classifica</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">← Pannello</a>
+    </div>
+
+    <% if (error) { %>
+      <div class="alert alert-error">❌ <%= error %></div>
+    <% } %>
+    <% if (success) { %>
+      <div class="alert alert-success">✔ Premi classifica erogati con successo. Crediti e patrimoni aggiornati.</div>
+    <% } %>
+
+    <% if (giaErogato) { %>
+      <div class="alert alert-error">
+        ⛔ <strong>Premi classifica</strong> già erogati il <strong><%= new Date(giaErogato.createdAt).toLocaleString('it-IT') %></strong>
+        (totale: <%= Number(giaErogato.totale).toFixed(2) %> M, beneficiari: <%= giaErogato.numBenef %>).
+        <br>Blocco attivo per 30 giorni dall'ultima erogazione. Per ri-aggiustare i crediti usa "Aggiustamento crediti" nella Situazione Finanziaria.
+      </div>
+    <% } %>
+
+    <% if (ultimiPremi.length > 0) { %>
+      <div class="info-card" style="background:#fff8e1; border-color:#f59e0b;">
+        <div class="label" style="color:#92400e;">Ultime erogazioni classifica</div>
+        <% ultimiPremi.forEach(p => { %>
+          <div style="font-size:.85rem; margin-top:6px;">
+            <%= new Date(p.createdAt).toLocaleDateString('it-IT') %> —
+            totale <strong><%= Number(p.totale).toFixed(2) %> M</strong>,
+            <%= p.numBenef %> presidenti
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <!-- ── Info card ── -->
+    <div class="info-card">
+      <div class="info-grid">
+        <div>
+          <div class="label">Giocatore più costoso</div>
+          <div class="value"><%= topGiocatore || '—' %></div>
+        </div>
+        <div>
+          <div class="label">Valore massimo (base premio)</div>
+          <div class="value"><%= maxValore.toFixed(2) %> M</div>
+        </div>
+        <div>
+          <div class="label">Fonte</div>
+          <div class="value" style="font-size:.85rem;">Ultima quotazione Transfermarkt</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding: 20px;">
+      <p style="font-size:.85rem; color: var(--gray-700); margin-bottom: 14px;">
+        Assegna la posizione in classifica (1° = ultimo, 10° = primo). Il premio è calcolato come
+        percentuale del valore del giocatore più costoso (<strong><%= maxValore.toFixed(2) %> M</strong>).
+        L'operazione è <strong>atomica e irreversibile</strong>: può essere eseguita una sola volta ogni 30 giorni.
+      </p>
+
+      <form method="POST" action="/admin/premi/classifica" id="form-classifica"
+            onsubmit="return confirm('Erogare i premi classifica?\n\nQuesta operazione è irreversibile.');">
+        <table class="classifica-table">
+          <thead>
+            <tr>
+              <th>Presidente</th>
+              <th>Crediti attuali</th>
+              <th style="width:100px;">Posizione</th>
+              <th style="width:90px;">%</th>
+              <th style="width:120px; text-align:right;">Premio (M)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% sfList.forEach(function(sf) { %>
+              <tr data-sf-id="<%= sf.id %>">
+                <td style="font-weight:700; color:var(--gray-700);">
+                  <%= sf.nomePresidente %>
+                  <% if (sf.nomeTeam) { %>
+                    <span style="font-weight:400; color:var(--gray-500); font-size:.85rem;">(<%= sf.nomeTeam %>)</span>
+                  <% } %>
+                </td>
+                <td style="font-size:.85rem; color:var(--gray-500);">
+                  <%= Number(sf.crediti).toFixed(2) %> M
+                  <% if (sf.stagione) { %>
+                    <span style="font-size:.72rem; color:var(--gray-400);">(<%= sf.stagione %>)</span>
+                  <% } %>
+                </td>
+                <td>
+                  <select name="classifica[<%= sf.id %>]" class="pos-select" data-sf="<%= sf.id %>"
+                          onchange="calcolaPremio(this)" <%= giaErogato ? 'disabled' : '' %>>
+                    <option value="">—</option>
+                    <% for (let i = 1; i <= 10; i++) { %>
+                      <option value="<%= i %>"><%= i %>°</option>
+                    <% } %>
+                  </select>
+                </td>
+                <td><span class="perc-badge" id="perc-<%= sf.id %>">—</span></td>
+                <td style="text-align:right;">
+                  <span class="premio-cell" id="premio-<%= sf.id %>">—</span>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+
+        <div class="totale-bar">
+          <span>Totale premi:</span>
+          <span id="totale-premi" style="font-size:1.3rem;">0.00 M</span>
+        </div>
+
+        <div style="margin-top:20px; text-align:right;">
+          <% if (!giaErogato) { %>
+            <button type="submit" class="btn btn-success" id="btn-commit" disabled>
+              💰 Eroga premi classifica
+            </button>
+          <% } %>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const maxValore = <%= maxValore %>;
+    const percentuali = {
+      10: 1.23, 9: 1.16, 8: 0.93, 7: 0.91,
+      6: 0.76, 5: 0.73, 4: 0.71, 3: 0.67,
+      2: 0.61, 1: 0.53
+    };
+
+    function calcolaPremio(sel) {
+      const sfId = sel.dataset.sf;
+      const pos = parseInt(sel.value, 10);
+      const percEl = document.getElementById('perc-' + sfId);
+      const premioEl = document.getElementById('premio-' + sfId);
+
+      if (!pos || !percentuali[pos]) {
+        percEl.textContent = '—';
+        premioEl.textContent = '—';
+      } else {
+        const perc = percentuali[pos];
+        const premio = (maxValore * perc).toFixed(2);
+        percEl.textContent = Math.round(perc * 100) + '%';
+        premioEl.textContent = premio + ' M';
+      }
+      aggiornaTotale();
+    }
+
+    function aggiornaTotale() {
+      let tot = 0;
+      let count = 0;
+      document.querySelectorAll('.pos-select').forEach(sel => {
+        const pos = parseInt(sel.value, 10);
+        if (pos && percentuali[pos]) {
+          tot += maxValore * percentuali[pos];
+          count++;
+        }
+      });
+      document.getElementById('totale-premi').textContent = tot.toFixed(2) + ' M';
+      const btn = document.getElementById('btn-commit');
+      if (btn) btn.disabled = count === 0;
+
+      // Evidenzia duplicati
+      const usati = {};
+      let hasDup = false;
+      document.querySelectorAll('.pos-select').forEach(sel => {
+        const pos = sel.value;
+        sel.style.borderColor = '';
+        if (pos && pos !== '') {
+          if (usati[pos]) {
+            sel.style.borderColor = '#dc2626';
+            usati[pos].style.borderColor = '#dc2626';
+            hasDup = true;
+          } else {
+            usati[pos] = sel;
+          }
+        }
+      });
+      if (btn && hasDup) btn.disabled = true;
+    }
+  </script>
+</body>
+</html>

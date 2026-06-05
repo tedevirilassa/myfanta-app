@@ -124,6 +124,17 @@ Dashboard unificata che mostra tutte le azioni scatenate in determinati momenti 
 - Controller: `admin.controller.js` → `showCalendarioAzioni`, `saveCalendarioDate`
 - Vista: `views/admin/calendario-azioni.ejs`
 
+### Premi Classifica (`/admin/premi/classifica`)
+Erogazione premi di fine campionato basati sulla classifica finale:
+- Admin assegna posizioni 1°-10° a ogni FantaTeam.
+- Il premio è calcolato come percentuale del valore del giocatore più costoso dall'ultimo scraping Transfermarkt.
+- Tabella percentuali: 10°=123%, 9°=116%, 8°=93%, 7°=91%, 6°=76%, 5°=73%, 4°=71%, 3°=67%, 2°=61%, 1°=53%
+- Calcolo live client-side, validazione duplicati posizioni.
+- Operazione atomica: aggiorna crediti+patrimonio SF per ogni team, crea record `PremioErogato` tipo `Classifica`.
+- Può essere eseguita una sola volta per stagione.
+- Controller: `admin.controller.js` → `showPremiClassifica`, `savePremiClassifica`
+- Vista: `views/admin/premi-classifica.ejs`
+
 ---
 
 ## Comandi sviluppo
