@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Calendario Azioni' }) %>
+  <style>
+    .cal-grid {
+      display: grid; gap: 18px;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    }
+    .cal-card {
+      background: var(--white); border-radius: 10px;
+      padding: 20px 22px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.07);
+      border-left: 4px solid var(--green-mid);
+      position: relative;
+    }
+    .cal-card.active { border-left-color: #16a34a; }
+    .cal-card.inactive { border-left-color: var(--gray-300); }
+    .cal-card.warning { border-left-color: #f59e0b; }
+    .cal-card-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .cal-card-title {
+      font-size: .95rem; font-weight: 800; color: var(--green-dark);
+    }
+    .cal-card-icon { font-size: 1.3rem; }
+    .cal-card-desc {
+      font-size: .82rem; color: var(--gray-700); line-height: 1.5;
+      margin-bottom: 14px;
+    }
+    .cal-status {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 12px; font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .3px;
+    }
+    .cal-status.open { background: #dcfce7; color: #166534; }
+    .cal-status.closed { background: #f1f5f9; color: #64748b; }
+    .cal-status.done { background: #fef3c7; color: #92400e; }
+    .cal-dates {
+      display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .cal-date-field {
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .cal-date-field label {
+      font-size: .68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .4px; color: var(--gray-400);
+    }
+    .cal-date-field input {
+      padding: 7px 10px; border: 1.5px solid var(--gray-200);
+      border-radius: 7px; font-size: .85rem; background: #fafdfa;
+      width: 110px; outline: none;
+    }
+    .cal-date-field input:focus {
+      border-color: var(--green-mid);
+      box-shadow: 0 0 0 2px rgba(45,106,79,.12);
+    }
+    .cal-actions {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      margin-top: 12px; padding-top: 12px;
+      border-top: 1px solid var(--gray-200);
+    }
+    .btn-trigger {
+      padding: 7px 14px; font-size: .8rem; font-weight: 700;
+      background: var(--green-mid); color: #fff;
+      border: none; border-radius: 7px; cursor: pointer;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+    }
+    .btn-trigger:hover { background: var(--green-dark); }
+    .btn-trigger.warning { background: #f59e0b; }
+    .btn-trigger.warning:hover { background: #d97706; }
+    .btn-trigger.danger { background: #dc2626; }
+    .btn-trigger.danger:hover { background: #b91c1c; }
+    .btn-save-dates {
+      padding: 6px 12px; font-size: .78rem; font-weight: 700;
+      background: var(--gray-100); color: var(--gray-700);
+      border: 1.5px solid var(--gray-200); border-radius: 7px; cursor: pointer;
+    }
+    .btn-save-dates:hover { background: var(--gray-200); }
+    .timeline-bar {
+      margin-top: 30px; margin-bottom: 30px;
+      background: var(--white); border-radius: 10px;
+      padding: 20px 24px;
+      box-shadow: 0 2px 10px rgba(26,58,42,.07);
+    }
+    .timeline-title {
+      font-size: .7rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .8px; color: var(--gray-400); margin-bottom: 14px;
+    }
+    .timeline-months {
+      display: flex; gap: 0; border-radius: 8px; overflow: hidden;
+      height: 36px;
+    }
+    .timeline-month {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      font-size: .68rem; font-weight: 700; color: var(--gray-500);
+      background: var(--gray-100);
+      border-right: 1px solid var(--gray-200);
+      position: relative;
+    }
+    .timeline-month:last-child { border-right: none; }
+    .timeline-month.current { background: #dcfce7; color: #166534; }
+    .timeline-month.mercato-estivo { background: rgba(34,197,94,.2); }
+    .timeline-month.mercato-invernale { background: rgba(59,130,246,.2); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1200px;">
+    <div class="page-header">
+      <h1>📅 Calendario Azioni Stagionali</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="border:1.5px solid var(--gray-200);background:#fff;">
+        ← Pannello
+      </a>
+    </div>
+
+    <% if (message) { %>
+      <div class="alert alert-success">✔ <%= message %></div>
+    <% } %>
+    <% if (error) { %>
+      <div class="alert alert-error">❌ <%= error %></div>
+    <% } %>
+
+    <!-- ══ TIMELINE VISUALE ═══════════════════════════════════════ -->
+    <div class="timeline-bar">
+      <div class="timeline-title">📊 Timeline stagione <%= stagione %> (luglio → giugno)</div>
+      <div class="timeline-months">
+        <% const mesi = ['Lug','Ago','Set','Ott','Nov','Dic','Gen','Feb','Mar','Apr','Mag','Giu'];
+           const meseCorrente = new Date().getMonth(); // 0-based
+           const mesiMap = [6,7,8,9,10,11,0,1,2,3,4,5]; // luglio→giugno
+           mesi.forEach(function(m, i) {
+             const realMonth = mesiMap[i];
+             const isCurrent = (realMonth === meseCorrente);
+             const isEstivo = (i >= 0 && i <= 2); // lug-set
+             const isInvernale = (i >= 6 && i <= 7); // gen-feb
+        %>
+        <div class="timeline-month<%= isCurrent ? ' current' : '' %><%= isEstivo ? ' mercato-estivo' : '' %><%= isInvernale ? ' mercato-invernale' : '' %>">
+          <%= m %>
+        </div>
+        <% }); %>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:10px;font-size:.72rem;color:var(--gray-500);">
+        <span>🟢 Mese corrente</span>
+        <span style="color:rgba(34,197,94,.8);">▪ Mercato estivo</span>
+        <span style="color:rgba(59,130,246,.8);">▪ Mercato invernale</span>
+      </div>
+    </div>
+
+    <!-- ══ GRIGLIA AZIONI ═════════════════════════════════════════ -->
+    <div class="cal-grid">
+
+      <!-- ── MERCATO ESTIVO ─────────────────────────────────── -->
+      <div class="cal-card <%= stati.mercatoEstivo ? 'active' : 'inactive' %>">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Mercato Estivo</div>
+          <span class="cal-card-icon">☀️</span>
+        </div>
+        <div class="cal-card-desc">
+          Sessione di trasferimento estiva. I contratti Acquisto/Cessione possono essere stipulati solo in questo periodo.
+        </div>
+        <span class="cal-status <%= stati.mercatoEstivo ? 'open' : 'closed' %>">
+          <%= stati.mercatoEstivo ? '● Aperto' : '○ Chiuso' %>
+        </span>
+        <form action="/admin/calendario-azioni/date" method="POST" style="margin-top:12px;">
+          <input type="hidden" name="gruppo" value="mercato_estivo">
+          <div class="cal-dates">
+            <div class="cal-date-field">
+              <label>Inizio (GG-MM)</label>
+              <input type="text" name="inizio" value="<%= params.mercato_estivo_inizio || '01-07' %>" placeholder="GG-MM">
+            </div>
+            <div class="cal-date-field">
+              <label>Fine (GG-MM)</label>
+              <input type="text" name="fine" value="<%= params.mercato_estivo_fine || '15-09' %>" placeholder="GG-MM">
+            </div>
+          </div>
+          <button type="submit" class="btn-save-dates">💾 Salva date</button>
+        </form>
+      </div>
+
+      <!-- ── MERCATO INVERNALE ──────────────────────────────── -->
+      <div class="cal-card <%= stati.mercatoInvernale ? 'active' : 'inactive' %>">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Mercato Invernale</div>
+          <span class="cal-card-icon">❄️</span>
+        </div>
+        <div class="cal-card-desc">
+          Sessione di trasferimento invernale. Acquisti con stipendio ridotto (5%).
+        </div>
+        <span class="cal-status <%= stati.mercatoInvernale ? 'open' : 'closed' %>">
+          <%= stati.mercatoInvernale ? '● Aperto' : '○ Chiuso' %>
+        </span>
+        <form action="/admin/calendario-azioni/date" method="POST" style="margin-top:12px;">
+          <input type="hidden" name="gruppo" value="mercato_invernale">
+          <div class="cal-dates">
+            <div class="cal-date-field">
+              <label>Inizio (GG-MM)</label>
+              <input type="text" name="inizio" value="<%= params.mercato_invernale_inizio || '01-01' %>" placeholder="GG-MM">
+            </div>
+            <div class="cal-date-field">
+              <label>Fine (GG-MM)</label>
+              <input type="text" name="fine" value="<%= params.mercato_invernale_fine || '15-02' %>" placeholder="GG-MM">
+            </div>
+          </div>
+          <button type="submit" class="btn-save-dates">💾 Salva date</button>
+        </form>
+      </div>
+
+      <!-- ── MERCATO PRIVATO ───────────────────────────────── -->
+      <div class="cal-card <%= stati.mercatoPrivato ? 'active' : 'inactive' %>">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Mercato Privato</div>
+          <span class="cal-card-icon">🤝</span>
+        </div>
+        <div class="cal-card-desc">
+          Finestra per trasferimenti tra presidenti. Aperto da luglio a febbraio (cavalca anno).
+        </div>
+        <span class="cal-status <%= stati.mercatoPrivato ? 'open' : 'closed' %>">
+          <%= stati.mercatoPrivato ? '● Aperto' : '○ Chiuso' %>
+        </span>
+        <form action="/admin/calendario-azioni/date" method="POST" style="margin-top:12px;">
+          <input type="hidden" name="gruppo" value="mercato_privato">
+          <div class="cal-dates">
+            <div class="cal-date-field">
+              <label>Inizio (GG-MM)</label>
+              <input type="text" name="inizio" value="<%= params.mercato_privato_inizio || '01-07' %>" placeholder="GG-MM">
+            </div>
+            <div class="cal-date-field">
+              <label>Fine (GG-MM)</label>
+              <input type="text" name="fine" value="<%= params.mercato_privato_fine || '15-02' %>" placeholder="GG-MM">
+            </div>
+          </div>
+          <button type="submit" class="btn-save-dates">💾 Salva date</button>
+        </form>
+      </div>
+
+      <!-- ── STAGIONE ──────────────────────────────────────── -->
+      <div class="cal-card">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Inizio / Fine Stagione</div>
+          <span class="cal-card-icon">🏟️</span>
+        </div>
+        <div class="cal-card-desc">
+          Date che definiscono i confini della stagione corrente (<strong><%= stagione %></strong>). L'inizio determina il cambio anno nel calcolo stagione.
+        </div>
+        <form action="/admin/calendario-azioni/date" method="POST" style="margin-top:8px;">
+          <input type="hidden" name="gruppo" value="stagione">
+          <div class="cal-dates">
+            <div class="cal-date-field">
+              <label>Inizio (GG-MM)</label>
+              <input type="text" name="inizio" value="<%= params.stagione_inizio || '01-07' %>" placeholder="GG-MM">
+            </div>
+            <div class="cal-date-field">
+              <label>Fine (GG-MM)</label>
+              <input type="text" name="fine" value="<%= params.stagione_fine || '15-06' %>" placeholder="GG-MM">
+            </div>
+          </div>
+          <button type="submit" class="btn-save-dates">💾 Salva date</button>
+        </form>
+      </div>
+
+      <!-- ── PREMI INIZIO STAGIONE ─────────────────────────── -->
+      <div class="cal-card <%= premiInizioErogato ? 'warning' : '' %>">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Premi Inizio Stagione</div>
+          <span class="cal-card-icon">🏁</span>
+        </div>
+        <div class="cal-card-desc">
+          Erogazione crediti ai presidenti a inizio stagione (dopo il 1° luglio).
+        </div>
+        <% if (premiInizioErogato) { %>
+          <span class="cal-status done">✔ Erogato il <%= new Date(premiInizioErogato.createdAt).toLocaleDateString('it-IT') %></span>
+        <% } else { %>
+          <span class="cal-status closed">○ Non ancora erogato</span>
+        <% } %>
+        <div class="cal-actions">
+          <a href="/admin/premi/inizio-stagione" class="btn-trigger">
+            ▶ Vai a erogazione
+          </a>
+        </div>
+      </div>
+
+      <!-- ── PREMI GENNAIO ─────────────────────────────────── -->
+      <div class="cal-card <%= premiGennaioErogato ? 'warning' : '' %>">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Premi di Gennaio</div>
+          <span class="cal-card-icon">❄️</span>
+        </div>
+        <div class="cal-card-desc">
+          Erogazione crediti ai presidenti nella sessione invernale (gennaio).
+        </div>
+        <% if (premiGennaioErogato) { %>
+          <span class="cal-status done">✔ Erogato il <%= new Date(premiGennaioErogato.createdAt).toLocaleDateString('it-IT') %></span>
+        <% } else { %>
+          <span class="cal-status closed">○ Non ancora erogato</span>
+        <% } %>
+        <div class="cal-actions">
+          <a href="/admin/premi/gennaio" class="btn-trigger">
+            ▶ Vai a erogazione
+          </a>
+        </div>
+      </div>
+
+      <!-- ── RINNOVI ───────────────────────────────────────── -->
+      <div class="cal-card">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Finalizzazione Rinnovi</div>
+          <span class="cal-card-icon">🔄</span>
+        </div>
+        <div class="cal-card-desc">
+          Ricalcola ingaggi (10% quotazione corrente) e finalizza le proposte di rinnovo pending per tutti i team in base al salary cap.
+        </div>
+        <span class="cal-status closed">
+          <%= proposteRinnovoPending %> propost<%= proposteRinnovoPending === 1 ? 'a' : 'e' %> in attesa
+        </span>
+        <div class="cal-actions">
+          <a href="/admin/rinnovi" class="btn-trigger">
+            ▶ Vai a rinnovi
+          </a>
+          <form action="/admin/rinnovi/finalizza" method="POST" style="margin:0;"
+                onsubmit="return confirm('Eseguire il calcolo reale dei rinnovi su TUTTI i team?\n\nProcedere?');">
+            <button type="submit" class="btn-trigger warning">⚡ Forza esecuzione</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- ── SVINCOLI INATTIVI ─────────────────────────────── -->
+      <div class="cal-card">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Svincoli Giocatori Inattivi</div>
+          <span class="cal-card-icon">🚪</span>
+        </div>
+        <div class="cal-card-desc">
+          Svincola automaticamente i giocatori con <code>active = false</code> che hanno ancora un contratto valido. Rimborso crediti = quotazione.
+        </div>
+        <div class="cal-actions">
+          <a href="/admin/svincoli-inattivi" class="btn-trigger">
+            ▶ Vai a svincoli
+          </a>
+        </div>
+      </div>
+
+      <!-- ── FINE STAGIONE ─────────────────────────────────── -->
+      <div class="cal-card" style="border-left-color:#dc2626;">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Fine Stagione (Rollover)</div>
+          <span class="cal-card-icon">🗓</span>
+        </div>
+        <div class="cal-card-desc">
+          Transazione ACID: decrementa durate, simula rinnovi, svincola scaduti, crea nuovi contratti. <strong>Irreversibile.</strong>
+        </div>
+        <span class="cal-status closed">
+          Previsto il 30 giugno — <%= contrattiValidi %> contratti validi
+        </span>
+        <div class="cal-actions">
+          <a href="/admin/fine-stagione" class="btn-trigger danger">
+            ▶ Vai a fine stagione
+          </a>
+        </div>
+      </div>
+
+      <!-- ── SYNC QUOTAZIONI ───────────────────────────────── -->
+      <div class="cal-card">
+        <div class="cal-card-header">
+          <div class="cal-card-title">Sync Quotazioni Transfermarkt</div>
+          <span class="cal-card-icon">📈</span>
+        </div>
+        <div class="cal-card-desc">
+          Scraping quotazioni da Transfermarkt per tutte le squadre di Serie A. Aggiorna valori e crea record quotazione.
+        </div>
+        <% if (ultimaQuotazione) { %>
+          <span class="cal-status done">Ultimo sync: <%= new Date(ultimaQuotazione).toLocaleDateString('it-IT') %></span>
+        <% } else { %>
+          <span class="cal-status closed">○ Mai eseguito</span>
+        <% } %>
+        <div class="cal-actions">
+          <a href="/admin/sync-transfermarkt" class="btn-trigger">
+            ▶ Vai a sync
+          </a>
+        </div>
+      </div>
+
+    </div><!-- /cal-grid -->
+  </div><!-- /container -->
+</body>
+</html>

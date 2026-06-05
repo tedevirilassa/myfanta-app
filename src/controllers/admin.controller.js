@@ -709,7 +709,100 @@ async function applyRealignRuoli(req, res) {
   }
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate };
+// ── GET /admin/calendario-azioni ──────────────────────────────────────────────
+async function showCalendarioAzioni(req, res, next) {
+  try {
+    const params = await parametriService.getAll();
+    console.log("[calendario-azioni] params loaded, keys:", Object.keys(params).length);
+    const stagione = getStagioneCorrente(params);
+    console.log("[calendario-azioni] stagione:", stagione);
+
+    // Stato apertura mercati
+    const oggi = new Date();
+    const dd = oggi.getDate();
+    const mm = oggi.getMonth() + 1;
+
+    function isOpen(inizio, fine) {
+      const [gi, mi] = (inizio || "01-07").split("-").map(Number);
+      const [gf, mf] = (fine || "15-09").split("-").map(Number);
+      const now = mm * 100 + dd;
+      const start = mi * 100 + gi;
+      const end = mf * 100 + gf;
+      if (start <= end) return now >= start && now <= end;
+      return now >= start || now <= end; // cavalca anno
+    }
+
+    const stati = {
+      mercatoEstivo: isOpen(params.mercato_estivo_inizio, params.mercato_estivo_fine),
+      mercatoInvernale: isOpen(params.mercato_invernale_inizio, params.mercato_invernale_fine),
+      mercatoPrivato: isOpen(params.mercato_privato_inizio, params.mercato_privato_fine),
+    };
+
+    const [premiInizioErogato, premiGennaioErogato, proposteRinnovoPending, contrattiValidi, ultimaQuotazione] = await Promise.all([
+      prisma.premioErogato.findFirst({ where: { tipo: "InizioStagione", stagione } }),
+      prisma.premioErogato.findFirst({ where: { tipo: "Gennaio", stagione } }),
+      prisma.propostaRinnovo.count({ where: { status: "PENDING", stagione } }),
+      prisma.contratto.count({ where: { valido: true } }),
+      prisma.quotazione.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+    ]);
+
+    const message = req.query.saved ? "Date aggiornate con successo." : null;
+    const error = req.query.error ? decodeURIComponent(req.query.error) : null;
+
+    res.render("admin/calendario-azioni", {
+      params,
+      stagione,
+      stati,
+      premiInizioErogato,
+      premiGennaioErogato,
+      proposteRinnovoPending,
+      contrattiValidi,
+      ultimaQuotazione: ultimaQuotazione ? ultimaQuotazione.createdAt : null,
+      currentUser: req.user,
+      message,
+      error,
+    });
+  } catch (err) {
+    console.error("[calendario-azioni] ERROR:", err);
+    next(err);
+  }
+}
+
+// ── POST /admin/calendario-azioni/date ───────────────────────────────────────
+async function saveCalendarioDate(req, res) {
+  const { gruppo, inizio, fine } = req.body;
+
+  const mapping = {
+    mercato_estivo:    ["mercato_estivo_inizio", "mercato_estivo_fine"],
+    mercato_invernale: ["mercato_invernale_inizio", "mercato_invernale_fine"],
+    mercato_privato:   ["mercato_privato_inizio", "mercato_privato_fine"],
+    stagione:          ["stagione_inizio", "stagione_fine"],
+  };
+
+  const chiavi = mapping[gruppo];
+  if (!chiavi) {
+    return res.redirect("/admin/calendario-azioni?error=" + encodeURIComponent("Gruppo non valido."));
+  }
+
+  // Validazione formato GG-MM
+  const re = /^\d{2}-\d{2}$/;
+  if (!re.test(inizio) || !re.test(fine)) {
+    return res.redirect("/admin/calendario-azioni?error=" + encodeURIComponent("Formato date non valido. Usare GG-MM (es. 01-07)."));
+  }
+
+  await prisma.parametro.updateMany({ where: { chiave: chiavi[0] }, data: { valore: inizio } });
+  await prisma.parametro.updateMany({ where: { chiave: chiavi[1] }, data: { valore: fine } });
+  parametriService.invalidateCache();
+
+  await logAction({
+    azione: "UPDATE", entita: "parametro", entitaId: null,
+    dettaglio: { gruppo, inizio, fine }, adminId: req.user.id,
+  });
+
+  res.redirect("/admin/calendario-azioni?saved=1");
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
 
 // ── POST /admin/users/:id/impersonate ─────────────────────────────────────
 // Genera un JWT in cui `sub` = utente target e `impersonator` = admin reale.
@@ -2231,6 +2324,48 @@ async function listLog(req, res) {
     }),
   ]);
 
+  // ── Risolvi ID → nomi per log più leggibili ──────────────────────────────
+  const giocatoreIds = new Set();
+  const fantaTeamIds = new Set();
+  const userIds = new Set();
+
+  for (const l of logs) {
+    // Raccogli entitaId in base al tipo di entità
+    if (l.entitaId) {
+      if (l.entita === "giocatore") giocatoreIds.add(l.entitaId);
+      if (l.entita === "utente" || l.entita === "profilo") userIds.add(l.entitaId);
+    }
+
+    if (!l.dettaglio) continue;
+    let det;
+    try { det = JSON.parse(l.dettaglio); } catch { continue; }
+    // Cerca nei vari livelli del dettaglio
+    const sections = [det, det?.prima, det?.dopo];
+    for (const s of sections) {
+      if (!s || typeof s !== "object") continue;
+      if (s.giocatoreId) giocatoreIds.add(Number(s.giocatoreId));
+      if (s.fantaTeamId) fantaTeamIds.add(Number(s.fantaTeamId));
+      if (s.userId)      userIds.add(Number(s.userId));
+    }
+  }
+
+  const [giocatoriMap, teamsMap, usersMap] = await Promise.all([
+    giocatoreIds.size > 0
+      ? prisma.giocatore.findMany({ where: { id: { in: [...giocatoreIds] } }, select: { id: true, nome: true } })
+          .then(rows => Object.fromEntries(rows.map(r => [r.id, r.nome])))
+      : Promise.resolve({}),
+    fantaTeamIds.size > 0
+      ? prisma.fantaTeam.findMany({ where: { id: { in: [...fantaTeamIds] } }, select: { id: true, nome: true } })
+          .then(rows => Object.fromEntries(rows.map(r => [r.id, r.nome])))
+      : Promise.resolve({}),
+    userIds.size > 0
+      ? prisma.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, nickname: true, email: true } })
+          .then(rows => Object.fromEntries(rows.map(r => [r.id, r.nickname || r.email])))
+      : Promise.resolve({}),
+  ]);
+
+  const nomiMap = { giocatori: giocatoriMap, teams: teamsMap, users: usersMap };
+
   const totalePagine = Math.ceil(totale / PER_PAGINA);
 
   // Ricostruisce query string senza pagina per la paginazione
@@ -2242,6 +2377,7 @@ async function listLog(req, res) {
   res.render("admin/log", {
     logs,
     admins,
+    nomiMap,
     totale,
     paginaCorrente: pagina,
     totalePagine,

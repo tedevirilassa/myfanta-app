@@ -59,6 +59,8 @@ router.post("/tools/seed-giocatori", ctrl.runSeedGiocatori);
 router.get("/situazione-finanziaria", ctrl.listSituazioneFinanziaria);
 router.post("/situazione-finanziaria/:id/assign", ctrl.assignFantaTeamToSituazione);
 router.post("/situazione-finanziaria/:id/crediti", ctrl.adjustCrediti);
+router.get("/calendario-azioni", ctrl.showCalendarioAzioni);
+router.post("/calendario-azioni/date", ctrl.saveCalendarioDate);
 router.get("/parametri", ctrl.listParametri);
 router.post("/parametri/serie-a-teams", ctrl.saveSerieATeams);
 router.post("/parametri/serie-a-catalogo/add", ctrl.addSerieATeam);

@@ -176,6 +176,31 @@
             </td>
             <td style="text-align:center; color:var(--gray-400); font-size:.8rem;">
               <%= l.entitaId ?? '—' %>
+              <%
+                // Mostra nome accanto all'ID se risolvibile
+                if (l.entitaId) {
+                  let nomeEntita = null;
+                  if (l.entita === 'contratto' || l.entita === 'giocatore') {
+                    // Per contratti, cerchiamo il nome giocatore nel dettaglio
+                    let _det = null;
+                    try { _det = JSON.parse(l.dettaglio || '{}'); } catch(e) {}
+                    if (_det) {
+                      const giocNome = _det.giocatoreNome || _det.dopo?.giocatoreNome || _det.prima?.giocatoreNome;
+                      const giocId = _det.giocatoreId || _det.dopo?.giocatoreId || _det.prima?.giocatoreId;
+                      if (giocNome) nomeEntita = giocNome;
+                      else if (giocId && nomiMap.giocatori[giocId]) nomeEntita = nomiMap.giocatori[giocId];
+                    }
+                    if (!nomeEntita && l.entita === 'giocatore' && nomiMap.giocatori[l.entitaId]) {
+                      nomeEntita = nomiMap.giocatori[l.entitaId];
+                    }
+                  } else if (l.entita === 'utente' || l.entita === 'profilo') {
+                    if (nomiMap.users[l.entitaId]) nomeEntita = nomiMap.users[l.entitaId];
+                  }
+                  if (nomeEntita) { %>
+                    <br><span style="color:var(--green-dark);font-weight:600;font-size:.72rem;"><%= nomeEntita %></span>
+              <%  }
+                }
+              %>
             </td>
             <td style="font-size:.82rem;">
               <%= l.admin ? (l.admin.nickname || l.admin.email) : '—' %>
@@ -191,9 +216,13 @@
                     // Log "standard" hanno struttura { prima, dopo }. Log custom (es. annullamento
                     // contratto, carry-over stagione, movimenti SF) hanno altre chiavi al top-level.
                     const hasPrimaDopo = det && (Object.prototype.hasOwnProperty.call(det, 'prima') || Object.prototype.hasOwnProperty.call(det, 'dopo'));
-                    function fmtVal(v) {
+                    function fmtVal(k, v) {
                       if (v === null || v === undefined) return '—';
                       if (typeof v === 'object') return JSON.stringify(v);
+                      // Risolvi ID → nomi leggibili
+                      if (k === 'giocatoreId' && nomiMap.giocatori[v]) return v + ' — ' + nomiMap.giocatori[v];
+                      if (k === 'fantaTeamId' && nomiMap.teams[v]) return v + ' — ' + nomiMap.teams[v];
+                      if (k === 'userId' && nomiMap.users[v]) return v + ' — ' + nomiMap.users[v];
                       return String(v);
                     }
                   %>
@@ -209,7 +238,7 @@
                            Object.entries(det.prima).forEach(([k, v]) => { %>
                         <div class="det-kv">
                           <span class="det-key"><%= k %></span>
-                          <span class="det-val"><%= fmtVal(v) %></span>
+                          <span class="det-val"><%= fmtVal(k, v) %></span>
                         </div>
                       <% }); } %>
                     </div>
@@ -223,7 +252,7 @@
                            Object.entries(det.dopo).forEach(([k, v]) => { %>
                         <div class="det-kv">
                           <span class="det-key"><%= k %></span>
-                          <span class="det-val"><%= fmtVal(v) %></span>
+                          <span class="det-val"><%= fmtVal(k, v) %></span>
                         </div>
                       <% }); } %>
                     </div>
@@ -239,7 +268,7 @@
                          Object.entries(det).forEach(([k, v]) => { %>
                       <div class="det-kv">
                         <span class="det-key"><%= k %></span>
-                        <span class="det-val"><%= fmtVal(v) %></span>
+                        <span class="det-val"><%= fmtVal(k, v) %></span>
                       </div>
                     <% }); } %>
                   </div>
