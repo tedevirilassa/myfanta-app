@@ -1,7 +1,7 @@
 // src/controllers/admin.controller.js
 const prisma = require("../lib/prisma");
 const authService = require("../services/auth.service");
-const { logAction } = require("../services/log.service");
+const { logAction, sfRollbackSQL } = require("../services/log.service");
 const { cleanNickname } = require("../lib/sanitize");
 const parametriService = require("../services/parametri.service");
 const { syncQuotazioni: runSyncQuotazioni } = require("../services/sync-quotazioni.service");
@@ -344,6 +344,7 @@ async function adjustCrediti(req, res) {
       motivo: motivo || null,
       prima: { crediti: creditiPre, patrimonio: patrimonioPre },
       dopo:  { crediti: nuoviCrediti, patrimonio: nuovoPatrimonio },
+      rollbackSQL: sfRollbackSQL(id, { crediti: creditiPre, patrimonio: patrimonioPre }),
     },
     adminId: req.user.id,
   });
@@ -867,7 +868,7 @@ async function savePremiClassifica(req, res) {
         percentuale: Math.round(percentuale * 100) + "%",
         premio,
         prima: { crediti: creditiPre, patrimonio: patrimonioPre },
-        dopo: { crediti: creditiNuovi, patrimonio: patrimonioNuovo },
+        dopo:  { crediti: creditiNuovi, patrimonio: patrimonioNuovo },
       });
     }
 
@@ -891,6 +892,7 @@ async function savePremiClassifica(req, res) {
       maxValore,
       numBenef: posizioni.length,
       movimenti,
+      rollbackSQL: movimenti.map(m => sfRollbackSQL(m.sfId, m.prima)).filter(Boolean),
     },
     adminId: req.user.id,
   });
@@ -1226,6 +1228,7 @@ async function approveSvincoliInattivi(req, res) {
               crediti:    { prima: creditiPrima,    dopo: creditiDopo },
               patrimonio: { prima: patrimonioPrima, dopo: patrimonioDopo },
             } : null,
+            rollbackSQL: sf ? sfRollbackSQL(sf.id, { crediti: creditiPrima, patrimonio: patrimonioPrima }) : null,
           },
           adminId: req.user.id,
         });
@@ -2241,6 +2244,11 @@ async function saveNuovoContratto(req, res) {
         contrattoId: nuovoContratto.id,
         giocatoreId: parseInt(giocatoreId, 10),
         movimento:   movimentoBuyer,
+        rollbackSQL: sfRollbackSQL(movimentoBuyer.sfId, {
+          crediti:    movimentoBuyer.crediti?.prima,
+          patrimonio: movimentoBuyer.patrimonio?.prima,
+          stipendi:   movimentoBuyer.stipendi?.prima,
+        }),
       },
       adminId: req.user.id,
     });
@@ -2254,6 +2262,11 @@ async function saveNuovoContratto(req, res) {
         contrattoId: nuovoContratto.id,
         giocatoreId: parseInt(giocatoreId, 10),
         movimento:   movimentoSeller,
+        rollbackSQL: sfRollbackSQL(movimentoSeller.sfId, {
+          crediti:    movimentoSeller.crediti?.prima,
+          patrimonio: movimentoSeller.patrimonio?.prima,
+          stipendi:   movimentoSeller.stipendi?.prima,
+        }),
       },
       adminId: req.user.id,
     });
@@ -2993,6 +3006,7 @@ async function savePremi(req, res) {
       });
 
       movimenti.push({
+        sfId:       sf.id,
         userId:     e.userId,
         presidente: u.nickname || u.email,
         fantaTeam:  u.fantaTeam.nome,
@@ -3024,6 +3038,7 @@ async function savePremi(req, res) {
       totale,
       numBenef: erogazioni.length,
       movimenti,
+      rollbackSQL: movimenti.map(m => sfRollbackSQL(m.sfId, m.prima)).filter(Boolean),
     },
     adminId: req.user.id,
   });

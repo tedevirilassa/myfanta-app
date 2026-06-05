@@ -60,4 +60,24 @@ async function logAction({ azione, entita, entitaId = null, dettaglio = null, ad
   }
 }
 
-module.exports = { logAction, runWithContext, getContext };
+module.exports = { logAction, runWithContext, getContext, sfRollbackSQL };
+
+/**
+ * Genera la query SQL per ripristinare una SituazioneFinanziaria allo stato
+ * precedente a un'operazione. Usare i valori "prima" del log per il rollback.
+ *
+ * @param {number} sfId
+ * @param {object} prima  - subset di { crediti, patrimonio, stipendi, valoreRose, giocatoriTesserati }
+ * @returns {string|null}
+ */
+function sfRollbackSQL(sfId, prima) {
+  if (!sfId || !prima) return null;
+  const parts = [];
+  if (prima.crediti            != null) parts.push(`"crediti" = ${Number(prima.crediti)}`);
+  if (prima.patrimonio         != null) parts.push(`"patrimonio" = ${Number(prima.patrimonio)}`);
+  if (prima.stipendi           != null) parts.push(`"stipendi" = ${Number(prima.stipendi)}`);
+  if (prima.valoreRose         != null) parts.push(`"valoreRose" = ${Number(prima.valoreRose)}`);
+  if (prima.giocatoriTesserati != null) parts.push(`"giocatoriTesserati" = ${Number(prima.giocatoriTesserati)}`);
+  if (!parts.length) return null;
+  return `UPDATE situazione_finanziaria SET ${parts.join(", ")} WHERE id = ${sfId};`;
+}

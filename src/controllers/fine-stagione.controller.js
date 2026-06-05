@@ -4,6 +4,7 @@
 
 const prisma = require("../lib/prisma");
 const parametriService = require("../services/parametri.service");
+const { sfRollbackSQL } = require("../services/log.service");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -213,6 +214,7 @@ async function eseguiFineStagione(req, res) {
                 fantaTeamId: c.fantaTeamId, quotazioneAccredito: quotValore,
                 motivo: idsRejectedContrattoVecchio.has(c.id) ? "rinnovo-bocciato" : "scadenza-naturale",
                 pre, post,
+                rollbackSQL: sfRollbackSQL(sf.id, pre),
               }),
               adminId: ADMIN_ID,
             },

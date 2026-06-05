@@ -106,27 +106,7 @@
     <a href="/fanta/lista-giocatori">📋 Lista Giocatori</a>
     <% if (currentUser.role === 'ADMIN') { %>
       <a href="/admin/contratti/riepilogo">📋 Riepilogo Contratti</a>
-      <div class="nav-dropdown">
-        <button class="nav-dd-btn">⚙️ Admin ▾</button>
-        <div class="nav-dd-menu">
-          <a href="/admin/contratti/nuovo">📝 Nuovo Contratto</a>
-          <a href="/admin/sync-transfermarkt">📈 Sync Transfermarkt</a>
-          <a href="/admin/realign-ruoli">🎯 Riallinea Ruoli</a>
-          <a href="/admin/users">👥 Gestione Utenti</a>
-          <a href="/admin/users/invite">➕ Invita Utente</a>
-          <a href="/admin/situazione-finanziaria">💰 Situazione Finanziaria</a>
-          <a href="/admin/premi/inizio-stagione">🏁 Premi inizio stagione</a>
-          <a href="/admin/premi/gennaio">❄️ Premi di gennaio</a>
-          <a href="/admin/premi/classifica">🏆 Premi classifica</a>
-          <a href="/admin/rosa">📋 Gestione Rose</a>
-          <a href="/admin/rinnovi">🔄 Rinnovi (finalize)</a>
-          <a href="/admin/svincoli-inattivi">🚪 Svincoli inattivi</a>
-          <a href="/admin/fine-stagione">🗓 Fine stagione</a>
-          <a href="/admin/calendario-azioni">📅 Calendario Azioni</a>
-          <a href="/admin/parametri">⚙️ Parametri</a>
-          <a href="/admin/log">📝 Log Azioni</a>
-        </div>
-      </div>
+      <a href="/admin/pannello">⚙️ Admin</a>
     <% } %>
     <form action="/auth/logout" method="POST">
       <button type="submit">Esci</button>
@@ -157,23 +137,7 @@
   <a href="/fanta/lista-giocatori">📋 Lista Giocatori</a>
   <% if (currentUser.role === 'ADMIN') { %>
   <a href="/admin/contratti/riepilogo">📋 Riepilogo Contratti</a>
-  <span class="nav-mobile-section-title">⚙️ Admin</span>
-  <a href="/admin/contratti/nuovo">📝 Nuovo Contratto</a>
-  <a href="/admin/sync-transfermarkt">📈 Sync Transfermarkt</a>
-  <a href="/admin/realign-ruoli">🎯 Riallinea Ruoli</a>
-  <a href="/admin/users">👥 Gestione Utenti</a>
-  <a href="/admin/users/invite">➕ Invita Utente</a>
-  <a href="/admin/situazione-finanziaria">💰 Situazione Finanziaria</a>
-  <a href="/admin/premi/inizio-stagione">🏁 Premi inizio stagione</a>
-  <a href="/admin/premi/gennaio">❄️ Premi di gennaio</a>
-  <a href="/admin/premi/classifica">🏆 Premi classifica</a>
-  <a href="/admin/rosa">📋 Gestione Rose</a>
-  <a href="/admin/rinnovi">🔄 Rinnovi (finalize)</a>
-  <a href="/admin/svincoli-inattivi">🚪 Svincoli inattivi</a>
-  <a href="/admin/fine-stagione">🗓 Fine stagione</a>
-  <a href="/admin/calendario-azioni">📅 Calendario Azioni</a>
-  <a href="/admin/parametri">⚙️ Parametri</a>
-  <a href="/admin/log">📝 Log Azioni</a>
+  <a href="/admin/pannello">⚙️ Admin</a>
   <% } %>
   <form action="/auth/logout" method="POST" style="margin-top:8px;">
     <button type="submit">🚪 Esci</button>
