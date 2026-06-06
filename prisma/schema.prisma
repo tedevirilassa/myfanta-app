@@ -36,6 +36,8 @@ model FantaTeam {
   situazioniFinanziarie SituazioneFinanziaria[]
   rosaGiocatori         RosaGiocatore[]
   propostaRinnovi       PropostaRinnovo[]
+  trattativeMittente    TrattativaMercato[]      @relation("TrattativeMittente")
+  trattativeRicevente   TrattativaMercato[]      @relation("TrattativeRicevente")
 
   @@map("fanta_teams")
 }
@@ -81,6 +83,7 @@ model Giocatore {
   rosaGiocatori   RosaGiocatore[]
   quotazioni      Quotazione[]
   propostaRinnovi PropostaRinnovo[]
+  trattative      TrattativaMercato[]
 
   @@map("giocatori")
 }
@@ -201,6 +204,34 @@ model RosaGiocatore {
 
   @@unique([fantaTeamId, giocatoreId, stagione])
   @@map("rosa_giocatori")
+}
+
+enum StatoTrattativa {
+  PENDING   // offerta inviata, attende risposta
+  ACCEPTED  // accettata, attende finalizzazione
+  REJECTED  // rifiutata
+  COMPLETED // trasferimento completato
+  EXPIRED   // scaduta senza risposta
+}
+
+model TrattativaMercato {
+  id                  Int              @id @default(autoincrement())
+  giocatoreId         Int
+  fantaTeamMittenteId Int
+  fantaTeamRiceventeId Int
+  importoOfferta      Decimal          @db.Decimal(10, 2)
+  valoreRiferimento   Decimal          @db.Decimal(10, 2)  // valore TM al momento dell'offerta
+  stato               StatoTrattativa  @default(PENDING)
+  motivoRifiuto       String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  scadenzaAt          DateTime?        // opzionale: data entro cui rispondere
+  contrattoNuovoId    Int?             // popolato alla finalizzazione
+  giocatore           Giocatore        @relation(fields: [giocatoreId], references: [id])
+  fantaTeamMittente   FantaTeam        @relation("TrattativeMittente",  fields: [fantaTeamMittenteId],  references: [id])
+  fantaTeamRicevente  FantaTeam        @relation("TrattativeRicevente", fields: [fantaTeamRiceventeId], references: [id])
+
+  @@map("trattative_mercato")
 }
 
 enum StatoRinnovo {
