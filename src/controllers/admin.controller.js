@@ -38,6 +38,8 @@ async function listUsers(req, res) {
          : req.query.fieldError  ? decodeURIComponent(req.query.fieldError)
          : req.query.deleteError ? decodeURIComponent(req.query.deleteError)
          : null,
+    inviteMessage: req.query.inviteOk   ? decodeURIComponent(req.query.inviteOk)   : null,
+    inviteError:   req.query.inviteErr  ? decodeURIComponent(req.query.inviteErr)   : null,
   });
 }
 
@@ -117,41 +119,29 @@ async function resetPassword(req, res) {
   res.redirect("/admin/users?reset=1");
 }
 
-// GET /admin/users/invite
+// GET /admin/users/invite  (redirect al tab utenti per retrocompatibilità)
 function showInvite(req, res) {
-  res.render("admin/invite", { error: null, message: null, currentUser: req.user });
+  res.redirect("/admin/users#invita");
 }
 
 // POST /admin/users/invite
 async function inviteUser(req, res) {
-  const { email, role } = req.body;
+  const { email, role, sendEmail } = req.body;
 
   if (!email || !role) {
-    return res.render("admin/invite", {
-      error: "Email e ruolo sono obbligatori.",
-      message: null,
-      currentUser: req.user,
-    });
+    return res.redirect("/admin/users?inviteErr=" + encodeURIComponent("Email e ruolo sono obbligatori.") + "#invita");
   }
 
   const validRoles = ["ADMIN", "USER", "POWER_USER"];
   if (!validRoles.includes(role)) {
-    return res.render("admin/invite", {
-      error: "Ruolo non valido.",
-      message: null,
-      currentUser: req.user,
-    });
+    return res.redirect("/admin/users?inviteErr=" + encodeURIComponent("Ruolo non valido.") + "#invita");
   }
 
   const existing = await prisma.user.findUnique({
     where: { email: email.toLowerCase().trim() },
   });
   if (existing) {
-    return res.render("admin/invite", {
-      error: "Un utente con questa email esiste già.",
-      message: null,
-      currentUser: req.user,
-    });
+    return res.redirect("/admin/users?inviteErr=" + encodeURIComponent("Un utente con questa email esiste già.") + "#invita");
   }
 
   const hash = await authService.hashPassword(DEFAULT_PASSWORD);
@@ -171,11 +161,34 @@ async function inviteUser(req, res) {
     },
     adminId: req.user.id });
 
-  return res.render("admin/invite", {
-    message: `Utente ${email} creato con successo. Comunicagli la password predefinita: ${DEFAULT_PASSWORD}`,
-    error: null,
-    currentUser: req.user,
-  });
+  // Invio email di benvenuto se richiesto
+  let emailNote = "";
+  if (sendEmail === "1") {
+    const { sendEmailTo } = require("../services/email.service");
+    const appUrl = process.env.APP_URL || "";
+    const htmlInvito = `
+      <p>Sei stato invitato ad unirsi alla <strong>Lega Manageriale</strong> su MyFanta!</p>
+      <p>Ecco le tue credenziali per accedere:</p>
+      <table style="border-collapse:collapse; margin:16px 0;">
+        <tr><td style="padding:6px 14px 6px 0; color:#6b7280; font-weight:700;">Email</td><td style="padding:6px 0;"><strong>${newUser.email}</strong></td></tr>
+        <tr><td style="padding:6px 14px 6px 0; color:#6b7280; font-weight:700;">Password temporanea</td><td style="padding:6px 0;"><code style="background:#f3f4f6; padding:2px 8px; border-radius:4px;">${DEFAULT_PASSWORD}</code></td></tr>
+      </table>
+      <p style="color:#b45309;">&#128274; Al primo accesso ti verrà chiesto di cambiare la password.</p>
+      ${appUrl ? `<p><a href="${appUrl}" style="display:inline-block; padding:10px 22px; background:#1a3a2a; color:#fff; border-radius:6px; text-decoration:none; font-weight:700;">Accedi ora</a></p>` : ""}
+    `;
+    try {
+      await sendEmailTo(newUser.email, "Benvenuto in MyFanta — Lega Manageriale", htmlInvito);
+      emailNote = " Email di benvenuto inviata.";
+    } catch (_) {
+      emailNote = " (email non inviata — controlla la configurazione SMTP).";
+    }
+  }
+
+  return res.redirect(
+    "/admin/users?inviteOk=" +
+    encodeURIComponent(`Utente ${newUser.email} creato con successo.${emailNote} Password predefinita: ${DEFAULT_PASSWORD}`) +
+    "#invita"
+  );
 }
 
 // GET /admin/users/:id/edit-profile
@@ -1006,7 +1019,7 @@ async function saveCalendarioDate(req, res) {
   res.redirect("/admin/calendario-azioni?saved=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showPremiClassifica, savePremiClassifica, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showPremiCombinati, showPremiClassifica, savePremiClassifica, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
 
 // ── POST /admin/users/:id/impersonate ─────────────────────────────────────
 // Genera un JWT in cui `sub` = utente target e `impersonator` = admin reale.
@@ -2883,6 +2896,35 @@ function getStagioneCorrente(params) {
   return `${annoInizio}-${annoInizio + 1}`;
 }
 
+// GET /admin/premi  (pagina unificata con entrambi i tipi)
+async function showPremiCombinati(req, res) {
+  const params = await parametriService.getAll();
+  const stagione = getStagioneCorrente(params);
+
+  const presidenti = await prisma.user.findMany({
+    where:   { isActive: true, fantaTeam: { isNot: null } },
+    orderBy: [{ nickname: "asc" }, { email: "asc" }],
+    select:  { id: true, email: true, nickname: true, fantaTeam: { select: { id: true, nome: true } } },
+  });
+
+  const [giaErogatoInizio, giaErogatoGennaio] = await Promise.all([
+    prisma.premioErogato.findFirst({ where: { tipo: "InizioStagione", stagione } }),
+    prisma.premioErogato.findFirst({ where: { tipo: "Gennaio",        stagione } }),
+  ]);
+
+  res.render("admin/premi-combinati", {
+    stagione,
+    presidenti,
+    TIPI_PREMIO,
+    giaErogatoInizio,
+    giaErogatoGennaio,
+    currentUser: req.user,
+    activeTab: req.query.tab || "inizio-stagione",
+    error:   req.query.error   ? decodeURIComponent(req.query.error) : null,
+    success: req.query.success ? decodeURIComponent(req.query.success) : null,
+  });
+}
+
 // GET /admin/premi/:tipo
 async function showPremi(req, res) {
   const tipoKey = req.params.tipo;
@@ -2930,7 +2972,7 @@ async function savePremi(req, res) {
   });
   if (giaErogato) {
     return res.redirect(
-      `/admin/premi/${tipoKey}?error=` +
+      `/admin/premi?tab=${tipoKey}&error=` +
       encodeURIComponent(`${tipo.label} già erogati per la stagione ${stagione} il ${new Date(giaErogato.createdAt).toLocaleString("it-IT")}.`)
     );
   }
@@ -2950,7 +2992,7 @@ async function savePremi(req, res) {
 
   if (erogazioni.length === 0) {
     return res.redirect(
-      `/admin/premi/${tipoKey}?error=` +
+      `/admin/premi?tab=${tipoKey}&error=` +
       encodeURIComponent("Nessun importo valorizzato. Inserisci almeno un valore > 0.")
     );
   }
@@ -2984,7 +3026,7 @@ async function savePremi(req, res) {
   }
   if (mancanti.length > 0) {
     return res.redirect(
-      `/admin/premi/${tipoKey}?error=` +
+      `/admin/premi?tab=${tipoKey}&error=` +
       encodeURIComponent(`Impossibile erogare: ${mancanti.join("; ")}`)
     );
   }
@@ -3043,5 +3085,5 @@ async function savePremi(req, res) {
     adminId: req.user.id,
   });
 
-  res.redirect(`/admin/premi/${tipoKey}?success=1`);
+  res.redirect(`/admin/premi?tab=${tipoKey}&success=` + encodeURIComponent(`${tipo.label} erogati con successo.`));
 }

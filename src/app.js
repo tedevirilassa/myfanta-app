@@ -13,6 +13,7 @@ const authRoutes = require("./routes/auth");
 const adminRoutes = require("./routes/admin");
 const fantaRoutes = require("./routes/fanta");
 const profileRoutes = require("./routes/profile");
+const mercatoRoutes = require("./routes/mercato");
 
 // Controllers
 const fantaCtrl = require("./controllers/fanta.controller");
@@ -69,6 +70,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/fanta", fantaRoutes);
 app.use("/profilo", profileRoutes);
+app.use("/mercato", mercatoRoutes);
 app.use("/health", healthRoutes);
 
 /**

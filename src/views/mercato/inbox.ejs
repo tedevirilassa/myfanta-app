@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Inbox Mercato' }) %>
+  <style>
+    .tabs-inline { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:24px; }
+    .tab-inline { padding:10px 22px; font-size:.85rem; font-weight:700; cursor:pointer;
+                  border:none; background:none; border-bottom:3px solid transparent; color:var(--gray-500); }
+    .tab-inline.active { color:var(--green-dark); border-bottom-color:var(--green-mid); }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    .trattativa-card {
+      background:#fff; border-radius:10px; padding:18px 20px;
+      box-shadow:0 2px 8px rgba(26,58,42,.07); margin-bottom:14px;
+      border-left:4px solid var(--gray-200);
+    }
+    .trattativa-card.pending  { border-left-color: #f59e0b; }
+    .trattativa-card.accepted { border-left-color: #22c55e; }
+    .trattativa-card.rejected { border-left-color: #ef4444; }
+    .trattativa-card.completed{ border-left-color: var(--green-mid); }
+    .trattativa-card.expired  { border-left-color: var(--gray-300); }
+
+    .card-header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; }
+    .card-title  { font-size:.95rem; font-weight:700; color:var(--green-dark); }
+    .card-meta   { font-size:.78rem; color:var(--gray-400); }
+    .badge-stato { font-size:.7rem; font-weight:700; padding:3px 9px; border-radius:12px; }
+    .stato-PENDING   { background:#fef3c7; color:#92400e; }
+    .stato-ACCEPTED  { background:#dcfce7; color:#166534; }
+    .stato-REJECTED  { background:#fee2e2; color:#991b1b; }
+    .stato-COMPLETED { background:#d1fae5; color:#065f46; }
+    .stato-EXPIRED   { background:var(--gray-100); color:var(--gray-500); }
+
+    .importo { font-size:1.1rem; font-weight:800; color:var(--green-dark); }
+    .card-body { margin-top:10px; font-size:.84rem; color:var(--gray-700); }
+    .card-actions { margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+
+    /* Modale finalizza */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:300; align-items:center; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:#fff; border-radius:12px; padding:28px 32px; max-width:440px; width:90%; box-shadow:0 12px 40px rgba(0,0,0,.18); }
+    .modal h2 { font-size:1.1rem; margin-bottom:18px; color:var(--green-dark); }
+    .modal label { display:block; font-size:.82rem; font-weight:700; color:var(--gray-700); margin:12px 0 4px; }
+    .modal select, .modal input { width:100%; padding:9px 12px; border:1.5px solid var(--gray-200); border-radius:7px; font-size:.9rem; }
+    .modal-actions { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
+
+    .empty-state { text-align:center; color:var(--gray-400); padding:40px 20px; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:860px;">
+    <div class="page-header">
+      <h1>📬 Inbox Mercato</h1>
+      <a href="/mercato/invia-offerta" class="btn btn-success btn-sm">📨 Nuova Offerta</a>
+    </div>
+
+    <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+    <% if (success) { %><div class="alert alert-success">✅ <%= success %></div><% } %>
+
+    <div class="tabs-inline">
+      <button class="tab-inline active" data-tab="ricevute">
+        📥 Offerte Ricevute
+        <% const pendingCount = ricevute.filter(r => r.stato === 'PENDING').length; %>
+        <% if (pendingCount > 0) { %>
+          <span style="background:#ef4444;color:#fff;border-radius:10px;padding:1px 7px;font-size:.7rem;margin-left:4px;"><%= pendingCount %></span>
+        <% } %>
+      </button>
+      <button class="tab-inline" data-tab="inviate">
+        📤 Offerte Inviate (<%= inviate.length %>)
+      </button>
+    </div>
+
+    <!-- ── TAB: RICEVUTE ────────────────────────────────────────────────────── -->
+    <div class="tab-panel active" id="panel-ricevute">
+      <% if (ricevute.length === 0) { %>
+        <div class="empty-state">Nessuna offerta ricevuta.</div>
+      <% } else { ricevute.forEach(t => { %>
+        <div class="trattativa-card <%= t.stato.toLowerCase() %>">
+          <div class="card-header">
+            <div>
+              <span class="card-title">⚽ <%= t.giocatore.nome %></span>
+              <span style="font-size:.8rem;color:var(--gray-400);margin-left:8px;">[<%= t.giocatore.ruolo %>]<% if (t.giocatore.squadra) { %> · <%= t.giocatore.squadra %><% } %></span>
+            </div>
+            <span class="badge-stato stato-<%= t.stato %>"><%= t.stato %></span>
+          </div>
+          <div class="card-body">
+            <span class="importo"><%= Number(t.importoOfferta).toFixed(2) %> M</span>
+            &nbsp;&nbsp;da&nbsp;&nbsp;
+            <strong><%= t.fantaTeamMittente.nome %></strong>
+            <% if (t.fantaTeamMittente.user) { %> (<%= t.fantaTeamMittente.user.nickname || '—' %>)<% } %>
+            <br>
+            <span class="card-meta">
+              Valore TM: <%= Number(t.valoreRiferimento).toFixed(2) %> M
+              · Ricevuta il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
+              <% if (t.scadenzaAt) { %> · Scade il <%= new Date(t.scadenzaAt).toLocaleDateString('it-IT') %><% } %>
+            </span>
+            <% if (t.motivoRifiuto) { %><br><em>Motivo rifiuto: <%= t.motivoRifiuto %></em><% } %>
+          </div>
+          <% if (t.stato === 'PENDING') { %>
+          <div class="card-actions">
+            <button class="btn btn-success btn-sm" onclick="rispondi(<%= t.id %>, 'ACCEPT')">✅ Accetta</button>
+            <button class="btn btn-danger  btn-sm" onclick="apriRifiuto(<%= t.id %>)">❌ Rifiuta</button>
+          </div>
+          <% } %>
+        </div>
+      <% }) } %>
+    </div>
+
+    <!-- ── TAB: INVIATE ─────────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="panel-inviate">
+      <% if (inviate.length === 0) { %>
+        <div class="empty-state">Nessuna offerta inviata.</div>
+      <% } else { inviate.forEach(t => { %>
+        <div class="trattativa-card <%= t.stato.toLowerCase() %>">
+          <div class="card-header">
+            <div>
+              <span class="card-title">⚽ <%= t.giocatore.nome %></span>
+              <span style="font-size:.8rem;color:var(--gray-400);margin-left:8px;">[<%= t.giocatore.ruolo %>]<% if (t.giocatore.squadra) { %> · <%= t.giocatore.squadra %><% } %></span>
+            </div>
+            <span class="badge-stato stato-<%= t.stato %>"><%= t.stato %></span>
+          </div>
+          <div class="card-body">
+            <span class="importo"><%= Number(t.importoOfferta).toFixed(2) %> M</span>
+            &nbsp;&nbsp;a&nbsp;&nbsp;
+            <strong><%= t.fantaTeamRicevente.nome %></strong>
+            <br>
+            <span class="card-meta">
+              Valore TM: <%= Number(t.valoreRiferimento).toFixed(2) %> M
+              · Inviata il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
+            </span>
+            <% if (t.motivoRifiuto) { %><br><em>Motivo rifiuto: <%= t.motivoRifiuto %></em><% } %>
+          </div>
+          <% if (t.stato === 'ACCEPTED') { %>
+          <div class="card-actions">
+            <button class="btn btn-success btn-sm" onclick="apriFinalizza(<%= t.id %>, '<%= t.giocatore.nome %>', <%= Number(t.importoOfferta).toFixed(2) %>)">
+              🏁 Finalizza trasferimento
+            </button>
+          </div>
+          <% } %>
+        </div>
+      <% }) } %>
+    </div>
+  </div>
+
+  <!-- ── Modale rifiuto ──────────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-rifiuto">
+    <div class="modal">
+      <h2>❌ Rifiuta Offerta</h2>
+      <label for="motivo-rifiuto">Motivazione (opzionale)</label>
+      <input type="text" id="motivo-rifiuto" placeholder="es. Giocatore incedibile" maxlength="200">
+      <div class="modal-actions">
+        <button class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);" onclick="chiudiModal('modal-rifiuto')">Annulla</button>
+        <button class="btn btn-danger btn-sm" id="btn-conferma-rifiuto">Conferma rifiuto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modale finalizza ───────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-finalizza">
+    <div class="modal">
+      <h2 id="finalizza-title">🏁 Finalizza Trasferimento</h2>
+      <p id="finalizza-desc" style="font-size:.85rem; color:var(--gray-600); margin-top:-8px; margin-bottom:4px;"></p>
+      <label for="anni-contratto">Durata contratto (anni)</label>
+      <select id="anni-contratto">
+        <option value="1">1 anno</option>
+        <option value="2">2 anni</option>
+        <option value="3">3 anni</option>
+      </select>
+      <label for="categoria-rosa">Categoria in rosa</label>
+      <select id="categoria-rosa">
+        <option value="InRosa">In Rosa</option>
+        <option value="FuoriRosa">Fuori Rosa</option>
+        <option value="U21">U21</option>
+      </select>
+      <div id="finalizza-error" class="alert alert-error" style="display:none; margin-top:12px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);" onclick="chiudiModal('modal-finalizza')">Annulla</button>
+        <button class="btn btn-success btn-sm" id="btn-conferma-finalizza">✅ Conferma trasferimento</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Tab switching ───────────────────────────────────────────────────────────
+    document.querySelectorAll('.tab-inline').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-inline').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    // ── Helpers modal ───────────────────────────────────────────────────────────
+    function chiudiModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    let _rifiutoId = null;
+    function apriRifiuto(id) {
+      _rifiutoId = id;
+      document.getElementById('motivo-rifiuto').value = '';
+      document.getElementById('modal-rifiuto').classList.add('open');
+    }
+    document.getElementById('btn-conferma-rifiuto').addEventListener('click', () => {
+      if (_rifiutoId) rispondi(_rifiutoId, 'REJECT', document.getElementById('motivo-rifiuto').value);
+    });
+
+    async function rispondi(id, azione, motivoRifiuto) {
+      const body = { azione };
+      if (motivoRifiuto) body.motivoRifiuto = motivoRifiuto;
+      const r = await fetch(`/mercato/offerta/${id}/risposta`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        window.location.href = '/mercato/inbox?success=' + encodeURIComponent('Risposta registrata.');
+      } else {
+        alert('Errore: ' + data.error);
+      }
+    }
+
+    let _finalizzaId = null;
+    function apriFinalizza(id, nomeGiocatore, importo) {
+      _finalizzaId = id;
+      document.getElementById('finalizza-title').textContent = `🏁 Finalizza: ${nomeGiocatore}`;
+      document.getElementById('finalizza-desc').textContent  = `Importo: ${importo} M`;
+      document.getElementById('finalizza-error').style.display = 'none';
+      document.getElementById('modal-finalizza').classList.add('open');
+    }
+    document.getElementById('btn-conferma-finalizza').addEventListener('click', async () => {
+      const btn = document.getElementById('btn-conferma-finalizza');
+      const errEl = document.getElementById('finalizza-error');
+      errEl.style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Elaborazione…';
+
+      const body = {
+        anniContratto: document.getElementById('anni-contratto').value,
+        categoria:     document.getElementById('categoria-rosa').value,
+      };
+      try {
+        const r = await fetch(`/mercato/offerta/${_finalizzaId}/finalizza`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          window.location.href = '/mercato/inbox?success=' + encodeURIComponent('Trasferimento completato con successo!');
+        } else {
+          errEl.textContent = data.error || 'Errore sconosciuto.';
+          errEl.style.display = 'block';
+        }
+      } catch(err) {
+        errEl.textContent = 'Errore di rete: ' + err.message;
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false; btn.textContent = '✅ Conferma trasferimento';
+      }
+    });
+
+    // Chiudi modal cliccando overlay
+    document.querySelectorAll('.modal-overlay').forEach(el => {
+      el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+    });
+  </script>
+</body>
+</html>

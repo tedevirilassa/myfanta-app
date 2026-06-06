@@ -45,6 +45,28 @@
       border: none; border-radius: 6px; cursor: pointer; align-self: flex-start;
     }
     .edit-user-form .btn-save:hover { background: var(--green-dark); }
+
+    /* ── Sezione invita ───────────────────────────────────────────────── */
+    .invite-section {
+      border: 2px solid var(--green-light); border-radius: 12px;
+      margin-bottom: 24px; overflow: hidden;
+    }
+    .invite-toggle {
+      width: 100%; display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; background: #f0fdf4; cursor: pointer;
+      border: none; font-size: .9rem; font-weight: 700; color: var(--green-dark);
+      text-align: left;
+    }
+    .invite-toggle .arrow { transition: transform .2s; font-size: .75rem; }
+    .invite-body {
+      padding: 20px 24px; background: #fff;
+      display: none;
+    }
+    .invite-body.open { display: block; }
+    .invite-grid { display: grid; grid-template-columns: 1fr 180px 180px auto; gap: 12px; align-items: end; }
+    @media (max-width: 680px) {
+      .invite-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -54,7 +76,58 @@
   <div class="container">
     <div class="page-header">
       <h1>Gestione utenti</h1>
-      <a href="/admin/users/invite" class="btn btn-primary">+ Invita utente</a>
+    </div>
+
+    <%# ── Sezione Invita utente ──────────────────────────────────────────── %>
+    <div class="invite-section" id="invita">
+      <button class="invite-toggle" id="inviteToggle" type="button">
+        <span>➕ Invita nuovo utente</span>
+        <span class="arrow" id="inviteArrow">▼</span>
+      </button>
+      <div class="invite-body" id="inviteBody">
+        <% if (inviteMessage) { %>
+          <div class="alert alert-success" style="margin-bottom:16px;">✔ <%= inviteMessage %></div>
+        <% } %>
+        <% if (inviteError) { %>
+          <div class="alert alert-error" style="margin-bottom:16px;">❌ <%= inviteError %></div>
+        <% } %>
+        <p style="font-size:.85rem; color:var(--gray-500); margin-bottom:16px;">
+          L'utente verrà creato con la password predefinita <strong>primalogin2026</strong>
+          e dovrà cambiarla al primo accesso.
+        </p>
+        <form action="/admin/users/invite" method="POST">
+          <div class="invite-grid">
+            <div>
+              <label style="font-size:.78rem; font-weight:700; color:var(--gray-500); display:block; margin-bottom:4px;">Indirizzo email *</label>
+              <input type="email" name="email" placeholder="utente@esempio.it" required
+                     style="width:100%; padding:8px 12px; border:1.5px solid var(--gray-200); border-radius:7px; font-size:.9rem;">
+            </div>
+            <div>
+              <label style="font-size:.78rem; font-weight:700; color:var(--gray-500); display:block; margin-bottom:4px;">Ruolo *</label>
+              <select name="role" required
+                      style="width:100%; padding:8px 10px; border:1.5px solid var(--gray-200); border-radius:7px; font-size:.9rem;">
+                <option value="" disabled selected>Seleziona…</option>
+                <option value="USER">User</option>
+                <option value="POWER_USER">Power User</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:.78rem; font-weight:700; color:var(--gray-500); display:block; margin-bottom:4px;">Email di benvenuto</label>
+              <label style="display:flex; align-items:center; gap:8px; padding:8px 0; font-size:.88rem; cursor:pointer;">
+                <input type="checkbox" name="sendEmail" value="1" checked
+                       style="width:16px; height:16px; accent-color:var(--green-mid);">
+                Invia email all'utente
+              </label>
+            </div>
+            <div>
+              <button type="submit" class="btn btn-primary" style="white-space:nowrap; padding:8px 20px;">
+                Crea utente
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
 
     <% if (message) { %>
@@ -181,5 +254,25 @@
     </div><!-- /user-grid -->
 
   </div><!-- /container -->
+
+  <script>
+    // ── Toggle sezione invita ──────────────────────────────────────────────────
+    const toggle  = document.getElementById('inviteToggle');
+    const body    = document.getElementById('inviteBody');
+    const arrow   = document.getElementById('inviteArrow');
+
+    function openInvite()  { body.classList.add('open');    arrow.style.transform = 'rotate(180deg)'; }
+    function closeInvite() { body.classList.remove('open'); arrow.style.transform = ''; }
+
+    toggle.addEventListener('click', () =>
+      body.classList.contains('open') ? closeInvite() : openInvite()
+    );
+
+    // Auto-apri se ci sono messaggi di risposta all'invito o se l'anchor è #invita
+    <% if (inviteMessage || inviteError) { %>
+    openInvite();
+    <% } %>
+    if (window.location.hash === '#invita') openInvite();
+  </script>
 </body>
 </html>

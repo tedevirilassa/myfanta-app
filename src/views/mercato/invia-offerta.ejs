@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Invia Offerta' }) %>
+  <style>
+    .form-card { background:#fff; border-radius:10px; padding:28px 32px; box-shadow:0 2px 10px rgba(26,58,42,.08); }
+    .range-bar { background:#f0fdf4; border:1.5px solid var(--green-light); border-radius:8px; padding:12px 16px; margin-bottom:18px; font-size:.88rem; }
+    .range-bar strong { color:var(--green-dark); }
+    .gioc-select-wrap { position:relative; }
+    .player-row { display:flex; justify-content:space-between; align-items:center; }
+    .player-badge { font-size:.72rem; font-weight:700; padding:2px 7px; border-radius:10px; background:var(--gray-100); color:var(--gray-600); }
+    label { display:block; font-weight:700; font-size:.82rem; color:var(--gray-700); margin-bottom:5px; margin-top:14px; }
+    select, input[type=number] {
+      width:100%; padding:10px 12px; border:1.5px solid var(--gray-200);
+      border-radius:8px; font-size:.9rem; background:#fafdfa; outline:none;
+    }
+    select:focus, input[type=number]:focus { border-color:var(--green-mid); box-shadow:0 0 0 2px rgba(45,106,79,.15); }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:680px;">
+    <div class="page-header">
+      <h1>📨 Invia Offerta di Mercato</h1>
+      <a href="/mercato/inbox" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">📬 Inbox</a>
+    </div>
+
+    <% if (error) { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+    <% if (success) { %><div class="alert alert-success">✅ Offerta inviata con successo!</div><% } %>
+
+    <div class="form-card">
+      <!-- Step 1: scegli team avversario (ricarica pagina) -->
+      <form method="GET" action="/mercato/invia-offerta" id="form-team">
+        <label for="teamId">Team avversario</label>
+        <select name="teamId" id="teamId" onchange="this.form.submit()">
+          <option value="">— Seleziona un team —</option>
+          <% altriTeam.forEach(t => { %>
+            <option value="<%= t.id %>" <%= preselTeamId === t.id ? 'selected' : '' %>>
+              <%= t.nome %><% if (t.user) { %> (<%= t.user.nickname || t.user.email.split('@')[0] %>)<% } %>
+            </option>
+          <% }) %>
+        </select>
+      </form>
+
+      <% if (preselTeamId && giocatoriTeamSelezionato.length > 0) { %>
+        <form id="form-offerta">
+          <input type="hidden" name="fantaTeamRiceventeId" value="<%= preselTeamId %>">
+
+          <label for="giocatoreId">Giocatore</label>
+          <select name="giocatoreId" id="giocatoreId" onchange="aggiornaPrezzi()">
+            <option value="">— Seleziona —</option>
+            <% giocatoriTeamSelezionato.forEach(g => { %>
+              <option value="<%= g.giocatoreId %>"
+                      data-valore="<%= g.valore != null ? g.valore : '' %>">
+                [<%= g.ruolo %>] <%= g.nome %>
+                <% if (g.squadra) { %> — <%= g.squadra %><% } %>
+                <% if (g.valore != null) { %> (<%=  g.valore.toFixed(2) %> M)<% } else { %> (valore n/d)<% } %>
+              </option>
+            <% }) %>
+          </select>
+
+          <div id="range-bar" class="range-bar" style="display:none;">
+            Range consentito (±40%):
+            <strong id="range-min">—</strong> M ÷ <strong id="range-max">—</strong> M
+            &nbsp;|&nbsp; Valore TM: <strong id="range-ref">—</strong> M
+          </div>
+
+          <label for="importoOfferta">Offerta (M)</label>
+          <input type="number" name="importoOfferta" id="importoOfferta"
+                 step="0.01" min="0" placeholder="es. 12.50" required>
+
+          <div style="margin-top:22px;">
+            <button type="submit" class="btn btn-success" id="btn-offerta">
+              📨 Invia Offerta
+            </button>
+            <span id="offerta-spinner" style="display:none; font-size:.85rem; color:var(--gray-500); margin-left:10px;">Invio in corso…</span>
+          </div>
+          <div id="offerta-error" class="alert alert-error" style="display:none; margin-top:12px;"></div>
+        </form>
+
+      <% } else if (preselTeamId) { %>
+        <p style="color:var(--gray-500); margin-top:16px; font-size:.88rem;">
+          Il team selezionato non ha giocatori con contratto Acquisto attivo.
+        </p>
+      <% } %>
+    </div>
+  </div>
+
+  <script>
+    const DELTA = 0.40;
+
+    function aggiornaPrezzi() {
+      const sel = document.getElementById('giocatoreId');
+      const opt = sel.options[sel.selectedIndex];
+      const valore = parseFloat(opt?.dataset?.valore);
+      const bar = document.getElementById('range-bar');
+
+      if (!valore || isNaN(valore)) { bar.style.display = 'none'; return; }
+
+      const minV = (valore * (1 - DELTA)).toFixed(2);
+      const maxV = (valore * (1 + DELTA)).toFixed(2);
+      document.getElementById('range-min').textContent = minV;
+      document.getElementById('range-max').textContent = maxV;
+      document.getElementById('range-ref').textContent = valore.toFixed(2);
+      document.getElementById('importoOfferta').min  = minV;
+      document.getElementById('importoOfferta').max  = maxV;
+      document.getElementById('importoOfferta').value = valore.toFixed(2);
+      bar.style.display = 'block';
+    }
+
+    document.getElementById('form-offerta')?.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-offerta');
+      const spinner = document.getElementById('offerta-spinner');
+      const errEl  = document.getElementById('offerta-error');
+      errEl.style.display = 'none';
+      btn.disabled = true; spinner.style.display = 'inline';
+
+      const fd = new FormData(this);
+      const body = Object.fromEntries(fd.entries());
+
+      try {
+        const r = await fetch('/mercato/offerta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          window.location.href = '/mercato/invia-offerta?success=1';
+        } else {
+          errEl.textContent = data.error || 'Errore sconosciuto.';
+          errEl.style.display = 'block';
+        }
+      } catch(err) {
+        errEl.textContent = 'Errore di rete: ' + err.message;
+        errEl.style.display = 'block';
+      } finally {
+        btn.disabled = false; spinner.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

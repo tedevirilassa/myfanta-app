@@ -72,6 +72,7 @@ router.get("/rosa/:fantaTeamId", ctrl.showRosa);
 router.post("/rosa/:fantaTeamId", ctrl.saveRosa);
 router.get("/premi/classifica", ctrl.showPremiClassifica);
 router.post("/premi/classifica", ctrl.savePremiClassifica);
+router.get("/premi",       ctrl.showPremiCombinati);
 router.get("/premi/:tipo", ctrl.showPremi);
 router.post("/premi/:tipo", ctrl.savePremi);
 router.post("/sync-quotazioni", ctrl.syncQuotazioni);
