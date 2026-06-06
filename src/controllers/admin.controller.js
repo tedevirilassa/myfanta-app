@@ -914,7 +914,11 @@ async function savePremiClassifica(req, res) {
 }
 
 // ── GET /admin/calendario-azioni ──────────────────────────────────────────────
-async function showCalendarioAzioni(req, res, next) {
+// GET /admin/calendario-azioni — redirect a /admin/parametri (sezione unificata)
+async function showCalendarioAzioni(req, res) {
+  return res.redirect("/admin/parametri#calendario");
+}
+async function _showCalendarioAzioniOld(req, res, next) {
   try {
     const params = await parametriService.getAll();
     const stagione = getStagioneCorrente(params);
@@ -1004,7 +1008,7 @@ async function saveCalendarioDate(req, res) {
   // Validazione formato GG-MM
   const re = /^\d{2}-\d{2}$/;
   if (!re.test(inizio) || !re.test(fine)) {
-    return res.redirect("/admin/calendario-azioni?error=" + encodeURIComponent("Formato date non valido. Usare GG-MM (es. 01-07)."));
+    return res.redirect("/admin/parametri?error=" + encodeURIComponent("Formato date non valido. Usare GG-MM (es. 01-07)."));
   }
 
   await prisma.parametro.updateMany({ where: { chiave: chiavi[0] }, data: { valore: inizio } });
@@ -1016,7 +1020,7 @@ async function saveCalendarioDate(req, res) {
     dettaglio: { gruppo, inizio, fine }, adminId: req.user.id,
   });
 
-  res.redirect("/admin/calendario-azioni?saved=1");
+  res.redirect("/admin/parametri?calsaved=1");
 }
 
 module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showPremiCombinati, showPremiClassifica, savePremiClassifica, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
@@ -2619,18 +2623,71 @@ async function listLog(req, res) {
 
 // ── GET /admin/parametri ─────────────────────────────────────────────────────
 async function listParametri(req, res) {
-  const parametri = await prisma.parametro.findMany({ orderBy: { chiave: "asc" } });
-  const catalogo = await parametriService.getSerieACatalogo() || SERIE_A_TEAMS;
-  const serieATeamNames = await parametriService.getSerieATeamNames();
-  const allTeams = catalogo.map(t => t.nome);
+  const [parametri, catalogo, serieATeamNames, params] = await Promise.all([
+    prisma.parametro.findMany({ orderBy: { chiave: "asc" } }),
+    parametriService.getSerieACatalogo(),
+    parametriService.getSerieATeamNames(),
+    parametriService.getAll(),
+  ]);
+  const resolvedCatalogo = catalogo || SERIE_A_TEAMS;
+  const allTeams = resolvedCatalogo.map(t => t.nome);
   const activeTeams = serieATeamNames || allTeams;
-  const message = req.query.saved ? "Parametro aggiornato."
+
+  // ── Calendario data ─────────────────────────────────────────────────────
+  const stagione = getStagioneCorrente(params);
+  const oggi = new Date();
+  const dd = oggi.getDate();
+  const mm = oggi.getMonth() + 1;
+
+  function isOpen(inizio, fine) {
+    const inizioStr = String(inizio || "01-07");
+    const fineStr   = String(fine   || "15-09");
+    const [gi, mi] = inizioStr.split("-").map(Number);
+    const [gf, mf] = fineStr.split("-").map(Number);
+    const now = mm * 100 + dd;
+    const start = mi * 100 + gi;
+    const end   = mf * 100 + gf;
+    if (start <= end) return now >= start && now <= end;
+    return now >= start || now <= end;
+  }
+
+  const stati = {
+    mercatoEstivo:    isOpen(params.mercato_estivo_inizio,    params.mercato_estivo_fine),
+    mercatoInvernale: isOpen(params.mercato_invernale_inizio, params.mercato_invernale_fine),
+    mercatoPrivato:   isOpen(params.mercato_privato_inizio,   params.mercato_privato_fine),
+  };
+
+  let premiInizioErogato = null, premiGennaioErogato = null;
+  let proposteRinnovoPending = 0, contrattiValidi = 0, ultimaQuotazione = null;
+
+  const calResults = await Promise.allSettled([
+    prisma.premioErogato.findFirst({ where: { tipo: "InizioStagione", stagione } }),
+    prisma.premioErogato.findFirst({ where: { tipo: "Gennaio",        stagione } }),
+    prisma.propostaRinnovo.count({ where: { status: "PENDING", stagione } }),
+    prisma.contratto.count({ where: { valido: true } }),
+    prisma.quotazione.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+  ]);
+  if (calResults[0].status === "fulfilled") premiInizioErogato      = calResults[0].value;
+  if (calResults[1].status === "fulfilled") premiGennaioErogato     = calResults[1].value;
+  if (calResults[2].status === "fulfilled") proposteRinnovoPending  = calResults[2].value;
+  if (calResults[3].status === "fulfilled") contrattiValidi         = calResults[3].value;
+  if (calResults[4].status === "fulfilled") ultimaQuotazione        = calResults[4].value;
+
+  const message = req.query.saved      ? "Parametro aggiornato."
+                : req.query.calsaved   ? "Date aggiornate con successo."
                 : req.query.teamsSaved ? "Squadre Serie A aggiornate."
-                : req.query.teamAdded ? "Squadra aggiunta al catalogo."
-                : req.query.teamRemoved ? "Squadra rimossa dal catalogo."
+                : req.query.teamAdded  ? "Squadra aggiunta al catalogo."
+                : req.query.teamRemoved? "Squadra rimossa dal catalogo."
                 : null;
   const error = req.query.error ? decodeURIComponent(req.query.error) : null;
-  res.render("admin/parametri", { parametri, currentUser: req.user, message, error, allTeams, activeTeams, catalogo });
+
+  res.render("admin/parametri", {
+    parametri, currentUser: req.user, message, error, allTeams, activeTeams, catalogo: resolvedCatalogo,
+    params, stagione, stati,
+    premiInizioErogato, premiGennaioErogato,
+    proposteRinnovoPending, contrattiValidi,
+    ultimaQuotazione: ultimaQuotazione ? ultimaQuotazione.createdAt : null,
+  });
 }
 
 // ── POST /admin/parametri/serie-a-teams ──────────────────────────────────────
