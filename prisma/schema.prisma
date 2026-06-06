@@ -207,29 +207,31 @@ model RosaGiocatore {
 }
 
 enum StatoTrattativa {
-  PENDING   // offerta inviata, attende risposta
-  ACCEPTED  // accettata, attende finalizzazione
-  REJECTED  // rifiutata
-  COMPLETED // trasferimento completato
-  EXPIRED   // scaduta senza risposta
+  PENDING            // offerta inviata, attende risposta
+  ACCEPTED           // accettata, attende finalizzazione
+  REJECTED           // rifiutata
+  COMPLETED          // trasferimento completato (immediato)
+  COMPLETED_DEFERRED // trasferimento finalizzato con decorrenza futura (in attesa di attivazione)
+  EXPIRED            // scaduta senza risposta
 }
 
 model TrattativaMercato {
-  id                  Int              @id @default(autoincrement())
-  giocatoreId         Int
-  fantaTeamMittenteId Int
+  id                   Int              @id @default(autoincrement())
+  giocatoreId          Int
+  fantaTeamMittenteId  Int
   fantaTeamRiceventeId Int
-  importoOfferta      Decimal          @db.Decimal(10, 2)
-  valoreRiferimento   Decimal          @db.Decimal(10, 2)  // valore TM al momento dell'offerta
-  stato               StatoTrattativa  @default(PENDING)
-  motivoRifiuto       String?
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
-  scadenzaAt          DateTime?        // opzionale: data entro cui rispondere
-  contrattoNuovoId    Int?             // popolato alla finalizzazione
-  giocatore           Giocatore        @relation(fields: [giocatoreId], references: [id])
-  fantaTeamMittente   FantaTeam        @relation("TrattativeMittente",  fields: [fantaTeamMittenteId],  references: [id])
-  fantaTeamRicevente  FantaTeam        @relation("TrattativeRicevente", fields: [fantaTeamRiceventeId], references: [id])
+  importoOfferta       Decimal          @db.Decimal(10, 2)
+  valoreRiferimento    Decimal          @db.Decimal(10, 2)  // valore TM al momento dell'offerta
+  stato                StatoTrattativa  @default(PENDING)
+  motivoRifiuto        String?
+  dataDecorrenza       String?          // MM-YYYY: mese di decorrenza effettiva dell'operazione
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  scadenzaAt           DateTime?        // opzionale: data entro cui rispondere
+  contrattoNuovoId     Int?             // popolato alla finalizzazione
+  giocatore            Giocatore        @relation(fields: [giocatoreId], references: [id])
+  fantaTeamMittente    FantaTeam        @relation("TrattativeMittente",  fields: [fantaTeamMittenteId],  references: [id])
+  fantaTeamRicevente   FantaTeam        @relation("TrattativeRicevente", fields: [fantaTeamRiceventeId], references: [id])
 
   @@map("trattative_mercato")
 }

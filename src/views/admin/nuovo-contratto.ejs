@@ -314,6 +314,8 @@
       selSessione.addEventListener("change", syncStipulaConSessione);
 
       // ── Range prezzoAcquisto: ±40% ultima quotazione TM ────────────────────
+      const MIN_PCT = parseFloat('<%= parametri.contratto_prezzo_min_pct || "0.60" %>');
+      const MAX_PCT = parseFloat('<%= parametri.contratto_prezzo_max_pct || "1.40" %>');
       const hintPrezzo = document.getElementById("hint-prezzo");
       function updatePrezzoRange() {
         if (selTipo.value !== "Acquisto") return;
@@ -326,14 +328,14 @@
           return;
         }
         // Range arrotondato a 1 decimale (step=0.1)
-        const minP = Math.round(valore * 0.6 * 10) / 10;
-        const maxP = Math.round(valore * 1.4 * 10) / 10;
+        const minP = Math.round(valore * MIN_PCT * 10) / 10;
+        const maxP = Math.round(valore * MAX_PCT * 10) / 10;
         inputPrezzo.min = String(minP);
         inputPrezzo.max = String(maxP);
         inputPrezzo.placeholder = minP.toFixed(1) + " – " + maxP.toFixed(1);
         hintPrezzo.textContent =
           "Range ammesso: " + minP.toFixed(1) + " – " + maxP.toFixed(1) +
-          " M (±40% di " + valore.toFixed(2) + " M, 1 decimale)";
+          " M (" + Math.round(MIN_PCT*100) + "%-" + Math.round(MAX_PCT*100) + "% di " + valore.toFixed(2) + " M, 1 decimale)";
         validatePrezzo();
       }
       function validatePrezzo() {
@@ -350,7 +352,7 @@
         const max = parseFloat(inputPrezzo.max);
         if (!isNaN(v) && !isNaN(min) && !isNaN(max) && (v < min || v > max)) {
           inputPrezzo.setCustomValidity(
-            "Prezzo acquisto fuori range: ammesso " + min.toFixed(1) + " – " + max.toFixed(1) + " M (±40% quotazione).");
+            "Prezzo acquisto fuori range: ammesso " + min.toFixed(1) + " – " + max.toFixed(1) + " M (" + Math.round(MIN_PCT*100) + "%–" + Math.round(MAX_PCT*100) + "% quotazione)");
         } else {
           inputPrezzo.setCustomValidity("");
         }

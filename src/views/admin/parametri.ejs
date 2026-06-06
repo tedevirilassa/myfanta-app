@@ -255,7 +255,6 @@
         'Prestiti':  { icon: '🔄', params: [] },
         'Contratti': { icon: '📝', params: [] },
         'Stipendi':  { icon: '💰', params: [] },
-        'Mercato':   { icon: '🏪', params: [] },
         'Budget':    { icon: '💵', params: [] },
         'Altro':     { icon: '⚙️', params: [] },
       };
@@ -265,7 +264,7 @@
         else if (k.startsWith('prestiti_'))  sezioni['Prestiti'].params.push(p);
         else if (k.startsWith('contratto_')) sezioni['Contratti'].params.push(p);
         else if (k.startsWith('stipendio_')) sezioni['Stipendi'].params.push(p);
-        else if (k.startsWith('mercato_'))   sezioni['Mercato'].params.push(p);
+        else if (k.startsWith('mercato_'))   { /* gestiti nel Calendario */ }
         else if (k.startsWith('stagione_'))  { /* gestiti nel Calendario */ }
         else if (k.startsWith('budget_'))    sezioni['Budget'].params.push(p);
         else                                 sezioni['Altro'].params.push(p);

@@ -8,7 +8,15 @@ const { scrapeSerieA }     = require('./transfermarkt.service');
 const parametriService     = require('./parametri.service');
 const { logAction }        = require('./log.service');
 
-const STAGIONE_CORRENTE = '2025-2026';
+// Stagione calcolata dinamicamente dal parametro stagione_inizio.
+function getStagioneCorrente(params) {
+  const stagioneInizio = params.stagione_inizio || '01-07';
+  const meseInizio = parseInt(stagioneInizio.split('-')[1], 10) || 7;
+  const oggi = new Date();
+  const meseOggi = oggi.getMonth() + 1;
+  const anno = meseOggi >= meseInizio ? oggi.getFullYear() : oggi.getFullYear() - 1;
+  return `${anno}-${anno + 1}`;
+}
 
 // ── Normalizzazione nome per matching ────────────────────────────────────────
 
@@ -55,6 +63,10 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
   const catalogo = await parametriService.getSerieACatalogo();
   const ruoliMap  = await parametriService.getRuoliTM();
   const risultati = await scrapeSerieA((msg) => onEvent({ type: 'log', msg }), teamNames, ruoliMap, catalogo);
+
+  // Stagione corrente dinamica (da parametro)
+  const _params = await parametriService.getAll();
+  const STAGIONE_CORRENTE = getStagioneCorrente(_params);
 
   // ── 2. Elaborazione per squadra ─────────────────────────────────────────
   for (const [teamNome, giocatori] of risultati.entries()) {

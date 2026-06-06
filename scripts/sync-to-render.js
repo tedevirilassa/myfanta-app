@@ -305,6 +305,20 @@ async function main() {
     });
     await resetSequence(remotePool, "premi_erogati");
 
+    // ── trattative_mercato ──
+    logSection("Sync tabella: trattative_mercato");
+    await syncTable({
+      localPool, remotePool,
+      table: "trattative_mercato",
+      columns: [
+        '"id"', '"giocatoreId"', '"fantaTeamMittenteId"', '"fantaTeamRiceventeId"',
+        '"importoOfferta"', '"valoreRiferimento"', '"stato"', '"motivoRifiuto"',
+        '"dataDecorrenza"', '"createdAt"', '"updatedAt"', '"scadenzaAt"',
+        '"contrattoNuovoId"',
+      ],
+    });
+    await resetSequence(remotePool, "trattative_mercato");
+
     logSection("Sincronizzazione completata con successo");
   } catch (err) {
     console.error("\nERRORE durante la sincronizzazione:", err.message);

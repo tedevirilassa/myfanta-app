@@ -19,6 +19,7 @@
     .trattativa-card.accepted { border-left-color: #22c55e; }
     .trattativa-card.rejected { border-left-color: #ef4444; }
     .trattativa-card.completed{ border-left-color: var(--green-mid); }
+    .trattativa-card.completed_deferred { border-left-color: #0ea5e9; }
     .trattativa-card.expired  { border-left-color: var(--gray-300); }
 
     .card-header { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; }
@@ -29,6 +30,7 @@
     .stato-ACCEPTED  { background:#dcfce7; color:#166534; }
     .stato-REJECTED  { background:#fee2e2; color:#991b1b; }
     .stato-COMPLETED { background:#d1fae5; color:#065f46; }
+    .stato-COMPLETED_DEFERRED { background:#e0f2fe; color:#0369a1; }
     .stato-EXPIRED   { background:var(--gray-100); color:var(--gray-500); }
 
     .importo { font-size:1.1rem; font-weight:800; color:var(--green-dark); }
@@ -95,6 +97,7 @@
               Valore TM: <%= Number(t.valoreRiferimento).toFixed(2) %> M
               · Ricevuta il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
               <% if (t.scadenzaAt) { %> · Scade il <%= new Date(t.scadenzaAt).toLocaleDateString('it-IT') %><% } %>
+              <% if (t.dataDecorrenza) { %> · Decorrenza: <strong><%= t.dataDecorrenza %></strong><% } %>
             </span>
             <% if (t.motivoRifiuto) { %><br><em>Motivo rifiuto: <%= t.motivoRifiuto %></em><% } %>
           </div>
@@ -129,6 +132,7 @@
             <span class="card-meta">
               Valore TM: <%= Number(t.valoreRiferimento).toFixed(2) %> M
               · Inviata il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
+              <% if (t.dataDecorrenza) { %> · Decorrenza: <strong><%= t.dataDecorrenza %></strong><% } %>
             </span>
             <% if (t.motivoRifiuto) { %><br><em>Motivo rifiuto: <%= t.motivoRifiuto %></em><% } %>
           </div>

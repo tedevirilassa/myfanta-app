@@ -22,8 +22,13 @@ function stagioneSuccessiva(stagione) {
 // Salary cap globale lega: 10% di [(max + min)/2 * 25%] del valore rosa
 // (somma valore giocatori sotto contratto Acquisto valido), calcolato sui team
 // con almeno un contratto valido. Restituisce valore in M€.
-//   cap = (max + min) / 2 * 0.25 * 0.10  =  (max + min) / 2 * 0.025
+// I coefficienti provengono dalla tabella Parametro:
+//   rinnovi_salary_cap_pct   (default 0.25)
+//   stipendio_percentuale    (default 0.10)
 async function calcSalaryCapGlobale() {
+  const params = await parametriService.getAll();
+  const salaryCapPct = parseFloat(params.rinnovi_salary_cap_pct || "0.25");
+  const stipPct      = parseFloat(params.stipendio_percentuale  || "0.10");
   const teams = await prisma.fantaTeam.findMany({ select: { id: true } });
   const valori = [];
   for (const t of teams) {
@@ -44,7 +49,7 @@ async function calcSalaryCapGlobale() {
   if (valori.length === 0) return 0;
   const maxR = Math.max(...valori);
   const minR = Math.min(...valori);
-  return Math.round(((maxR + minR) / 2) * 0.25 * 0.10 * 100) / 100;
+  return Math.round(((maxR + minR) / 2) * salaryCapPct * stipPct * 100) / 100;
 }
 
 // Contratti in scadenza = Acquisto valido con dataFine entro mese inizio

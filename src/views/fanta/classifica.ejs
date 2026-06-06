@@ -170,7 +170,7 @@
         const roseValues = classifica.map(p => p.valoreRose);
         const maxRosa = Math.max(...roseValues);
         const minRosa = Math.min(...roseValues);
-        const quotaRinnovi = Math.round(((maxRosa + minRosa) / 2) * 0.25 * 100) / 100;
+        const quotaRinnovi = Math.round(((maxRosa + minRosa) / 2) * salaryCapPct * 100) / 100;
         const leader = classifica[0];
         const bestPM = [...classifica].sort((a,b)=>b.ultimoPlusMinus-a.ultimoPlusMinus)[0];
         const mostPlayers = [...classifica].sort((a,b)=>b.giocatoriTesserati-a.giocatoriTesserati)[0];
@@ -178,7 +178,7 @@
       <div class="card" style="padding:20px;">
         <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Quota Rinnovi</div>
         <div style="font-size:1.5rem; font-weight:800; color:var(--green-dark);"><%= quotaRinnovi.toFixed(2) %></div>
-        <div style="font-size:.72rem; color:var(--gray-400); margin-top:4px;">25% media tra max (<%= maxRosa.toFixed(2) %>) e min (<%= minRosa.toFixed(2) %>)</div>
+        <div style="font-size:.72rem; color:var(--gray-400); margin-top:4px;"><%= Math.round(salaryCapPct * 100) %>% media tra max (<%= maxRosa.toFixed(2) %>) e min (<%= minRosa.toFixed(2) %>)</div>
       </div>
       <div class="card" style="padding:20px;">
         <div style="font-size:.75rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Leader</div>

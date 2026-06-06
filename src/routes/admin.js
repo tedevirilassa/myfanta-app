@@ -4,6 +4,7 @@ const router = express.Router();
 const { requireAuth, requireAdmin } = require("../middleware/auth.middleware");
 const ctrl = require("../controllers/admin.controller");
 const rinnoviCtrl = require("../controllers/rinnovi.controller");
+const { attivaTrattativeDifferite } = require("../controllers/mercato.controller");
 
 // ── Stop impersonate (PRIMA di requireAdmin!) ────────────
 // Accessibile anche all'utente impersonato (potrebbe non essere admin):
@@ -12,6 +13,17 @@ router.post("/stop-impersonate", requireAuth, ctrl.stopImpersonate);
 
 // Tutte le altre rotte admin richiedono autenticazione + ruolo ADMIN
 router.use(requireAuth, requireAdmin);
+
+// ── Job automatico: attiva trasferimenti differiti (debounce 1h) ─────────────
+let _ultimoCheckDifferiti = 0;
+router.use(async (req, res, next) => {
+  const ora = Date.now();
+  if (ora - _ultimoCheckDifferiti > 60 * 60 * 1000) {
+    _ultimoCheckDifferiti = ora;
+    attivaTrattativeDifferite().catch((e) => console.error("[job differiti]", e.message));
+  }
+  next();
+});
 
 // ── Impersonificazione ─────────────────────────────────
 router.post("/users/:id/impersonate", ctrl.startImpersonate);

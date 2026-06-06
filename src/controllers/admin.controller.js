@@ -510,7 +510,8 @@ async function runScrapeTransfermarkt(req, res) {
     send({ type: "log", msg: `🔍 Confronto con il database…` });
 
     const preview = [];
-    const STAGIONE_CORRENTE = "2025-2026";
+    const _paramsForStag = await parametriService.getAll();
+    const STAGIONE_CORRENTE = getStagioneCorrente(_paramsForStag);
 
     // Normalizza nome per matching. Match SOLO per nome (no transfermarktId,
     // no squadra). Gestisce: NFD strip diacritici, lettere estese non
@@ -574,7 +575,8 @@ async function importTransfermarkt(req, res) {
   }
 
   const stats = { nuovi: 0, aggiornati: 0, inattivi: 0, quotazioni: 0, errori: 0 };
-  const STAGIONE_CORRENTE = "2025-2026";
+  const _impParams = await parametriService.getAll();
+  const STAGIONE_CORRENTE = getStagioneCorrente(_impParams);
 
   for (const p of players) {
     try {
@@ -724,18 +726,21 @@ async function applyRealignRuoli(req, res) {
 }
 
 // ── Premi classifica (fine stagione) ─────────────────────────────────────────
-const PERCENTUALI_CLASSIFICA = {
-  10: 1.23,
-  9:  1.16,
-  8:  0.93,
-  7:  0.91,
-  6:  0.76,
-  5:  0.73,
-  4:  0.71,
-  3:  0.67,
-  2:  0.61,
-  1:  0.53,
+// Le percentuali vengono lette dalla tabella Parametro (premi_class_pos_1..10).
+// Fallback ai valori storici nel caso un parametro non esista ancora.
+const PERCENTUALI_CLASSIFICA_DEFAULT = {
+  10: 1.23, 9: 1.16, 8: 0.93, 7: 0.91, 6: 0.76,
+  5: 0.73,  4: 0.71, 3: 0.67, 2: 0.61, 1: 0.53,
 };
+async function getPercentualiClassifica() {
+  const params = await parametriService.getAll();
+  const map = {};
+  for (let i = 1; i <= 10; i++) {
+    const v = parseFloat(params[`premi_class_pos_${i}`]);
+    map[i] = Number.isFinite(v) ? v : PERCENTUALI_CLASSIFICA_DEFAULT[i];
+  }
+  return map;
+}
 
 // GET /admin/premi/classifica
 async function showPremiClassifica(req, res) {
@@ -779,16 +784,19 @@ async function showPremiClassifica(req, res) {
     });
   } catch { /* tabella potrebbe non esistere */ }
 
-  // Blocco soft: erogato negli ultimi 30 giorni?
-  const soglia30gg = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const giaErogato = ultimiPremi.find(p => new Date(p.createdAt) > soglia30gg) || null;
+  // Blocco soft: erogato negli ultimi N giorni (da parametro)
+  const _paramsPremi = await parametriService.getAll();
+  const bloccoDays = parseInt(_paramsPremi.premi_classifica_blocco_giorni) || 30;
+  const sogliaBlocco = new Date(Date.now() - bloccoDays * 24 * 60 * 60 * 1000);
+  const giaErogato = ultimiPremi.find(p => new Date(p.createdAt) > sogliaBlocco) || null;
+  const percentuali = await getPercentualiClassifica();
 
   res.render("admin/premi-classifica", {
     currentUser: req.user,
     sfList,
     maxValore,
     topGiocatore: topQuotazione ? topQuotazione.giocatore.nome : null,
-    percentuali: PERCENTUALI_CLASSIFICA,
+    percentuali,
     ultimiPremi,
     giaErogato,
     error:   req.query.error ? decodeURIComponent(req.query.error) : null,
@@ -798,15 +806,17 @@ async function showPremiClassifica(req, res) {
 
 // POST /admin/premi/classifica
 async function savePremiClassifica(req, res) {
-  // Blocco soft: già erogato negli ultimi 30 giorni?
+  // Blocco soft: già erogato negli ultimi N giorni (da parametro)
   try {
-    const soglia30gg = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const _p = await parametriService.getAll();
+    const bloccoDays = parseInt(_p.premi_classifica_blocco_giorni) || 30;
+    const sogliaBlocco = new Date(Date.now() - bloccoDays * 24 * 60 * 60 * 1000);
     const recente = await prisma.premioErogato.findFirst({
-      where: { tipo: "Classifica", createdAt: { gte: soglia30gg } },
+      where: { tipo: "Classifica", createdAt: { gte: sogliaBlocco } },
     });
     if (recente) {
       return res.redirect("/admin/premi/classifica?error=" +
-        encodeURIComponent(`Premi classifica già erogati il ${new Date(recente.createdAt).toLocaleDateString("it-IT")}. Attendi 30 giorni o rimuovi il blocco manualmente.`));
+        encodeURIComponent(`Premi classifica già erogati il ${new Date(recente.createdAt).toLocaleDateString("it-IT")}. Attendi ${bloccoDays} giorni o rimuovi il blocco manualmente.`));
     }
   } catch { /* ignore */ }
 
@@ -855,9 +865,11 @@ async function savePremiClassifica(req, res) {
   let totale = 0;
   const movimenti = [];
 
+  const percMap = await getPercentualiClassifica();
+
   await prisma.$transaction(async (tx) => {
     for (const { sfId, pos } of posizioni) {
-      const percentuale = PERCENTUALI_CLASSIFICA[pos];
+      const percentuale = percMap[pos];
       if (!percentuale) continue;
       const premio = Math.round(maxValore * percentuale * 100) / 100;
       totale = Math.round((totale + premio) * 100) / 100;
@@ -1686,8 +1698,12 @@ async function saveNuovoContratto(req, res) {
     const imp = parseFloat(importoOperazione);
     if (!importoOperazione || isNaN(imp)) {
       errors.push("Il corrispettivo del prestito è obbligatorio.");
-    } else if (imp < 0.1 || imp > 5) {
-      errors.push("Il corrispettivo del prestito deve essere tra 0.1 e 5 M.");
+    } else {
+      const prestiCorrMin = parseFloat(params.prestiti_corrispettivo_min || "0.10");
+      const prestiCorrMax = parseFloat(params.prestiti_spesa_max_totale  || "5.00");
+      if (imp < prestiCorrMin || imp > prestiCorrMax) {
+        errors.push(`Il corrispettivo del prestito deve essere tra ${prestiCorrMin.toFixed(2)} e ${prestiCorrMax.toFixed(2)} M.`);
+      }
     }
     if (durata !== 1) {
       errors.push("Il prestito non può durare più di una stagione (durata = 1).");
@@ -1784,10 +1800,12 @@ async function saveNuovoContratto(req, res) {
     } else {
       const prezzo = parseFloat(prezzoRaw);
       const baseV  = parseFloat(valoreEffettivo);
-      const minP   = Math.round(baseV * 0.6 * 10) / 10;
-      const maxP   = Math.round(baseV * 1.4 * 10) / 10;
+      const minPct = parseFloat(params.contratto_prezzo_min_pct || "0.60");
+      const maxPct = parseFloat(params.contratto_prezzo_max_pct || "1.40");
+      const minP   = Math.round(baseV * minPct * 10) / 10;
+      const maxP   = Math.round(baseV * maxPct * 10) / 10;
       if (prezzo < minP || prezzo > maxP) {
-        errors.push(`Prezzo acquisto fuori range: ammesso ${minP.toFixed(1)} – ${maxP.toFixed(1)} M (±40% di ${baseV.toFixed(2)} M, ricevuto ${prezzo.toFixed(2)}).`);
+        errors.push(`Prezzo acquisto fuori range: ammesso ${minP.toFixed(1)} – ${maxP.toFixed(1)} M (${Math.round(minPct*100)}%–${Math.round(maxPct*100)}% di ${baseV.toFixed(2)} M, ricevuto ${prezzo.toFixed(2)}).`);
       }
     }
   }

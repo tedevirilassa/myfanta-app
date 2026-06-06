@@ -38,6 +38,33 @@ const DEFAULTS = [
   // ── Budget ──
   { chiave: "budget_iniziale", valore: "100", descrizione: "Budget iniziale per presidente (M)" },
 
+  // ── Prezzi acquisto ──
+  { chiave: "contratto_prezzo_min_pct", valore: "0.60", descrizione: "Coefficiente minimo prezzo acquisto rispetto alla quotazione TM (es. 0.60 = 60%)" },
+  { chiave: "contratto_prezzo_max_pct", valore: "1.40", descrizione: "Coefficiente massimo prezzo acquisto rispetto alla quotazione TM (es. 1.40 = 140%)" },
+
+  // ── Prestiti ──
+  { chiave: "prestiti_corrispettivo_min", valore: "0.10", descrizione: "Corrispettivo minimo per un singolo prestito (M)" },
+
+  // ── Mercato P2P ──
+  { chiave: "mercato_p2p_delta",           valore: "0.40", descrizione: "Variazione massima nelle offerte P2P rispetto al valore di mercato (es. 0.40 = ±40%)" },
+  { chiave: "mercato_p2p_scadenza_giorni", valore: "7",    descrizione: "Giorni di validità di un'offerta P2P prima della scadenza automatica" },
+
+  // ── Rinnovi / Salary cap ──
+  { chiave: "rinnovi_salary_cap_pct", valore: "0.25", descrizione: "Percentuale del valore medio rosa usata come base per il salary cap rinnovi (es. 0.25 = 25%)" },
+
+  // ── Premi classifica ──
+  { chiave: "premi_classifica_blocco_giorni", valore: "30",   descrizione: "Giorni minimi tra due erogazioni consecutive dei premi classifica" },
+  { chiave: "premi_class_pos_1",  valore: "0.53", descrizione: "Premio classifica: coefficiente posizione 1  (moltiplicatore × max quotazione)" },
+  { chiave: "premi_class_pos_2",  valore: "0.61", descrizione: "Premio classifica: coefficiente posizione 2" },
+  { chiave: "premi_class_pos_3",  valore: "0.67", descrizione: "Premio classifica: coefficiente posizione 3" },
+  { chiave: "premi_class_pos_4",  valore: "0.71", descrizione: "Premio classifica: coefficiente posizione 4" },
+  { chiave: "premi_class_pos_5",  valore: "0.73", descrizione: "Premio classifica: coefficiente posizione 5" },
+  { chiave: "premi_class_pos_6",  valore: "0.76", descrizione: "Premio classifica: coefficiente posizione 6" },
+  { chiave: "premi_class_pos_7",  valore: "0.91", descrizione: "Premio classifica: coefficiente posizione 7" },
+  { chiave: "premi_class_pos_8",  valore: "0.93", descrizione: "Premio classifica: coefficiente posizione 8" },
+  { chiave: "premi_class_pos_9",  valore: "1.16", descrizione: "Premio classifica: coefficiente posizione 9" },
+  { chiave: "premi_class_pos_10", valore: "1.23", descrizione: "Premio classifica: coefficiente posizione 10" },
+
   // ── Stagione ──
   { chiave: "stagione_inizio", valore: "01-07", descrizione: "Data inizio stagione (GG-MM)" },
   { chiave: "stagione_fine",   valore: "15-06", descrizione: "Data fine stagione (GG-MM)" },

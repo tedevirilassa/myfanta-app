@@ -20,7 +20,9 @@ function stagioneSuccessiva(s) {
   return `${a + 1}-${a + 2}`;
 }
 
-async function calcSalaryCapGlobale(tx) {
+async function calcSalaryCapGlobale(tx, params) {
+  const salaryCapPct = parseFloat(params.rinnovi_salary_cap_pct || "0.25");
+  const stipPct      = parseFloat(params.stipendio_percentuale  || "0.10");
   const teams = await tx.fantaTeam.findMany({ select: { id: true } });
   const valori = [];
   for (const t of teams) {
@@ -41,7 +43,7 @@ async function calcSalaryCapGlobale(tx) {
   if (valori.length === 0) return 0;
   const maxR = Math.max(...valori);
   const minR = Math.min(...valori);
-  return Math.round(((maxR + minR) / 2) * 0.25 * 0.10 * 100) / 100;
+  return Math.round(((maxR + minR) / 2) * salaryCapPct * stipPct * 100) / 100;
 }
 
 async function ultimaQuotazione(tx, giocatoreId, fallbackGiocatoreValore) {
@@ -110,7 +112,7 @@ async function eseguiFineStagione(req, res) {
       });
 
       // ── Step 2: Simula rinnovi → APPROVED / REJECTED ──────────────────
-      const cap = await calcSalaryCapGlobale(tx);
+      const cap = await calcSalaryCapGlobale(tx, params);
       const teams = await tx.fantaTeam.findMany({ include: { user: true } });
       const approved = [];
       const rejected = [];

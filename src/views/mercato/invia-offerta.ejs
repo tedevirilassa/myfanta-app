@@ -61,7 +61,7 @@
           </select>
 
           <div id="range-bar" class="range-bar" style="display:none;">
-            Range consentito (±40%):
+            Range consentito (±<%= Math.round(delta * 100) %>%):
             <strong id="range-min">—</strong> M ÷ <strong id="range-max">—</strong> M
             &nbsp;|&nbsp; Valore TM: <strong id="range-ref">—</strong> M
           </div>
@@ -69,6 +69,14 @@
           <label for="importoOfferta">Offerta (M)</label>
           <input type="number" name="importoOfferta" id="importoOfferta"
                  step="0.01" min="0" placeholder="es. 12.50" required>
+
+          <label for="dataDecorrenza">Data decorrenza (MM-YYYY)</label>
+          <input type="text" name="dataDecorrenza" id="dataDecorrenza"
+                 pattern="\d{2}-\d{4}" placeholder="es. 01-2027" required
+                 style="width:100%; padding:10px 12px; border:1.5px solid var(--gray-200); border-radius:8px; font-size:.9rem; background:#fafdfa;">
+          <div style="font-size:.72rem; color:var(--gray-400); margin-top:3px;">
+            Mese in cui l'operazione diventerà effettiva. Deve rientrare nella finestra di mercato privato.
+          </div>
 
           <div style="margin-top:22px;">
             <button type="submit" class="btn btn-success" id="btn-offerta">
@@ -88,7 +96,7 @@
   </div>
 
   <script>
-    const DELTA = 0.40;
+    const DELTA = parseFloat('<%= delta %>');
 
     function aggiornaPrezzi() {
       const sel = document.getElementById('giocatoreId');

@@ -7,14 +7,47 @@ const { logAction, sfRollbackSQL } = require("../services/log.service");
 const { sendEmailToUser } = require("../services/email.service");
 const parametriService = require("../services/parametri.service");
 
-// ── Costanti ──────────────────────────────────────────────────────────────────
-const OFFERTA_DELTA = 0.40; // ±40% dal valore di mercato
+// ── Costanti rimosse: i valori sono ora in tabella Parametro ─────────────────────
+// mercato_p2p_delta            (default 0.40)
+// mercato_p2p_scadenza_giorni  (default 7)
+// contratto_durata_min / max   (default 1 / 3)
 
 // ── Helper: stagione corrente ─────────────────────────────────────────────────
 function stagioneCorrente() {
   const oggi = new Date();
   const anno = oggi.getMonth() >= 6 ? oggi.getFullYear() : oggi.getFullYear() - 1;
   return `${anno}-${anno + 1}`;
+}
+
+// ── Helper: verifica se dataDecorrenza (MM-YYYY) rientra in una finestra di mercato privato
+function isDataDecorrenzaValida(dataDecorrenza, params) {
+  const [mm, yyyy] = dataDecorrenza.split("-").map(Number);
+  if (!mm || !yyyy || mm < 1 || mm > 12) return { valida: false, errore: "Formato dataDecorrenza non valido (atteso MM-YYYY)." };
+
+  // Finestre: mercato_privato_inizio / mercato_privato_fine (formato GG-MM)
+  const parseMese = (ggmm) => parseInt((ggmm || "").split("-")[1], 10);
+  const privIz  = parseMese(params.mercato_privato_inizio || "01-07");
+  const privFin = parseMese(params.mercato_privato_fine   || "15-02");
+
+  // Finestra che attraversa il capodanno (es. luglio → febbraio): valido se mese >= inizio OR mese <= fine
+  let inFinestra;
+  if (privIz > privFin) {
+    inFinestra = (mm >= privIz || mm <= privFin);
+  } else {
+    inFinestra = (mm >= privIz && mm <= privFin);
+  }
+
+  if (!inFinestra) {
+    return { valida: false, errore: `La data di decorrenza (mese ${mm}) non rientra nella finestra di mercato privato (mesi ${privIz}–${privFin}).` };
+  }
+  return { valida: true };
+}
+
+// ── Helper: controlla se dataDecorrenza corrisponde al mese corrente ──────────
+function isDecorrenzaImmediata(dataDecorrenza) {
+  const [mm, yyyy] = dataDecorrenza.split("-").map(Number);
+  const oggi = new Date();
+  return oggi.getFullYear() === yyyy && (oggi.getMonth() + 1) === mm;
 }
 
 // ── Helper: trova SF per un fantaTeam (più recente) ──────────────────────────
@@ -73,11 +106,15 @@ async function showInviaOfferta(req, res) {
     }));
   }
 
+  const _params = await parametriService.getAll();
+  const delta   = parseFloat(_params.mercato_p2p_delta || "0.40");
+
   res.render("mercato/invia-offerta", {
     currentUser: req.user,
     altriTeam,
     giocatoriTeamSelezionato,
     preselTeamId: teamIdSel,
+    delta,
     error: req.query.error ? decodeURIComponent(req.query.error) : null,
     success: req.query.success === "1",
   });
@@ -134,12 +171,23 @@ async function creaOfferta(req, res) {
   const fantaTeamRiceventeId = parseInt(req.body.fantaTeamRiceventeId, 10);
   const giocatoreId          = parseInt(req.body.giocatoreId, 10);
   const importoOfferta       = parseFloat(req.body.importoOfferta);
+  const dataDecorrenza       = (req.body.dataDecorrenza || "").trim(); // MM-YYYY
 
   if (!fantaTeamRiceventeId || !giocatoreId || isNaN(importoOfferta) || importoOfferta <= 0) {
     return res.status(400).json({ error: "Parametri mancanti o non validi." });
   }
+  if (!dataDecorrenza || !/^\d{2}-\d{4}$/.test(dataDecorrenza)) {
+    return res.status(400).json({ error: "dataDecorrenza obbligatoria (formato MM-YYYY)." });
+  }
   if (fantaTeamRiceventeId === myTeam.id) {
     return res.status(400).json({ error: "Non puoi fare un'offerta a te stesso." });
+  }
+
+  // Validazione dataDecorrenza rispetto alle finestre di mercato privato
+  const _params = await parametriService.getAll();
+  const { valida, errore } = isDataDecorrenzaValida(dataDecorrenza, _params);
+  if (!valida) {
+    return res.status(400).json({ error: errore });
   }
 
   // Verifica che il giocatore appartenga effettivamente al team ricevente
@@ -159,12 +207,13 @@ async function creaOfferta(req, res) {
     return res.status(400).json({ error: "Nessuna quotazione disponibile per questo giocatore. Impossibile validare l'offerta." });
   }
   const valoreRif = Number(ultimaQuot.valore);
-  const minOfferta = Math.round(valoreRif * (1 - OFFERTA_DELTA) * 100) / 100;
-  const maxOfferta = Math.round(valoreRif * (1 + OFFERTA_DELTA) * 100) / 100;
+  const ofDelta   = parseFloat(_params.mercato_p2p_delta || "0.40");
+  const minOfferta = Math.round(valoreRif * (1 - ofDelta) * 100) / 100;
+  const maxOfferta = Math.round(valoreRif * (1 + ofDelta) * 100) / 100;
 
   if (importoOfferta < minOfferta || importoOfferta > maxOfferta) {
     return res.status(400).json({
-      error: `L'offerta deve essere tra ${minOfferta.toFixed(2)} M e ${maxOfferta.toFixed(2)} M (±40% del valore di mercato ${valoreRif.toFixed(2)} M).`,
+      error: `L'offerta deve essere tra ${minOfferta.toFixed(2)} M e ${maxOfferta.toFixed(2)} M (±${Math.round(ofDelta*100)}% del valore di mercato ${valoreRif.toFixed(2)} M).`,
       minOfferta, maxOfferta, valoreRif,
     });
   }
@@ -177,8 +226,9 @@ async function creaOfferta(req, res) {
     return res.status(400).json({ error: "Hai già un'offerta pendente per questo giocatore." });
   }
 
-  // Scadenza: +7 giorni
-  const scadenzaAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  // Scadenza: N giorni da parametro
+  const scadenzaGiorni = parseInt(_params.mercato_p2p_scadenza_giorni || "7", 10);
+  const scadenzaAt = new Date(Date.now() + scadenzaGiorni * 24 * 60 * 60 * 1000);
 
   const trattativa = await prisma.trattativaMercato.create({
     data: {
@@ -187,6 +237,7 @@ async function creaOfferta(req, res) {
       fantaTeamRiceventeId,
       importoOfferta,
       valoreRiferimento:    valoreRif,
+      dataDecorrenza,
       scadenzaAt,
     },
     include: {
@@ -207,6 +258,7 @@ async function creaOfferta(req, res) {
       `<p>Il team <strong>${trattativa.fantaTeamMittente.nome}</strong> ti ha inviato un'offerta di
        <strong>${importoOfferta.toFixed(2)} M</strong> per il giocatore
        <strong>${trattativa.giocatore.nome}</strong>.</p>
+       <p>L'operazione, se accettata, diventerà effettiva in data <strong>${dataDecorrenza}</strong>.</p>
        <p>Hai tempo fino al <strong>${scadenzaAt.toLocaleDateString("it-IT")}</strong> per rispondere.</p>
        <p><a href="${process.env.HOST ? "http://" + process.env.HOST + ":" + (process.env.PORT || 3000) : ""}/mercato/inbox">➡️ Vai alla tua Inbox Mercato</a></p>`
     );
@@ -222,6 +274,7 @@ async function creaOfferta(req, res) {
       fantaTeamRiceventeId,
       importoOfferta,
       valoreRiferimento:    valoreRif,
+      dataDecorrenza,
     },
     adminId: req.user.id,
   });
@@ -289,6 +342,10 @@ async function rispondiOfferta(req, res) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // POST /api/mercato/offerta/:id/finalizza  — esegue il trasferimento
+// Se dataDecorrenza = mese corrente → esecuzione immediata.
+// Se dataDecorrenza = futuro → crea contratto con valido=false, nessun
+// movimento rosa/crediti; lo stato diventa COMPLETED_DEFERRED. L'attivazione
+// avviene tramite il job `attivaTrattativeDifferite`.
 // ═══════════════════════════════════════════════════════════════════════════════
 async function finalizzaTransferimento(req, res) {
   const id              = parseInt(req.params.id, 10);
@@ -296,8 +353,12 @@ async function finalizzaTransferimento(req, res) {
   const categoria       = req.body.categoria; // InRosa | FuoriRosa | U21
   const CATEGORIE_VALIDE = ["InRosa", "FuoriRosa", "U21"];
 
-  if (isNaN(anniContratto) || anniContratto < 1 || anniContratto > 3) {
-    return res.status(400).json({ error: "anniContratto deve essere 1, 2 o 3." });
+  const params          = await parametriService.getAll();
+  const durataMin       = parseInt(params.contratto_durata_min || "1", 10);
+  const durataMax       = parseInt(params.contratto_durata_max || "3", 10);
+
+  if (isNaN(anniContratto) || anniContratto < durataMin || anniContratto > durataMax) {
+    return res.status(400).json({ error: `anniContratto deve essere tra ${durataMin} e ${durataMax}.` });
   }
   if (!CATEGORIE_VALIDE.includes(categoria)) {
     return res.status(400).json({ error: `categoria deve essere uno di: ${CATEGORIE_VALIDE.join(", ")}.` });
@@ -321,173 +382,379 @@ async function finalizzaTransferimento(req, res) {
     return res.status(400).json({ error: `La trattativa deve essere in stato ACCEPTED (attuale: ${trattativa.stato}).` });
   }
 
-  const importo   = Number(trattativa.importoOfferta);
-  const stagione  = stagioneCorrente();
+  const importo        = Number(trattativa.importoOfferta);
+  const stagione       = stagioneCorrente();
+  const dataDecorrenza = trattativa.dataDecorrenza; // MM-YYYY
+  const immediato      = !dataDecorrenza || isDecorrenzaImmediata(dataDecorrenza);
 
-  // Calcola dataFine contratto
-  const oggi    = new Date();
-  const dataFine = `${oggi.getFullYear() + anniContratto}-06-30`;
+  // dataStipula: per immediato = oggi; per differito = dataDecorrenza
+  const oggi           = new Date();
+  const dataStipula    = immediato
+    ? oggi.toISOString().slice(0, 10)
+    : dataDecorrenza; // MM-YYYY (stesso formato usato altrove)
 
-  let movimentoBuyer = null;
+  // dataFine: calcolata dal mese/anno di decorrenza
+  let dataFine;
+  if (immediato) {
+    dataFine = `${oggi.getFullYear() + anniContratto}-06-30`;
+  } else {
+    const [mm, yyyy] = dataDecorrenza.split("-").map(Number);
+    dataFine = `${yyyy + anniContratto}-06-30`;
+  }
+
+  let movimentoBuyer  = null;
   let movimentoSeller = null;
-  let nuovoContratto = null;
+  let nuovoContratto  = null;
 
   try {
     await prisma.$transaction(async (tx) => {
-      // ── A. Situazione finanziaria acquirente ────────────────────────────────
-      const sfBuyer = await tx.situazioneFinanziaria.findFirst({
-        where:   { fantaTeamId: trattativa.fantaTeamMittenteId },
-        orderBy: { updatedAt: "desc" },
-      });
-      if (!sfBuyer) throw new Error(`Situazione finanziaria non trovata per l'acquirente (teamId=${trattativa.fantaTeamMittenteId}).`);
+      if (immediato) {
+        // ══════════════════════════════════════════════════════════════════════
+        // ESECUZIONE IMMEDIATA
+        // ══════════════════════════════════════════════════════════════════════
 
-      const creditiBuyer = Number(sfBuyer.crediti);
-      if (creditiBuyer < importo) {
-        throw new Error(`Crediti insufficienti: hai ${creditiBuyer.toFixed(2)} M, serve ${importo.toFixed(2)} M.`);
-      }
+        // ── A. Situazione finanziaria acquirente ──────────────────────────────
+        const sfBuyer = await tx.situazioneFinanziaria.findFirst({
+          where:   { fantaTeamId: trattativa.fantaTeamMittenteId },
+          orderBy: { updatedAt: "desc" },
+        });
+        if (!sfBuyer) throw new Error(`Situazione finanziaria non trovata per l'acquirente (teamId=${trattativa.fantaTeamMittenteId}).`);
 
-      const creditiBuyerNuovi    = Math.round((creditiBuyer    - importo) * 100) / 100;
-      const patrimonioBuyerNuovi = Math.round((Number(sfBuyer.patrimonio) - importo) * 100) / 100;
+        const creditiBuyer = Number(sfBuyer.crediti);
+        if (creditiBuyer < importo) {
+          throw new Error(`Crediti insufficienti: hai ${creditiBuyer.toFixed(2)} M, serve ${importo.toFixed(2)} M.`);
+        }
 
-      await tx.situazioneFinanziaria.update({
-        where: { id: sfBuyer.id },
-        data:  { crediti: creditiBuyerNuovi, patrimonio: patrimonioBuyerNuovi },
-      });
-      movimentoBuyer = {
-        sfId:      sfBuyer.id,
-        ruolo:     "acquirente",
-        presidente: trattativa.fantaTeamMittente.user?.nickname,
-        crediti:   { prima: creditiBuyer,                  dopo: creditiBuyerNuovi },
-        patrimonio:{ prima: Number(sfBuyer.patrimonio),    dopo: patrimonioBuyerNuovi },
-      };
+        const creditiBuyerNuovi    = Math.round((creditiBuyer - importo) * 100) / 100;
+        const patrimonioBuyerNuovi = Math.round((Number(sfBuyer.patrimonio) - importo) * 100) / 100;
 
-      // ── B. Situazione finanziaria venditore ─────────────────────────────────
-      const sfSeller = await tx.situazioneFinanziaria.findFirst({
-        where:   { fantaTeamId: trattativa.fantaTeamRiceventeId },
-        orderBy: { updatedAt: "desc" },
-      });
-      if (!sfSeller) throw new Error(`Situazione finanziaria non trovata per il venditore (teamId=${trattativa.fantaTeamRiceventeId}).`);
+        await tx.situazioneFinanziaria.update({
+          where: { id: sfBuyer.id },
+          data:  { crediti: creditiBuyerNuovi, patrimonio: patrimonioBuyerNuovi },
+        });
+        movimentoBuyer = {
+          sfId:       sfBuyer.id,
+          ruolo:      "acquirente",
+          presidente: trattativa.fantaTeamMittente.user?.nickname,
+          crediti:    { prima: creditiBuyer,               dopo: creditiBuyerNuovi },
+          patrimonio: { prima: Number(sfBuyer.patrimonio), dopo: patrimonioBuyerNuovi },
+        };
 
-      const creditiSellerNuovi    = Math.round((Number(sfSeller.crediti)    + importo) * 100) / 100;
-      const patrimonioSellerNuovi = Math.round((Number(sfSeller.patrimonio) + importo) * 100) / 100;
+        // ── B. Situazione finanziaria venditore ───────────────────────────────
+        const sfSeller = await tx.situazioneFinanziaria.findFirst({
+          where:   { fantaTeamId: trattativa.fantaTeamRiceventeId },
+          orderBy: { updatedAt: "desc" },
+        });
+        if (!sfSeller) throw new Error(`Situazione finanziaria non trovata per il venditore (teamId=${trattativa.fantaTeamRiceventeId}).`);
 
-      await tx.situazioneFinanziaria.update({
-        where: { id: sfSeller.id },
-        data:  { crediti: creditiSellerNuovi, patrimonio: patrimonioSellerNuovi },
-      });
-      movimentoSeller = {
-        sfId:       sfSeller.id,
-        ruolo:      "venditore",
-        presidente: trattativa.fantaTeamRicevente.user?.nickname,
-        crediti:    { prima: Number(sfSeller.crediti),    dopo: creditiSellerNuovi },
-        patrimonio: { prima: Number(sfSeller.patrimonio), dopo: patrimonioSellerNuovi },
-      };
+        const creditiSellerNuovi    = Math.round((Number(sfSeller.crediti) + importo) * 100) / 100;
+        const patrimonioSellerNuovi = Math.round((Number(sfSeller.patrimonio) + importo) * 100) / 100;
 
-      // ── C. Invalida contratto attuale del giocatore ─────────────────────────
-      await tx.contratto.updateMany({
-        where: {
-          giocatoreId: trattativa.giocatoreId,
-          fantaTeamId: trattativa.fantaTeamRiceventeId,
-          tipo:        "Acquisto",
-          valido:      true,
-        },
-        data: {
-          valido:       false,
-          destinazione: trattativa.fantaTeamMittente.nome,
-        },
-      });
+        await tx.situazioneFinanziaria.update({
+          where: { id: sfSeller.id },
+          data:  { crediti: creditiSellerNuovi, patrimonio: patrimonioSellerNuovi },
+        });
+        movimentoSeller = {
+          sfId:       sfSeller.id,
+          ruolo:      "venditore",
+          presidente: trattativa.fantaTeamRicevente.user?.nickname,
+          crediti:    { prima: Number(sfSeller.crediti),    dopo: creditiSellerNuovi },
+          patrimonio: { prima: Number(sfSeller.patrimonio), dopo: patrimonioSellerNuovi },
+        };
 
-      // ── D. Nuovo contratto ──────────────────────────────────────────────────
-      nuovoContratto = await tx.contratto.create({
-        data: {
-          tipo:              "Acquisto",
-          dataStipula:       oggi.toISOString().slice(0, 10),
-          durataContratto:   anniContratto,
-          dataFine,
-          giocatoreId:       trattativa.giocatoreId,
-          fantaTeamId:       trattativa.fantaTeamMittenteId,
-          valoreGiocatore:   trattativa.valoreRiferimento,
-          prezzoAcquisto:    importo,
-          importoOperazione: importo,
-          provenienza:       trattativa.fantaTeamRicevente.nome,
-          destinazione:      trattativa.fantaTeamMittente.nome,
-          valido:            true,
-        },
-      });
+        // ── C. Invalida contratto attuale del giocatore ───────────────────────
+        await tx.contratto.updateMany({
+          where: {
+            giocatoreId: trattativa.giocatoreId,
+            fantaTeamId: trattativa.fantaTeamRiceventeId,
+            tipo:        "Acquisto",
+            valido:      true,
+          },
+          data: {
+            valido:       false,
+            destinazione: trattativa.fantaTeamMittente.nome,
+          },
+        });
 
-      // ── E. RosaGiocatore: rimuovi dal venditore, aggiungi all'acquirente ────
-      await tx.rosaGiocatore.deleteMany({
-        where: {
-          fantaTeamId: trattativa.fantaTeamRiceventeId,
-          giocatoreId: trattativa.giocatoreId,
-          stagione,
-        },
-      });
-      await tx.rosaGiocatore.upsert({
-        where: {
-          fantaTeamId_giocatoreId_stagione: {
-            fantaTeamId: trattativa.fantaTeamMittenteId,
+        // ── D. Nuovo contratto ────────────────────────────────────────────────
+        nuovoContratto = await tx.contratto.create({
+          data: {
+            tipo:              "Acquisto",
+            dataStipula,
+            durataContratto:   anniContratto,
+            dataFine,
+            giocatoreId:       trattativa.giocatoreId,
+            fantaTeamId:       trattativa.fantaTeamMittenteId,
+            valoreGiocatore:   trattativa.valoreRiferimento,
+            prezzoAcquisto:    importo,
+            importoOperazione: importo,
+            provenienza:       trattativa.fantaTeamRicevente.nome,
+            destinazione:      trattativa.fantaTeamMittente.nome,
+            valido:            true,
+          },
+        });
+
+        // ── E. RosaGiocatore: rimuovi dal venditore, aggiungi all'acquirente ──
+        await tx.rosaGiocatore.deleteMany({
+          where: {
+            fantaTeamId: trattativa.fantaTeamRiceventeId,
             giocatoreId: trattativa.giocatoreId,
             stagione,
           },
-        },
-        create: {
-          fantaTeamId: trattativa.fantaTeamMittenteId,
-          giocatoreId: trattativa.giocatoreId,
-          stagione,
-          categoria:   categoria,
-        },
-        update: { categoria },
-      });
+        });
+        await tx.rosaGiocatore.upsert({
+          where: {
+            fantaTeamId_giocatoreId_stagione: {
+              fantaTeamId: trattativa.fantaTeamMittenteId,
+              giocatoreId: trattativa.giocatoreId,
+              stagione,
+            },
+          },
+          create: {
+            fantaTeamId: trattativa.fantaTeamMittenteId,
+            giocatoreId: trattativa.giocatoreId,
+            stagione,
+            categoria,
+          },
+          update: { categoria },
+        });
 
-      // ── F. Marca trattativa COMPLETED ───────────────────────────────────────
-      await tx.trattativaMercato.update({
-        where: { id },
-        data:  { stato: "COMPLETED", contrattoNuovoId: nuovoContratto.id },
-      });
+        // ── F. Marca trattativa COMPLETED ─────────────────────────────────────
+        await tx.trattativaMercato.update({
+          where: { id },
+          data:  { stato: "COMPLETED", contrattoNuovoId: nuovoContratto.id },
+        });
+
+      } else {
+        // ══════════════════════════════════════════════════════════════════════
+        // DECORRENZA FUTURA — crea contratto con valido=false, nessun
+        // movimento crediti/rosa. L'attivazione avverrà al raggiungimento
+        // della data di decorrenza tramite job.
+        // ══════════════════════════════════════════════════════════════════════
+
+        nuovoContratto = await tx.contratto.create({
+          data: {
+            tipo:              "Acquisto",
+            dataStipula,
+            durataContratto:   anniContratto,
+            dataFine,
+            giocatoreId:       trattativa.giocatoreId,
+            fantaTeamId:       trattativa.fantaTeamMittenteId,
+            valoreGiocatore:   trattativa.valoreRiferimento,
+            prezzoAcquisto:    importo,
+            importoOperazione: importo,
+            provenienza:       trattativa.fantaTeamRicevente.nome,
+            destinazione:      trattativa.fantaTeamMittente.nome,
+            valido:            false, // NON attivo fino alla decorrenza
+          },
+        });
+
+        await tx.trattativaMercato.update({
+          where: { id },
+          data:  { stato: "COMPLETED_DEFERRED", contrattoNuovoId: nuovoContratto.id },
+        });
+      }
     });
 
     // ── Log fuori transazione ─────────────────────────────────────────────────
+    const tipoOperazione = immediato ? "immediata" : "differita";
     await logAction({
       azione:    "CREATE",
       entita:    "trattativa_mercato",
       entitaId:  id,
       dettaglio: {
-        tipo:          "finalizzazione",
-        giocatoreId:   trattativa.giocatoreId,
-        giocatoreNome: trattativa.giocatore.nome,
+        tipo:             "finalizzazione",
+        tipo_operazione:  tipoOperazione,
+        decorrenza:       dataDecorrenza || null,
+        giocatoreId:      trattativa.giocatoreId,
+        giocatoreNome:    trattativa.giocatore.nome,
         importo,
         anniContratto,
         categoria,
         dataFine,
         contrattoNuovoId: nuovoContratto?.id,
-        movimenti: [movimentoBuyer, movimentoSeller],
-        rollbackSQL: [
-          sfRollbackSQL(movimentoBuyer.sfId,  movimentoBuyer.crediti.prima  !== null ? { crediti: movimentoBuyer.crediti.prima,  patrimonio: movimentoBuyer.patrimonio.prima }  : null),
-          sfRollbackSQL(movimentoSeller.sfId, movimentoSeller.crediti.prima !== null ? { crediti: movimentoSeller.crediti.prima, patrimonio: movimentoSeller.patrimonio.prima } : null),
-        ].filter(Boolean),
+        ...(immediato && {
+          movimenti: [movimentoBuyer, movimentoSeller],
+          rollbackSQL: [
+            sfRollbackSQL(movimentoBuyer.sfId,  { crediti: movimentoBuyer.crediti.prima,  patrimonio: movimentoBuyer.patrimonio.prima }),
+            sfRollbackSQL(movimentoSeller.sfId, { crediti: movimentoSeller.crediti.prima, patrimonio: movimentoSeller.patrimonio.prima }),
+          ].filter(Boolean),
+        }),
       },
       adminId: req.user.id,
     });
 
     // Notifica email a entrambi
     const nomGiocatore = trattativa.giocatore.nome;
-    if (trattativa.fantaTeamRicevente.user?.id) {
-      sendEmailToUser(
-        trattativa.fantaTeamRicevente.user.id,
-        `✅ Trasferimento completato: ${nomGiocatore}`,
-        `<p>Il trasferimento di <strong>${nomGiocatore}</strong> al team
-         <strong>${trattativa.fantaTeamMittente.nome}</strong> per
-         <strong>${importo.toFixed(2)} M</strong> è stato completato.</p>
-         <p>I crediti sono stati accreditati sulla tua situazione finanziaria.</p>`
-      );
+    if (immediato) {
+      if (trattativa.fantaTeamRicevente.user?.id) {
+        sendEmailToUser(
+          trattativa.fantaTeamRicevente.user.id,
+          `✅ Trasferimento completato: ${nomGiocatore}`,
+          `<p>Il trasferimento di <strong>${nomGiocatore}</strong> al team
+           <strong>${trattativa.fantaTeamMittente.nome}</strong> per
+           <strong>${importo.toFixed(2)} M</strong> è stato completato.</p>
+           <p>I crediti sono stati accreditati sulla tua situazione finanziaria.</p>`
+        );
+      }
+    } else {
+      // Email di conferma operazione differita
+      const destinatari = [trattativa.fantaTeamRicevente.user?.id, trattativa.fantaTeamMittente.user?.id].filter(Boolean);
+      for (const uid of destinatari) {
+        sendEmailToUser(
+          uid,
+          `📅 Trasferimento differito confermato: ${nomGiocatore}`,
+          `<p>Il trasferimento di <strong>${nomGiocatore}</strong> dal team
+           <strong>${trattativa.fantaTeamRicevente.nome}</strong> al team
+           <strong>${trattativa.fantaTeamMittente.nome}</strong> per
+           <strong>${importo.toFixed(2)} M</strong> è stato registrato con
+           decorrenza <strong>${dataDecorrenza}</strong>.</p>
+           <p>Il giocatore resterà nella rosa attuale e i crediti non saranno movimentati fino al raggiungimento della data di decorrenza.</p>`
+        );
+      }
     }
 
-    return res.json({ ok: true, contrattoNuovoId: nuovoContratto?.id });
+    return res.json({ ok: true, contrattoNuovoId: nuovoContratto?.id, differito: !immediato });
 
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
 }
 
-module.exports = { showInviaOfferta, showInbox, creaOfferta, rispondiOfferta, finalizzaTransferimento };
+// ═══════════════════════════════════════════════════════════════════════════════
+// JOB: attivaTrattativeDifferite
+// Chiamato dall'admin panel o da un cron. Trova tutte le trattative
+// COMPLETED_DEFERRED la cui dataDecorrenza corrisponde al mese corrente (o è
+// passata), ed esegue il trasferimento effettivo (crediti + rosa).
+// ═══════════════════════════════════════════════════════════════════════════════
+async function attivaTrattativeDifferite() {
+  const oggi    = new Date();
+  const mmOggi  = oggi.getMonth() + 1;
+  const yyyyOggi = oggi.getFullYear();
+  const stagione = stagioneCorrente();
+
+  const pendenti = await prisma.trattativaMercato.findMany({
+    where: { stato: "COMPLETED_DEFERRED" },
+    include: {
+      giocatore:          { select: { id: true, nome: true } },
+      fantaTeamMittente:  { include: { user: { select: { id: true, nickname: true } } } },
+      fantaTeamRicevente: { include: { user: { select: { id: true, nickname: true } } } },
+    },
+  });
+
+  const risultati = { attivati: 0, errori: [] };
+
+  for (const t of pendenti) {
+    const [mm, yyyy] = (t.dataDecorrenza || "").split("-").map(Number);
+    if (!mm || !yyyy) continue;
+
+    // Attiva solo se mese/anno corrente >= decorrenza
+    const decDate = new Date(yyyy, mm - 1, 1);
+    const oggiDate = new Date(yyyyOggi, mmOggi - 1, 1);
+    if (oggiDate < decDate) continue; // non ancora raggiunta
+
+    const importo = Number(t.importoOfferta);
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // A. Crediti acquirente
+        const sfBuyer = await tx.situazioneFinanziaria.findFirst({
+          where: { fantaTeamId: t.fantaTeamMittenteId },
+          orderBy: { updatedAt: "desc" },
+        });
+        if (!sfBuyer) throw new Error(`SF non trovata per acquirente teamId=${t.fantaTeamMittenteId}`);
+        const creditiBuyer = Number(sfBuyer.crediti);
+        if (creditiBuyer < importo) throw new Error(`Crediti insufficienti per attivazione differita (teamId=${t.fantaTeamMittenteId}): ${creditiBuyer.toFixed(2)} < ${importo.toFixed(2)}`);
+
+        await tx.situazioneFinanziaria.update({
+          where: { id: sfBuyer.id },
+          data: {
+            crediti:    Math.round((creditiBuyer - importo) * 100) / 100,
+            patrimonio: Math.round((Number(sfBuyer.patrimonio) - importo) * 100) / 100,
+          },
+        });
+
+        // B. Crediti venditore
+        const sfSeller = await tx.situazioneFinanziaria.findFirst({
+          where: { fantaTeamId: t.fantaTeamRiceventeId },
+          orderBy: { updatedAt: "desc" },
+        });
+        if (!sfSeller) throw new Error(`SF non trovata per venditore teamId=${t.fantaTeamRiceventeId}`);
+
+        await tx.situazioneFinanziaria.update({
+          where: { id: sfSeller.id },
+          data: {
+            crediti:    Math.round((Number(sfSeller.crediti) + importo) * 100) / 100,
+            patrimonio: Math.round((Number(sfSeller.patrimonio) + importo) * 100) / 100,
+          },
+        });
+
+        // C. Invalida contratto attuale giocatore
+        await tx.contratto.updateMany({
+          where: {
+            giocatoreId: t.giocatoreId,
+            fantaTeamId: t.fantaTeamRiceventeId,
+            tipo:        "Acquisto",
+            valido:      true,
+          },
+          data: {
+            valido:       false,
+            destinazione: t.fantaTeamMittente.nome,
+          },
+        });
+
+        // D. Attiva il contratto pre-creato
+        if (t.contrattoNuovoId) {
+          await tx.contratto.update({
+            where: { id: t.contrattoNuovoId },
+            data:  { valido: true },
+          });
+        }
+
+        // E. Rosa: rimuovi dal venditore, aggiungi all'acquirente
+        await tx.rosaGiocatore.deleteMany({
+          where: {
+            fantaTeamId: t.fantaTeamRiceventeId,
+            giocatoreId: t.giocatoreId,
+            stagione,
+          },
+        });
+        await tx.rosaGiocatore.create({
+          data: {
+            fantaTeamId: t.fantaTeamMittenteId,
+            giocatoreId: t.giocatoreId,
+            stagione,
+            categoria:   "InRosa",
+          },
+        });
+
+        // F. Marca COMPLETED
+        await tx.trattativaMercato.update({
+          where: { id: t.id },
+          data:  { stato: "COMPLETED" },
+        });
+      });
+
+      await logAction({
+        azione:    "UPDATE",
+        entita:    "trattativa_mercato",
+        entitaId:  t.id,
+        dettaglio: {
+          tipo_operazione: "attivazione_differita",
+          decorrenza:      t.dataDecorrenza,
+          giocatoreNome:   t.giocatore.nome,
+          importo,
+        },
+        adminId: null,
+      });
+
+      risultati.attivati++;
+    } catch (err) {
+      risultati.errori.push({ trattativaId: t.id, giocatore: t.giocatore.nome, errore: err.message });
+    }
+  }
+
+  return risultati;
+}
+
+module.exports = { showInviaOfferta, showInbox, creaOfferta, rispondiOfferta, finalizzaTransferimento, attivaTrattativeDifferite };

@@ -204,6 +204,7 @@ async function showClassifica(req, res) {
       currentUser: req.user,
       teamsPerCombobox,
       teamDetail,
+      salaryCapPct: parseFloat(params.rinnovi_salary_cap_pct || "0.25"),
       error: null,
     });
   } catch (err) {
@@ -292,7 +293,8 @@ async function calcQuotaRinnoviLive() {
   }
   const max = Math.max(...valori);
   const min = Math.min(...valori);
-  return Math.round(((max + min) / 2) * 0.25 * 100) / 100;
+  const salaryCapPct = parseFloat(params.rinnovi_salary_cap_pct || "0.25");
+  return Math.round(((max + min) / 2) * salaryCapPct * 100) / 100;
 }
 
 async function showPresidente(req, res) {
