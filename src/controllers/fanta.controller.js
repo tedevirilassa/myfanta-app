@@ -974,8 +974,11 @@ async function showRosaDettaglio(req, res) {
 
     const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
 
-    // Calcola anni rimanenti dalla dataFine del contratto
-    const meseCorrente = now.getMonth() + 1;
+    // Calcola anni rimanenti dalla dataFine del contratto.
+    // Giugno è il mese di chiusura stagione: per il calcolo si tratta come luglio
+    // (inizio stagione successiva) così i contratti non appaiono accorciati di un anno.
+    const _meseRaw    = now.getMonth() + 1;
+    const meseCorrente = _meseRaw === 6 ? 7 : _meseRaw;
     const annoCorrente = now.getFullYear();
 
     const giocatori = fantaTeam.contratti.map((c) => {
