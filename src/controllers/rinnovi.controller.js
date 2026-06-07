@@ -391,6 +391,9 @@ async function finalizzaRinnovi(req, res) {
   const annoStipulaNuova = parseInt(sTarget.split("-")[0], 10); // es. 2026-2027 → 2026
   const dataStipulaNuova = `${String(meseInizio).padStart(2, "0")}-${annoStipulaNuova}`;
   const pctStipendio = parseFloat(params.stipendio_percentuale || "0.10");
+  // Durata contratto: limiti dal parametro (stessa fonte di createProposta)
+  const durataMin = params.contratto_durata_min ? Number(params.contratto_durata_min) : 1;
+  const durataMax = params.contratto_durata_max ? Number(params.contratto_durata_max) : 3;
 
   try {
     const cap = await calcSalaryCapGlobale();
@@ -439,6 +442,25 @@ async function finalizzaRinnovi(req, res) {
       const approvati = [];
       const rifiutati = [];
       for (const p of pendenti) {
+        // ── Guardia durata: blocca proposte con nuovaDurata fuori range ──────
+        // Questa è una difesa in profondità: createProposta già valida, ma il
+        // parametro potrebbe essere stato modificato dopo la creazione della proposta.
+        if (!Number.isFinite(p.nuovaDurata) || p.nuovaDurata < durataMin || p.nuovaDurata > durataMax) {
+          await prisma.propostaRinnovo.update({
+            where: { id: p.id },
+            data: {
+              status: "REJECTED",
+              motivoStato: `Durata ${p.nuovaDurata} anni non consentita (range: ${durataMin}-${durataMax}). Proposta annullata.`,
+            },
+          });
+          await logAction({
+            azione: "UPDATE", entita: "proposta_rinnovo", entitaId: p.id,
+            dettaglio: { tipo: "finalize-durata-invalida", nuovaDurata: p.nuovaDurata, durataMin, durataMax },
+            adminId: req.user.id,
+          });
+          rifiutati.push(p);
+          continue;
+        }
         const ing = Number(p.nuovoIngaggio);
         if (speso + ing <= cap + 1e-9) { approvati.push(p); speso += ing; }
         else rifiutati.push(p);
