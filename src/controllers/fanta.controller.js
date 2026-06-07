@@ -975,20 +975,23 @@ async function showRosaDettaglio(req, res) {
     const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
 
     // Calcola anni rimanenti dalla dataFine del contratto.
-    // Giugno è il mese di chiusura stagione: per il calcolo si tratta come luglio
-    // (inizio stagione successiva) così i contratti non appaiono accorciati di un anno.
-    const _meseRaw    = now.getMonth() + 1;
-    const meseCorrente = _meseRaw === 6 ? 7 : _meseRaw;
+    // Se il mese corrente è il mese di anticipo scadenze (default: giugno),
+    // la visualizzazione scala di 1 anno per riflettere il rollover imminente.
+    // Il dato reale in DB NON viene toccato.
+    const meseAnticipo = parseInt(params.mese_anticipo_scadenze || "6", 10);
+    const meseCorrente = now.getMonth() + 1;
     const annoCorrente = now.getFullYear();
+    const isAnticipo   = (meseCorrente === meseAnticipo);
 
     const giocatori = fantaTeam.contratti.map((c) => {
       let anniRimanenti = c.durataContratto;
       if (c.dataFine && /^\d{2}-\d{4}$/.test(c.dataFine)) {
         const [mmFine, yyyyFine] = c.dataFine.split("-").map(Number);
-        // Differenza in anni arrotondata per eccesso
         const diffMesi = (yyyyFine - annoCorrente) * 12 + (mmFine - meseCorrente);
         anniRimanenti = Math.max(0, Math.ceil(diffMesi / 12));
       }
+      // Presentazione: nel mese di anticipo scadenze, mostra 1 anno in meno (senza toccare il DB)
+      const anniVisibili = isAnticipo ? Math.max(0, anniRimanenti - 1) : anniRimanenti;
       return {
         id: c.giocatore.id,
         nome: c.giocatore.nome,
@@ -996,7 +999,7 @@ async function showRosaDettaglio(req, res) {
         squadra: c.giocatore.squadra,
         eta: c.giocatore.eta,
         valore: c.giocatore.valore ? +c.giocatore.valore : null,
-        anniContratto: anniRimanenti,
+        anniContratto: anniVisibili,
         tipo: c.tipo,
         dataFine: c.dataFine || null,
         categoria: rosaMap[c.giocatore.id] || "InRosa",
@@ -1008,6 +1011,8 @@ async function showRosaDettaglio(req, res) {
       presidente: fantaTeam.user?.nickname || fantaTeam.user?.email || "—",
       giocatori,
       stagione,
+      meseAnticipo,
+      isAnticipo,
       currentUser: req.user,
       error: null,
     });

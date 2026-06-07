@@ -1280,9 +1280,19 @@ async function listSvincoliInattivi(req, res) {
     orderBy: [{ fantaTeamId: "asc" }, { id: "asc" }],
   });
 
+  // Escludi giocatori in slot U21 (regola: U21 congela il contratto)
+  const u21Rows = await prisma.rosaGiocatore.findMany({
+    where: { stagione, categoria: "U21" },
+    select: { fantaTeamId: true, giocatoreId: true },
+  });
+  const u21Keys = new Set(u21Rows.map((r) => `${r.fantaTeamId}:${r.giocatoreId}`));
+  const contrattiFiltrati = contratti.filter(
+    (c) => !u21Keys.has(`${c.fantaTeam.id}:${c.giocatore.id}`)
+  );
+
   // Annota rimborso preview e SF target
   const candidati = [];
-  for (const c of contratti) {
+  for (const c of contrattiFiltrati) {
     const rimborso = (c.tipo === "Acquisto" && c.giocatore.valore)
       ? Number(c.giocatore.valore)
       : 0;
@@ -1347,6 +1357,12 @@ async function approveSvincoliInattivi(req, res) {
       if (!c)               { errori.push(`#${cid}: non trovato`); continue; }
       if (!c.valido)        { errori.push(`#${cid}: già scaduto`); continue; }
       if (c.giocatore.active) { errori.push(`#${cid}: giocatore tornato attivo`); continue; }
+
+      // Protezione U21: non svincolabile anche se selezionato manualmente
+      const isU21 = await prisma.rosaGiocatore.findFirst({
+        where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId, stagione, categoria: "U21" },
+      });
+      if (isU21) { errori.push(`#${cid}: ${c.giocatore.nome} è in slot U21, contratto protetto`); continue; }
 
       const isAcquisto = c.tipo === "Acquisto";
       const rimborso = isAcquisto && c.giocatore.valore ? Number(c.giocatore.valore) : 0;

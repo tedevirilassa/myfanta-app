@@ -143,12 +143,44 @@ async function eseguiFineStagione(req, res) {
       // (a) Contratti validi con durataContratto<=0 dopo decrement (scaduti naturalmente)
       //     E non oggetto di rinnovo APPROVED.
       // (b) Contratti con proposta REJECTED.
+      // (c) GUARDIA EXTRA: contratti con dataFine nel formato MM-YYYY il cui anno
+      //     <= annoFineStagione, a prescindere da durataContratto (copre import errati
+      //     o contratti aggiunti a stagione iniziata senza passare dal flusso rinnovi).
+      // NOTA: i giocatori in slot U21 sono SEMPRE esclusi dagli svincoli di fine stagione.
+      //       Lo slot U21 "congela" il giocatore: contratto valido indipendentemente da
+      //       dataFine, durataContratto o assenza dallo scraping Transfermarkt.
+      const annoFineStagione = sCorrente.annoInizio + 1; // es. 2026 per stagione 2025-2026
+
+      // Raccogli tutti i giocatoreId in slot U21 per la stagione corrente (per team)
+      const rosaU21Rows = await tx.rosaGiocatore.findMany({
+        where: { stagione: stagioneOld, categoria: "U21" },
+        select: { fantaTeamId: true, giocatoreId: true },
+      });
+      // Set di chiavi composte "fantaTeamId:giocatoreId" per lookup O(1)
+      const u21Keys = new Set(rosaU21Rows.map((r) => `${r.fantaTeamId}:${r.giocatoreId}`));
+
+      // Contratti validi con dataFine scaduta per anno (filtro JS su stringa MM-YYYY)
+      const tuttiValidi = await tx.contratto.findMany({
+        where: { valido: true, NOT: [{ id: { in: Array.from(idsApprovedContrattoVecchio) } }] },
+        select: { id: true, dataFine: true, fantaTeamId: true, giocatoreId: true },
+      });
+      const idsDataFineScaduta = new Set(
+        tuttiValidi
+          .filter((c) => {
+            if (!c.dataFine || !/^\d{2}-\d{4}$/.test(c.dataFine)) return false;
+            if (u21Keys.has(`${c.fantaTeamId}:${c.giocatoreId}`)) return false; // U21 protetti
+            return parseInt(c.dataFine.split("-")[1], 10) <= annoFineStagione;
+          })
+          .map((c) => c.id)
+      );
+
       const candidatiSvincolo = await tx.contratto.findMany({
         where: {
           valido: true,
           OR: [
             { durataContratto: { lte: 0 } },
             { id: { in: Array.from(idsRejectedContrattoVecchio) } },
+            { id: { in: Array.from(idsDataFineScaduta) } },
           ],
           NOT: [
             // Esclude i contratti rinnovati (verranno chiusi nel passo Rinnovi)
@@ -158,8 +190,13 @@ async function eseguiFineStagione(req, res) {
         include: { giocatore: true, fantaTeam: { include: { user: true } } },
       });
 
+      // Filtra ulteriormente: rimuovi qualsiasi U21 rimasto (es. durataContratto<=0)
+      const candidatiSvincoloFiltrati = candidatiSvincolo.filter(
+        (c) => !u21Keys.has(`${c.fantaTeamId}:${c.giocatoreId}`)
+      );
+
       let svincoliApplicati = 0;
-      for (const c of candidatiSvincolo) {
+      for (const c of candidatiSvincoloFiltrati) {
         const quotValore = await ultimaQuotazione(tx, c.giocatoreId, c.giocatore.valore);
 
         // Pre-state contratto
@@ -214,7 +251,9 @@ async function eseguiFineStagione(req, res) {
                 tipo: "fine-stagione-svincolo",
                 contrattoId: c.id, giocatoreId: c.giocatoreId, giocatoreNome: c.giocatore.nome,
                 fantaTeamId: c.fantaTeamId, quotazioneAccredito: quotValore,
-                motivo: idsRejectedContrattoVecchio.has(c.id) ? "rinnovo-bocciato" : "scadenza-naturale",
+                motivo: idsRejectedContrattoVecchio.has(c.id) ? "rinnovo-bocciato"
+                       : idsDataFineScaduta.has(c.id) && c.durataContratto > 0 ? "scadenza-datafine"
+                       : "scadenza-naturale",
                 pre, post,
                 rollbackSQL: sfRollbackSQL(sf.id, pre),
               }),
@@ -236,7 +275,9 @@ async function eseguiFineStagione(req, res) {
             entitaId:  c.id,
             dettaglio: JSON.stringify({
               tipo:   "fine-stagione-svincolo",
-              motivo: idsRejectedContrattoVecchio.has(c.id) ? "rinnovo-bocciato" : "scadenza-naturale",
+              motivo: idsRejectedContrattoVecchio.has(c.id) ? "rinnovo-bocciato"
+                     : idsDataFineScaduta.has(c.id) && c.durataContratto > 0 ? "scadenza-datafine"
+                     : "scadenza-naturale",
               pre:    preContratto,
               post:   { valido: false, destinazione: c.destinazione || "Scaduto" },
             }),

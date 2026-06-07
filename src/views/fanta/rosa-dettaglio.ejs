@@ -74,6 +74,11 @@
     <% if (error) { %>
       <div class="alert alert-error"><%= error %></div>
     <% } %>
+    <% if (isAnticipo) { %>
+      <div class="alert" style="background:#fef9c3;border-left:4px solid #ca8a04;color:#78350f;font-size:.82rem;padding:10px 16px;border-radius:6px;margin-bottom:16px;">
+        📅 <strong>Periodo rinnovi:</strong> gli anni contratto mostrati riflettono la situazione <em>dopo</em> il rollover di fine stagione. I contratti con <strong>0 anni</strong> sono in scadenza e richiedono rinnovo o svincolo.
+      </div>
+    <% } %>
 
     <%
       const totValore = giocatori.reduce((s, g) => s + (g.valore || 0), 0);
