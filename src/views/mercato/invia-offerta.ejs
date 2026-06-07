@@ -68,7 +68,35 @@
 
           <label for="importoOfferta">Offerta (M)</label>
           <input type="number" name="importoOfferta" id="importoOfferta"
-                 step="0.01" min="0" placeholder="es. 12.50" required>
+                 step="0.01" min="0" placeholder="es. 12.50" required
+                 oninput="aggiornaHintClausola()">
+
+          <label for="tipoContratto">Tipo contratto</label>
+          <select name="tipoContratto" id="tipoContratto" onchange="aggiornaClasuole()">
+            <option value="Acquisto">Acquisto</option>
+            <option value="Prestito">Prestito</option>
+          </select>
+
+          <label for="clausola">Clausola speciale <span style="font-weight:400;color:var(--gray-400);">(opzionale)</span></label>
+          <select name="clausola" id="clausola" onchange="aggiornaHintClausola()">
+            <option value="">— Nessuna clausola —</option>
+            <optgroup label="Solo su Acquisto" id="grp-ricompra">
+              <option value="DirittoRicompra">Diritto di Ricompra</option>
+              <option value="ObbligoRicompra">Obbligo di Ricompra</option>
+            </optgroup>
+            <optgroup label="Solo su Prestito" id="grp-riscatto">
+              <option value="DirittoRiscatto">Diritto di Riscatto</option>
+              <option value="ObbligoRiscatto">Obbligo di Riscatto</option>
+            </optgroup>
+          </select>
+
+          <div id="clausola-wrap" style="display:none;">
+            <label for="importoClausola">Importo clausola (M)</label>
+            <input type="number" name="importoClausola" id="importoClausola"
+                   step="0.01" min="0" placeholder="es. 18.00"
+                   oninput="aggiornaHintClausola()">
+            <div id="clausola-hint" style="font-size:.72rem;color:var(--gray-400);margin-top:3px;"></div>
+          </div>
 
           <label for="dataDecorrenza">Data decorrenza (MM-YYYY)</label>
           <input type="text" name="dataDecorrenza" id="dataDecorrenza"
@@ -96,25 +124,77 @@
   </div>
 
   <script>
-    const DELTA = parseFloat('<%= delta %>');
+    const DELTA    = parseFloat('<%= delta %>');
+    const MIN_PCT  = parseFloat('<%= params.contratto_prezzo_min_pct || "0.60" %>');
+    const MAX_PCT  = parseFloat('<%= params.contratto_prezzo_max_pct || "1.40" %>');
+
+    let _valoreRif = 0;
 
     function aggiornaPrezzi() {
       const sel = document.getElementById('giocatoreId');
       const opt = sel.options[sel.selectedIndex];
-      const valore = parseFloat(opt?.dataset?.valore);
+      _valoreRif = parseFloat(opt?.dataset?.valore) || 0;
       const bar = document.getElementById('range-bar');
 
-      if (!valore || isNaN(valore)) { bar.style.display = 'none'; return; }
+      if (!_valoreRif) { bar.style.display = 'none'; return; }
 
-      const minV = (valore * (1 - DELTA)).toFixed(2);
-      const maxV = (valore * (1 + DELTA)).toFixed(2);
+      const minV = (_valoreRif * (1 - DELTA)).toFixed(2);
+      const maxV = (_valoreRif * (1 + DELTA)).toFixed(2);
       document.getElementById('range-min').textContent = minV;
       document.getElementById('range-max').textContent = maxV;
-      document.getElementById('range-ref').textContent = valore.toFixed(2);
-      document.getElementById('importoOfferta').min  = minV;
-      document.getElementById('importoOfferta').max  = maxV;
-      document.getElementById('importoOfferta').value = valore.toFixed(2);
+      document.getElementById('range-ref').textContent = _valoreRif.toFixed(2);
+      document.getElementById('importoOfferta').min   = minV;
+      document.getElementById('importoOfferta').max   = maxV;
+      document.getElementById('importoOfferta').value = _valoreRif.toFixed(2);
       bar.style.display = 'block';
+      aggiornaClasuole();
+      aggiornaHintClausola();
+    }
+
+    function aggiornaClasuole() {
+      const tipo = document.getElementById('tipoContratto').value;
+      const sel  = document.getElementById('clausola');
+      const grpR = document.getElementById('grp-riscatto');
+      const grpC = document.getElementById('grp-ricompra');
+
+      // Nascondi gruppi non compatibili e deseleziona se necessario
+      if (tipo === 'Acquisto') {
+        grpR.style.display = 'none';
+        grpC.style.display = '';
+        if (['DirittoRiscatto','ObbligoRiscatto'].includes(sel.value)) sel.value = '';
+      } else {
+        grpC.style.display = 'none';
+        grpR.style.display = '';
+        if (['DirittoRicompra','ObbligoRicompra'].includes(sel.value)) sel.value = '';
+      }
+      aggiornaHintClausola();
+    }
+
+    function aggiornaHintClausola() {
+      const clausola = document.getElementById('clausola').value;
+      const wrap     = document.getElementById('clausola-wrap');
+      const hint     = document.getElementById('clausola-hint');
+
+      if (!clausola) { wrap.style.display = 'none'; return; }
+      wrap.style.display = 'block';
+
+      const RISCATTI = ['DirittoRiscatto', 'ObbligoRiscatto'];
+      const base = RISCATTI.includes(clausola)
+        ? _valoreRif
+        : parseFloat(document.getElementById('importoOfferta').value) || 0;
+
+      if (!base) { hint.textContent = ''; return; }
+
+      const minC = (base * MIN_PCT).toFixed(2);
+      const maxC = (base * MAX_PCT).toFixed(2);
+      const tipo = RISCATTI.includes(clausola) ? 'riscatto' : 'ricompra';
+      const baseLbl = RISCATTI.includes(clausola)
+        ? `valore TM (${base.toFixed(2)} M)`
+        : `importo offerta (${base.toFixed(2)} M)`;
+      hint.textContent = `L'importo di ${tipo} deve essere compreso tra ${minC} M e ${maxC} M (${Math.round(MIN_PCT*100)}%–${Math.round(MAX_PCT*100)}% del ${baseLbl}).`;
+
+      document.getElementById('importoClausola').min = minC;
+      document.getElementById('importoClausola').max = maxC;
     }
 
     document.getElementById('form-offerta')?.addEventListener('submit', async function(e) {

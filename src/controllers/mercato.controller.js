@@ -43,6 +43,18 @@ function isDataDecorrenzaValida(dataDecorrenza, params) {
   return { valida: true };
 }
 
+// ── Helper: mese decorrenza → periodo (luglio-dicembre = estivo, gen-giugno = invernale)
+function isDecorrenzaEstiva(dataDecorrenza) {
+  const mm = parseInt((dataDecorrenza || "").split("-")[0], 10);
+  if (!mm) return (new Date().getMonth() + 1) >= 7; // fallback: mese corrente
+  return mm >= 7;
+}
+
+// ── Helper: calcola stipendio = quotazione × pct, arrotondato a 2 decimali ────
+function calcolaStipendio(quotazioneValore, pct) {
+  return Math.round(Number(quotazioneValore) * Number(pct) * 100) / 100;
+}
+
 // ── Helper: controlla se dataDecorrenza corrisponde al mese corrente ──────────
 function isDecorrenzaImmediata(dataDecorrenza) {
   const [mm, yyyy] = dataDecorrenza.split("-").map(Number);
@@ -115,6 +127,7 @@ async function showInviaOfferta(req, res) {
     giocatoriTeamSelezionato,
     preselTeamId: teamIdSel,
     delta,
+    params: _params,
     error: req.query.error ? decodeURIComponent(req.query.error) : null,
     success: req.query.success === "1",
   });
@@ -238,6 +251,9 @@ async function creaOfferta(req, res) {
       importoOfferta,
       valoreRiferimento:    valoreRif,
       dataDecorrenza,
+      tipoContratto,
+      clausola:             clausola || null,
+      importoClausola:      importoClausola ?? null,
       scadenzaAt,
     },
     include: {
@@ -275,6 +291,9 @@ async function creaOfferta(req, res) {
       importoOfferta,
       valoreRiferimento:    valoreRif,
       dataDecorrenza,
+      tipoContratto,
+      clausola:             clausola || null,
+      importoClausola:      importoClausola ?? null,
     },
     adminId: req.user.id,
   });
@@ -413,6 +432,30 @@ async function finalizzaTransferimento(req, res) {
         // ESECUZIONE IMMEDIATA
         // ══════════════════════════════════════════════════════════════════════
 
+        // ── 0. Calcolo stipendi pro-rata (prima di leggere le SF) ─────────────
+        const vecchioContratto = await tx.contratto.findFirst({
+          where:   { giocatoreId: trattativa.giocatoreId, fantaTeamId: trattativa.fantaTeamRiceventeId, tipo: "Acquisto", valido: true },
+          orderBy: { createdAt: "desc" },
+        });
+        const stipendioVecchio = vecchioContratto
+          ? Math.round(Number(vecchioContratto.importoOperazione || 0) * 100) / 100
+          : 0;
+
+        const ultimaQuotTx = await tx.quotazione.findFirst({
+          where:   { giocatoreId: trattativa.giocatoreId },
+          orderBy: { createdAt: "desc" },
+        });
+        const quotVal = ultimaQuotTx?.valore ? Number(ultimaQuotTx.valore) : Number(trattativa.valoreRiferimento);
+
+        const estivo         = isDecorrenzaEstiva(dataDecorrenza);
+        const stipendioPct   = estivo
+          ? parseFloat(params.stipendio_percentuale           || "0.10")
+          : parseFloat(params.stipendio_percentuale_invernale || "0.05");
+        const stipendioNuovo = calcolaStipendio(quotVal, stipendioPct);
+        const rimborsoSeller = estivo
+          ? stipendioVecchio
+          : Math.round(stipendioVecchio * 0.5 * 100) / 100;
+
         // ── A. Situazione finanziaria acquirente ──────────────────────────────
         const sfBuyer = await tx.situazioneFinanziaria.findFirst({
           where:   { fantaTeamId: trattativa.fantaTeamMittenteId },
@@ -421,16 +464,18 @@ async function finalizzaTransferimento(req, res) {
         if (!sfBuyer) throw new Error(`Situazione finanziaria non trovata per l'acquirente (teamId=${trattativa.fantaTeamMittenteId}).`);
 
         const creditiBuyer = Number(sfBuyer.crediti);
-        if (creditiBuyer < importo) {
-          throw new Error(`Crediti insufficienti: hai ${creditiBuyer.toFixed(2)} M, serve ${importo.toFixed(2)} M.`);
+        const totaleDovuto = Math.round((importo + stipendioNuovo) * 100) / 100;
+        if (creditiBuyer < totaleDovuto) {
+          throw new Error(`Crediti insufficienti: hai ${creditiBuyer.toFixed(2)} M, serve ${totaleDovuto.toFixed(2)} M (cartellino ${importo.toFixed(2)} + stipendio ${stipendioNuovo.toFixed(2)}).`);
         }
 
-        const creditiBuyerNuovi    = Math.round((creditiBuyer - importo) * 100) / 100;
-        const patrimonioBuyerNuovi = Math.round((Number(sfBuyer.patrimonio) - importo) * 100) / 100;
+        const creditiBuyerNuovi    = Math.round((creditiBuyer - totaleDovuto) * 100) / 100;
+        const patrimonioBuyerNuovi = Math.round((Number(sfBuyer.patrimonio) - totaleDovuto) * 100) / 100;
+        const stipendiBuyerNuovi   = Math.round((Number(sfBuyer.stipendi)   + stipendioNuovo) * 100) / 100;
 
         await tx.situazioneFinanziaria.update({
           where: { id: sfBuyer.id },
-          data:  { crediti: creditiBuyerNuovi, patrimonio: patrimonioBuyerNuovi },
+          data:  { crediti: creditiBuyerNuovi, patrimonio: patrimonioBuyerNuovi, stipendi: stipendiBuyerNuovi },
         });
         movimentoBuyer = {
           sfId:       sfBuyer.id,
@@ -438,6 +483,7 @@ async function finalizzaTransferimento(req, res) {
           presidente: trattativa.fantaTeamMittente.user?.nickname,
           crediti:    { prima: creditiBuyer,               dopo: creditiBuyerNuovi },
           patrimonio: { prima: Number(sfBuyer.patrimonio), dopo: patrimonioBuyerNuovi },
+          stipendi:   { prima: Number(sfBuyer.stipendi),   dopo: stipendiBuyerNuovi },
         };
 
         // ── B. Situazione finanziaria venditore ───────────────────────────────
@@ -447,12 +493,13 @@ async function finalizzaTransferimento(req, res) {
         });
         if (!sfSeller) throw new Error(`Situazione finanziaria non trovata per il venditore (teamId=${trattativa.fantaTeamRiceventeId}).`);
 
-        const creditiSellerNuovi    = Math.round((Number(sfSeller.crediti) + importo) * 100) / 100;
+        const creditiSellerNuovi    = Math.round((Number(sfSeller.crediti)    + importo + rimborsoSeller) * 100) / 100;
         const patrimonioSellerNuovi = Math.round((Number(sfSeller.patrimonio) + importo) * 100) / 100;
+        const stipendiSellerNuovi   = Math.round((Number(sfSeller.stipendi)   - rimborsoSeller) * 100) / 100;
 
         await tx.situazioneFinanziaria.update({
           where: { id: sfSeller.id },
-          data:  { crediti: creditiSellerNuovi, patrimonio: patrimonioSellerNuovi },
+          data:  { crediti: creditiSellerNuovi, patrimonio: patrimonioSellerNuovi, stipendi: stipendiSellerNuovi },
         });
         movimentoSeller = {
           sfId:       sfSeller.id,
@@ -460,6 +507,7 @@ async function finalizzaTransferimento(req, res) {
           presidente: trattativa.fantaTeamRicevente.user?.nickname,
           crediti:    { prima: Number(sfSeller.crediti),    dopo: creditiSellerNuovi },
           patrimonio: { prima: Number(sfSeller.patrimonio), dopo: patrimonioSellerNuovi },
+          stipendi:   { prima: Number(sfSeller.stipendi),   dopo: stipendiSellerNuovi },
         };
 
         // ── C. Invalida contratto attuale del giocatore ───────────────────────
@@ -476,10 +524,11 @@ async function finalizzaTransferimento(req, res) {
           },
         });
 
-        // ── D. Nuovo contratto ────────────────────────────────────────────────
+        // ── D. Nuovo contratto (importoOperazione = stipendio calcolato) ──────
         nuovoContratto = await tx.contratto.create({
           data: {
-            tipo:              "Acquisto",
+            tipo:              trattativa.tipoContratto || "Acquisto",
+            clausola:          trattativa.clausola || null,
             dataStipula,
             durataContratto:   anniContratto,
             dataFine,
@@ -487,7 +536,7 @@ async function finalizzaTransferimento(req, res) {
             fantaTeamId:       trattativa.fantaTeamMittenteId,
             valoreGiocatore:   trattativa.valoreRiferimento,
             prezzoAcquisto:    importo,
-            importoOperazione: importo,
+            importoOperazione: stipendioNuovo,
             provenienza:       trattativa.fantaTeamRicevente.nome,
             destinazione:      trattativa.fantaTeamMittente.nome,
             valido:            true,
@@ -532,9 +581,23 @@ async function finalizzaTransferimento(req, res) {
         // della data di decorrenza tramite job.
         // ══════════════════════════════════════════════════════════════════════
 
+        // Stima stipendio provvisoria basata su quotazione attuale e periodo di decorrenza.
+        // Verrà ricalcolata alla data di attivazione con la quotazione aggiornata.
+        const ultimaQuotDef  = await tx.quotazione.findFirst({
+          where:   { giocatoreId: trattativa.giocatoreId },
+          orderBy: { createdAt: "desc" },
+        });
+        const quotValDef      = ultimaQuotDef?.valore ? Number(ultimaQuotDef.valore) : Number(trattativa.valoreRiferimento);
+        const estivoDef       = isDecorrenzaEstiva(dataDecorrenza);
+        const stipendioPctDef = estivoDef
+          ? parseFloat(params.stipendio_percentuale           || "0.10")
+          : parseFloat(params.stipendio_percentuale_invernale || "0.05");
+        const stipendioNuovoDef = calcolaStipendio(quotValDef, stipendioPctDef);
+
         nuovoContratto = await tx.contratto.create({
           data: {
-            tipo:              "Acquisto",
+            tipo:              trattativa.tipoContratto || "Acquisto",
+            clausola:          trattativa.clausola || null,
             dataStipula,
             durataContratto:   anniContratto,
             dataFine,
@@ -542,7 +605,7 @@ async function finalizzaTransferimento(req, res) {
             fantaTeamId:       trattativa.fantaTeamMittenteId,
             valoreGiocatore:   trattativa.valoreRiferimento,
             prezzoAcquisto:    importo,
-            importoOperazione: importo,
+            importoOperazione: stipendioNuovoDef, // stima; aggiornata all'attivazione
             provenienza:       trattativa.fantaTeamRicevente.nome,
             destinazione:      trattativa.fantaTeamMittente.nome,
             valido:            false, // NON attivo fino alla decorrenza
@@ -575,9 +638,11 @@ async function finalizzaTransferimento(req, res) {
         contrattoNuovoId: nuovoContratto?.id,
         ...(immediato && {
           movimenti: [movimentoBuyer, movimentoSeller],
+          stipendioNuovo,
+          rimborsoSeller,
           rollbackSQL: [
-            sfRollbackSQL(movimentoBuyer.sfId,  { crediti: movimentoBuyer.crediti.prima,  patrimonio: movimentoBuyer.patrimonio.prima }),
-            sfRollbackSQL(movimentoSeller.sfId, { crediti: movimentoSeller.crediti.prima, patrimonio: movimentoSeller.patrimonio.prima }),
+            sfRollbackSQL(movimentoBuyer.sfId,  { crediti: movimentoBuyer.crediti.prima,  patrimonio: movimentoBuyer.patrimonio.prima,  stipendi: movimentoBuyer.stipendi.prima }),
+            sfRollbackSQL(movimentoSeller.sfId, { crediti: movimentoSeller.crediti.prima, patrimonio: movimentoSeller.patrimonio.prima, stipendi: movimentoSeller.stipendi.prima }),
           ].filter(Boolean),
         }),
       },
@@ -642,54 +707,97 @@ async function attivaTrattativeDifferite() {
     },
   });
 
-  const risultati = { attivati: 0, errori: [] };
+  const params     = await parametriService.getAll();
+  const risultati  = { attivati: 0, errori: [] };
 
   for (const t of pendenti) {
     const [mm, yyyy] = (t.dataDecorrenza || "").split("-").map(Number);
     if (!mm || !yyyy) continue;
 
     // Attiva solo se mese/anno corrente >= decorrenza
-    const decDate = new Date(yyyy, mm - 1, 1);
+    const decDate  = new Date(yyyy, mm - 1, 1);
     const oggiDate = new Date(yyyyOggi, mmOggi - 1, 1);
     if (oggiDate < decDate) continue; // non ancora raggiunta
 
     const importo = Number(t.importoOfferta);
+    let movBuyerAct  = null;
+    let movSellerAct = null;
+    let stipendioNuovoAct = 0;
 
     try {
       await prisma.$transaction(async (tx) => {
-        // A. Crediti acquirente
+        // ── 0. Calcolo stipendi pro-rata al momento dell'attivazione ──────────
+        const vecchioContrattoAct = await tx.contratto.findFirst({
+          where:   { giocatoreId: t.giocatoreId, fantaTeamId: t.fantaTeamRiceventeId, tipo: "Acquisto", valido: true },
+          orderBy: { createdAt: "desc" },
+        });
+        const stipendioVecchioAct = vecchioContrattoAct
+          ? Math.round(Number(vecchioContrattoAct.importoOperazione || 0) * 100) / 100
+          : 0;
+
+        const ultimaQuotAct = await tx.quotazione.findFirst({
+          where:   { giocatoreId: t.giocatoreId },
+          orderBy: { createdAt: "desc" },
+        });
+        const quotValAct = ultimaQuotAct?.valore ? Number(ultimaQuotAct.valore) : Number(t.valoreRiferimento);
+
+        const estivoAct      = isDecorrenzaEstiva(t.dataDecorrenza);
+        const stipendioPct   = estivoAct
+          ? parseFloat(params.stipendio_percentuale           || "0.10")
+          : parseFloat(params.stipendio_percentuale_invernale || "0.05");
+        stipendioNuovoAct    = calcolaStipendio(quotValAct, stipendioPct);
+        const rimborsoSellerAct = estivoAct
+          ? stipendioVecchioAct
+          : Math.round(stipendioVecchioAct * 0.5 * 100) / 100;
+
+        // ── A. Crediti acquirente (cartellino + stipendio) ─────────────────────
         const sfBuyer = await tx.situazioneFinanziaria.findFirst({
           where: { fantaTeamId: t.fantaTeamMittenteId },
           orderBy: { updatedAt: "desc" },
         });
         if (!sfBuyer) throw new Error(`SF non trovata per acquirente teamId=${t.fantaTeamMittenteId}`);
         const creditiBuyer = Number(sfBuyer.crediti);
-        if (creditiBuyer < importo) throw new Error(`Crediti insufficienti per attivazione differita (teamId=${t.fantaTeamMittenteId}): ${creditiBuyer.toFixed(2)} < ${importo.toFixed(2)}`);
+        const totaleDovuto = Math.round((importo + stipendioNuovoAct) * 100) / 100;
+        if (creditiBuyer < totaleDovuto) throw new Error(`Crediti insufficienti per attivazione differita (teamId=${t.fantaTeamMittenteId}): ${creditiBuyer.toFixed(2)} < ${totaleDovuto.toFixed(2)}`);
 
+        const creditiBuyerNuovi  = Math.round((creditiBuyer - totaleDovuto) * 100) / 100;
+        const patrimBuyerNuovi   = Math.round((Number(sfBuyer.patrimonio)   - totaleDovuto) * 100) / 100;
+        const stipendiBuyerNuovi = Math.round((Number(sfBuyer.stipendi)     + stipendioNuovoAct) * 100) / 100;
         await tx.situazioneFinanziaria.update({
           where: { id: sfBuyer.id },
-          data: {
-            crediti:    Math.round((creditiBuyer - importo) * 100) / 100,
-            patrimonio: Math.round((Number(sfBuyer.patrimonio) - importo) * 100) / 100,
-          },
+          data:  { crediti: creditiBuyerNuovi, patrimonio: patrimBuyerNuovi, stipendi: stipendiBuyerNuovi },
         });
+        movBuyerAct = {
+          sfId:       sfBuyer.id,
+          ruolo:      "acquirente",
+          crediti:    { prima: creditiBuyer,               dopo: creditiBuyerNuovi },
+          patrimonio: { prima: Number(sfBuyer.patrimonio), dopo: patrimBuyerNuovi },
+          stipendi:   { prima: Number(sfBuyer.stipendi),   dopo: stipendiBuyerNuovi },
+        };
 
-        // B. Crediti venditore
+        // ── B. Crediti venditore (cartellino + rimborso stipendio) ─────────────
         const sfSeller = await tx.situazioneFinanziaria.findFirst({
           where: { fantaTeamId: t.fantaTeamRiceventeId },
           orderBy: { updatedAt: "desc" },
         });
         if (!sfSeller) throw new Error(`SF non trovata per venditore teamId=${t.fantaTeamRiceventeId}`);
 
+        const creditiSellerNuovi  = Math.round((Number(sfSeller.crediti)    + importo + rimborsoSellerAct) * 100) / 100;
+        const patrimSellerNuovi   = Math.round((Number(sfSeller.patrimonio) + importo) * 100) / 100;
+        const stipendiSellerNuovi = Math.round((Number(sfSeller.stipendi)   - rimborsoSellerAct) * 100) / 100;
         await tx.situazioneFinanziaria.update({
           where: { id: sfSeller.id },
-          data: {
-            crediti:    Math.round((Number(sfSeller.crediti) + importo) * 100) / 100,
-            patrimonio: Math.round((Number(sfSeller.patrimonio) + importo) * 100) / 100,
-          },
+          data:  { crediti: creditiSellerNuovi, patrimonio: patrimSellerNuovi, stipendi: stipendiSellerNuovi },
         });
+        movSellerAct = {
+          sfId:       sfSeller.id,
+          ruolo:      "venditore",
+          crediti:    { prima: Number(sfSeller.crediti),    dopo: creditiSellerNuovi },
+          patrimonio: { prima: Number(sfSeller.patrimonio), dopo: patrimSellerNuovi },
+          stipendi:   { prima: Number(sfSeller.stipendi),   dopo: stipendiSellerNuovi },
+        };
 
-        // C. Invalida contratto attuale giocatore
+        // ── C. Invalida contratto attuale giocatore ────────────────────────────
         await tx.contratto.updateMany({
           where: {
             giocatoreId: t.giocatoreId,
@@ -703,15 +811,15 @@ async function attivaTrattativeDifferite() {
           },
         });
 
-        // D. Attiva il contratto pre-creato
+        // ── D. Attiva il contratto pre-creato e aggiorna importoOperazione ─────
         if (t.contrattoNuovoId) {
           await tx.contratto.update({
             where: { id: t.contrattoNuovoId },
-            data:  { valido: true },
+            data:  { valido: true, importoOperazione: stipendioNuovoAct },
           });
         }
 
-        // E. Rosa: rimuovi dal venditore, aggiungi all'acquirente
+        // ── E. Rosa: rimuovi dal venditore, aggiungi all'acquirente ────────────
         await tx.rosaGiocatore.deleteMany({
           where: {
             fantaTeamId: t.fantaTeamRiceventeId,
@@ -728,7 +836,7 @@ async function attivaTrattativeDifferite() {
           },
         });
 
-        // F. Marca COMPLETED
+        // ── F. Marca COMPLETED ─────────────────────────────────────────────────
         await tx.trattativaMercato.update({
           where: { id: t.id },
           data:  { stato: "COMPLETED" },
@@ -744,6 +852,12 @@ async function attivaTrattativeDifferite() {
           decorrenza:      t.dataDecorrenza,
           giocatoreNome:   t.giocatore.nome,
           importo,
+          stipendioNuovo:  stipendioNuovoAct,
+          movimenti:       [movBuyerAct, movSellerAct].filter(Boolean),
+          rollbackSQL: [
+            sfRollbackSQL(movBuyerAct?.sfId,  movBuyerAct  ? { crediti: movBuyerAct.crediti.prima,  patrimonio: movBuyerAct.patrimonio.prima,  stipendi: movBuyerAct.stipendi.prima }  : null),
+            sfRollbackSQL(movSellerAct?.sfId, movSellerAct ? { crediti: movSellerAct.crediti.prima, patrimonio: movSellerAct.patrimonio.prima, stipendi: movSellerAct.stipendi.prima } : null),
+          ].filter(Boolean),
         },
         adminId: null,
       });
