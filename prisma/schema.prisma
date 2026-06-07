@@ -167,6 +167,7 @@ model Log {
   entita     String              // contratto | utente | giocatore | ...
   entitaId   Int?                // id dell'oggetto coinvolto
   dettaglio  String?  @db.Text  // JSON con i campi modificati
+  rollbacked Boolean  @default(false) // true se questa azione è stata annullata
   adminId    Int
   admin      User     @relation(fields: [adminId], references: [id])
   createdAt  DateTime @default(now())

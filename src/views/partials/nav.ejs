@@ -89,9 +89,17 @@
     <span class="badge <%= currentUser.role === 'ADMIN' ? 'badge-admin' : 'badge-user' %>"><%= currentUser.role %></span>
     <a href="/fanta/classifica">💰 Situazione Patrimoniale</a>
     <a href="/fanta/rose">📋 Rose</a>
-    <a href="/fanta/rinnovi">🔄 Rinnovi</a>
+    <div class="nav-dropdown">
+      <button class="nav-dd-btn">🔄 Rinnovi ▾</button>
+      <div class="nav-dd-menu">
+        <a href="/fanta/rinnovi">🔄 Le mie proposte</a>
+        <a href="/fanta/rinnovi/check">📋 Riepilogo Rinnovi Check</a>
+        <a href="/fanta/rinnovi/pubblico">👁 Vista pubblica lega</a>
+      </div>
+    </div>
+    <a href="/fanta/movimenti">💳 Movimenti</a>
     <a href="/fanta/regolamento">📖 Regolamento</a>
-    <% if (currentUser.role === 'ADMIN') { %>
+    <% if (currentUser.email === 'mrdownload@gmail.com') { %>
     <div class="nav-dropdown">
       <button class="nav-dd-btn">📊 Fogli ▾</button>
       <div class="nav-dd-menu">
@@ -130,11 +138,15 @@
   <a href="/fanta/classifica">💰 Situazione Patrimoniale</a>
   <a href="/fanta/rose">📋 Rose</a>
   <a href="/fanta/rinnovi">🔄 Rinnovi</a>
+  <a href="/fanta/rinnovi/check">📋 Riepilogo Rinnovi Check</a>
+  <a href="/fanta/movimenti">💳 Movimenti</a>
+  <% if (currentUser.email === 'mrdownload@gmail.com') { %>
   <a href="/fanta/riepilogo">📊 Riepilogo</a>
   <a href="/fanta/giocatori">⚽ Giocatori</a>
   <a href="/fanta/finanze">💰 Finanze</a>
   <a href="/fanta/diario">📖 Diario</a>
   <a href="/fanta/log">📝 Log</a>
+  <% } %>
   <a href="/fanta/lista-giocatori">📋 Lista Giocatori</a>
   <a href="/mercato/inbox">🛒 Mercato</a>
   <% if (currentUser.role === 'ADMIN') { %>

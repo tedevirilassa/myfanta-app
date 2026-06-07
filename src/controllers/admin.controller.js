@@ -1035,7 +1035,147 @@ async function saveCalendarioDate(req, res) {
   res.redirect("/admin/parametri?calsaved=1");
 }
 
-module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showPremiCombinati, showPremiClassifica, savePremiClassifica, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /admin/log/:id/rollback — Annulla l'operazione registrata nel log
+// Supporta tre formati di dettaglio:
+//  A) Standard: { tipo_operazione, stato_precedente, stato_successivo }
+//  B) Legacy:   { prima, dopo }
+//  C) Flat keys (con entitaId nello schema Log): DELETE ricostruisce da prima/dopo
+// ═══════════════════════════════════════════════════════════════════════════════
+async function rollbackLog(req, res) {
+  const logId = parseInt(req.params.id, 10);
+  if (isNaN(logId)) return res.status(400).json({ error: "ID log non valido." });
+
+  const logRecord = await prisma.log.findUnique({ where: { id: logId } });
+  if (!logRecord) return res.status(404).json({ error: "Log non trovato." });
+  if (logRecord.rollbacked) return res.status(400).json({ error: "Questa azione è già stata annullata." });
+
+  let det;
+  try { det = JSON.parse(logRecord.dettaglio || "{}"); } catch {
+    return res.status(400).json({ error: "Il dettaglio del log non è un JSON valido." });
+  }
+
+  // Normalizza: supporta sia il formato standard { tipo_operazione, stato_precedente, stato_successivo }
+  // sia il formato legacy { prima, dopo }
+  let tipoOp = det.tipo_operazione || null;
+  let statoPrecedente = det.stato_precedente || det.prima || null;
+  let statoSuccessivo = det.stato_successivo || det.dopo || null;
+
+  // Se tipo_operazione non è esplicito, deducilo dall'azione del log
+  if (!tipoOp) {
+    if (logRecord.azione === "CREATE") tipoOp = "INSERT";
+    else if (logRecord.azione === "UPDATE") tipoOp = "UPDATE";
+    else if (logRecord.azione === "DELETE") tipoOp = "DELETE";
+  }
+
+  if (!tipoOp || !["INSERT", "UPDATE", "DELETE"].includes(tipoOp)) {
+    return res.status(400).json({ error: `Impossibile determinare il tipo di operazione da annullare (azione: ${logRecord.azione}).` });
+  }
+
+  // Mappa entita → modello Prisma
+  const ENTITA_MAP = {
+    contratto:                "contratto",
+    giocatore:                "giocatore",
+    utente:                   "user",
+    profilo:                  "user",
+    situazione_finanziaria:   "situazioneFinanziaria",
+    trattativa_mercato:       "trattativaMercato",
+    rosa_giocatore:           "rosaGiocatore",
+    parametro:                "parametro",
+    premio_erogato:           "premioErogato",
+  };
+
+  const modelName = ENTITA_MAP[logRecord.entita] || logRecord.entita;
+  const model = prisma[modelName];
+  if (!model) {
+    return res.status(400).json({ error: `Modello Prisma non trovato per entità "${logRecord.entita}" (cercato: ${modelName}).` });
+  }
+
+  // Determina la primary key
+  const entityId = logRecord.entitaId || statoSuccessivo?.id || statoPrecedente?.id;
+  if (!entityId && tipoOp !== "INSERT") {
+    return res.status(400).json({ error: "Impossibile determinare l'ID dell'entità da ripristinare." });
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const txModel = tx[modelName];
+
+      switch (tipoOp) {
+        case "INSERT": {
+          // Rollback INSERT = DELETE del record creato
+          const targetId = statoSuccessivo?.id || entityId;
+          if (!targetId) throw new Error("ID del record da eliminare non trovato nel dettaglio.");
+          await txModel.delete({ where: { id: targetId } });
+          break;
+        }
+
+        case "UPDATE": {
+          // Rollback UPDATE = ripristino stato precedente
+          if (!statoPrecedente) throw new Error("stato_precedente/prima non presente nel dettaglio: impossibile ripristinare.");
+          const targetId = entityId || statoPrecedente.id;
+          if (!targetId) throw new Error("ID del record da ripristinare non trovato.");
+          // Rimuovi campi non-data (id, createdAt, updatedAt, relations)
+          const dataToRestore = { ...statoPrecedente };
+          delete dataToRestore.id;
+          delete dataToRestore.createdAt;
+          delete dataToRestore.updatedAt;
+          // Rimuovi eventuali chiavi relation (oggetti annidati)
+          for (const [k, v] of Object.entries(dataToRestore)) {
+            if (v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date)) {
+              delete dataToRestore[k];
+            }
+          }
+          await txModel.update({ where: { id: targetId }, data: dataToRestore });
+          break;
+        }
+
+        case "DELETE": {
+          // Rollback DELETE = re-INSERT del record
+          if (!statoPrecedente) throw new Error("stato_precedente/prima non presente nel dettaglio: impossibile reinserire.");
+          const dataToInsert = { ...statoPrecedente };
+          // Rimuovi id (lascia autoincrement) e timestamps gestiti da Prisma
+          delete dataToInsert.id;
+          delete dataToInsert.createdAt;
+          delete dataToInsert.updatedAt;
+          // Rimuovi eventuali chiavi relation
+          for (const [k, v] of Object.entries(dataToInsert)) {
+            if (v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date)) {
+              delete dataToInsert[k];
+            }
+          }
+          await txModel.create({ data: dataToInsert });
+          break;
+        }
+      }
+
+      // Marca il log originale come rollbacked
+      await tx.log.update({ where: { id: logId }, data: { rollbacked: true } });
+    });
+
+    // Log del rollback stesso
+    await logAction({
+      azione:    "UPDATE",
+      entita:    "log_rollback",
+      entitaId:  logId,
+      dettaglio: {
+        tipo_operazione: "ROLLBACK",
+        log_originale_id: logId,
+        azione_annullata: logRecord.azione,
+        entita_annullata: logRecord.entita,
+        entitaId_annullata: entityId,
+      },
+      adminId: req.user.id,
+    });
+
+    return res.json({ ok: true, message: `Rollback completato per log #${logId} (${tipoOp} su ${logRecord.entita}).` });
+
+  } catch (err) {
+    return res.status(400).json({ error: `Rollback fallito: ${err.message}` });
+  }
+}
+
+module.exports = { listUsers, toggleActive, resetPassword, showInvite, inviteUser, showEditProfile, saveEditProfile, showPannello, inlineEditUser, runSeedGiocatori, showNuovoContratto, saveNuovoContratto, listContrattiRiepilogo, saveEditContratto, annullaContratto, listLog, rollbackLog, changeRole, createGiocatore, updateGiocatore, deleteGiocatore, deleteUser, assignFantaTeam, listSituazioneFinanziaria, assignFantaTeamToSituazione, adjustCrediti, saveUserFields, listParametri, saveParametro, saveSerieATeams, addSerieATeam, removeSerieATeam, initRuoliTM, listRosa, showRosa, saveRosa, syncQuotazioni, showSyncTransfermarkt, runScrapeTransfermarkt, importTransfermarkt, showPremi, savePremi, showPremiCombinati, showPremiClassifica, savePremiClassifica, showRealignRuoli, applyRealignRuoli, listSvincoliInattivi, approveSvincoliInattivi, startImpersonate, stopImpersonate, showCalendarioAzioni, saveCalendarioDate };
 
 // ── POST /admin/users/:id/impersonate ─────────────────────────────────────
 // Genera un JWT in cui `sub` = utente target e `impersonator` = admin reale.
@@ -1407,7 +1547,12 @@ async function createGiocatore(req, res) {
   });
 
   await logAction({ azione: "CREATE", entita: "giocatore", entitaId: g.id,
-    dettaglio: { dopo: { nome: g.nome, ruolo: g.ruolo, squadra: g.squadra } },
+    dettaglio: {
+      tipo_operazione: "INSERT",
+      stato_precedente: null,
+      stato_successivo: { id: g.id, nome: g.nome, ruolo: g.ruolo, ruoloEsteso: g.ruoloEsteso, squadra: g.squadra, eta: g.eta, valore: g.valore ? Number(g.valore) : null, active: g.active },
+      dopo: { id: g.id, nome: g.nome, ruolo: g.ruolo, squadra: g.squadra },
+    },
     adminId: req.user.id });
 
   res.redirect("/fanta/lista-giocatori?gSaved=1");
@@ -1436,8 +1581,11 @@ async function updateGiocatore(req, res) {
 
   await logAction({ azione: "UPDATE", entita: "giocatore", entitaId: id,
     dettaglio: {
-      prima: { nome: pre.nome, ruolo: pre.ruolo, squadra: pre.squadra, valore: pre.valore, active: pre.active },
-      dopo:  { nome: updated.nome, ruolo: updated.ruolo, squadra: updated.squadra, valore: updated.valore, active: updated.active },
+      tipo_operazione: "UPDATE",
+      stato_precedente: { nome: pre.nome, ruolo: pre.ruolo, ruoloEsteso: pre.ruoloEsteso, squadra: pre.squadra, eta: pre.eta, valore: pre.valore ? Number(pre.valore) : null, active: pre.active },
+      stato_successivo: { nome: updated.nome, ruolo: updated.ruolo, ruoloEsteso: updated.ruoloEsteso, squadra: updated.squadra, eta: updated.eta, valore: updated.valore ? Number(updated.valore) : null, active: updated.active },
+      prima: { nome: pre.nome, ruolo: pre.ruolo, squadra: pre.squadra, valore: pre.valore ? Number(pre.valore) : null, active: pre.active },
+      dopo:  { nome: updated.nome, ruolo: updated.ruolo, squadra: updated.squadra, valore: updated.valore ? Number(updated.valore) : null, active: updated.active },
     },
     adminId: req.user.id });
 
@@ -1458,7 +1606,12 @@ async function deleteGiocatore(req, res) {
 
   await prisma.giocatore.delete({ where: { id } });
   await logAction({ azione: "DELETE", entita: "giocatore", entitaId: id,
-    dettaglio: { prima: { nome: g.nome, ruolo: g.ruolo, squadra: g.squadra } },
+    dettaglio: {
+      tipo_operazione: "DELETE",
+      stato_precedente: { id: g.id, nome: g.nome, ruolo: g.ruolo, ruoloEsteso: g.ruoloEsteso, squadra: g.squadra, eta: g.eta, valore: g.valore ? Number(g.valore) : null, active: g.active },
+      stato_successivo: null,
+      prima: { id: g.id, nome: g.nome, ruolo: g.ruolo, ruoloEsteso: g.ruoloEsteso, squadra: g.squadra, eta: g.eta, valore: g.valore ? Number(g.valore) : null, active: g.active },
+    },
     adminId: req.user.id });
 
   res.redirect("/fanta/lista-giocatori?gDeleted=1");
@@ -2361,6 +2514,29 @@ async function saveEditContratto(req, res) {
   });
   await logAction({ azione: "UPDATE", entita: "contratto", entitaId: id,
     dettaglio: {
+      tipo_operazione: "UPDATE",
+      stato_precedente: contrattoPre ? {
+        tipo:              contrattoPre.tipo,
+        clausola:          contrattoPre.clausola ?? null,
+        dataStipula:       contrattoPre.dataStipula,
+        durataContratto:   contrattoPre.durataContratto,
+        dataFine:          contrattoPre.dataFine ?? null,
+        valoreGiocatore:   contrattoPre.valoreGiocatore ? Number(contrattoPre.valoreGiocatore) : null,
+        importoOperazione: contrattoPre.importoOperazione ? Number(contrattoPre.importoOperazione) : null,
+        provenienza:       contrattoPre.provenienza ?? null,
+        destinazione:      contrattoPre.destinazione ?? null,
+      } : null,
+      stato_successivo: {
+        tipo,
+        clausola:          clausola || null,
+        dataStipula:       dataStipula.trim(),
+        durataContratto:   durata,
+        dataFine:          dataFine ? dataFine.trim() : null,
+        valoreGiocatore:   Number.isFinite(valore)  ? valore  : null,
+        importoOperazione: Number.isFinite(importo) ? importo : null,
+        provenienza:       provenienza || null,
+        destinazione:      destinazione || null,
+      },
       prima: contrattoPre ? {
         tipo:              contrattoPre.tipo,
         clausola:          contrattoPre.clausola ?? null,

@@ -449,7 +449,416 @@ async function showListaGiocatori(req, res) {
   }
 }
 
-module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio, showRegolamento, showDashboard };
+// ── Movimenti helpers ────────────────────────────────────────────────────────
+
+function _mvDelta(obj) {
+  if (!obj || obj.prima == null || obj.dopo == null) return 0;
+  return Math.round((Number(obj.dopo) - Number(obj.prima)) * 100) / 100;
+}
+function _mvDelta2(a, b) {
+  if (a == null || b == null) return 0;
+  return Math.round((Number(b) - Number(a)) * 100) / 100;
+}
+function _mvExtractDeltas(det, src) {
+  if (src === "premi") {
+    return {
+      crediti:    _mvDelta2(det.prima && det.prima.crediti, det.dopo && det.dopo.crediti),
+      stipendi:   0,
+      valoreRosa: 0,
+    };
+  }
+  if (src === "rinnovo") {
+    const oldStip = det.pre  && det.pre.importoOperazione  != null ? Number(det.pre.importoOperazione)  : 0;
+    const newStip = det.post && det.post.importoOperazione != null ? Number(det.post.importoOperazione) : 0;
+    return {
+      crediti:    0,
+      stipendi:   Math.round((newStip - oldStip) * 100) / 100,
+      valoreRosa: 0,
+    };
+  }
+  if (det.movimento) {
+    const m = det.movimento;
+    return {
+      crediti:    _mvDelta(m.crediti),
+      stipendi:   _mvDelta(m.stipendi),
+      valoreRosa: 0,
+    };
+  }
+  if (det.operazione === "aggiustamento_crediti") {
+    return {
+      crediti:    _mvDelta2(det.prima && det.prima.crediti, det.dopo && det.dopo.crediti),
+      stipendi:   0,
+      valoreRosa: 0,
+    };
+  }
+  if (det.tipo === "fine-stagione-svincolo") {
+    return {
+      crediti:    _mvDelta2(det.pre && det.pre.crediti,    det.post && det.post.crediti),
+      stipendi:   _mvDelta2(det.pre && det.pre.stipendi,   det.post && det.post.stipendi),
+      valoreRosa: _mvDelta2(det.pre && det.pre.valoreRose, det.post && det.post.valoreRose),
+    };
+  }
+  // generic prima/dopo
+  if (det.prima && det.dopo) {
+    return {
+      crediti:    _mvDelta2(det.prima.crediti, det.dopo.crediti),
+      stipendi:   _mvDelta2(det.prima.stipendi, det.dopo.stipendi),
+      valoreRosa: _mvDelta2(det.prima.valoreRose, det.dopo.valoreRose),
+    };
+  }
+  return { crediti: 0, stipendi: 0, valoreRosa: 0 };
+}
+function _mvTipoOp(det, src) {
+  if (src === "premi")                              return "PREMIO";
+  if (src === "rinnovo")                            return "RINNOVO";
+  if (det.movimento && det.movimento.ruolo === "acquirente") return "ACQUISTO";
+  if (det.movimento && det.movimento.ruolo === "venditore")  return "VENDITA";
+  if (det.operazione === "aggiustamento_crediti")   return "AGGIUSTAMENTO";
+  if (det.tipo === "fine-stagione-svincolo")        return "SVINCOLO";
+  return "ALTRO";
+}
+function _mvDescrizione(det, contratto, src) {
+  if (src === "premi") {
+    const pos  = det.posizione  || "?";
+    const pct  = det.percentuale || "";
+    const prem = det.premio      != null ? Number(det.premio).toFixed(2) + " M" : "";
+    return `Premio classifica – pos. ${pos}${pct ? " (" + pct + ")" : ""}${prem ? " → +" + prem : ""}`;
+  }
+  if (det.movimento) {
+    const nome = contratto && contratto.giocatore ? contratto.giocatore.nome : (det.contrattoId ? `#${det.contrattoId}` : "?");
+    const ruolo = contratto && contratto.giocatore ? contratto.giocatore.ruolo : "";
+    const nomeStr = ruolo ? `[${ruolo}] ${nome}` : nome;
+    if (det.movimento.ruolo === "acquirente") {
+      const prov = det.movimento.provenienza || null;
+      return `Acquisto: ${nomeStr}${prov ? " da " + prov : ""}`;
+    }
+    return `Vendita P2P: ${nomeStr}`;
+  }
+  if (det.operazione === "aggiustamento_crediti") {
+    const imp = det.importo != null ? (Number(det.importo) > 0 ? "+" : "") + Number(det.importo).toFixed(2) + " M" : "";
+    return `Aggiustamento crediti${imp ? " " + imp : ""}${det.motivo ? " – " + det.motivo : ""}`;
+  }
+  if (det.tipo === "fine-stagione-svincolo") {
+    const gn = det.giocatoreNome || "?";
+    const mot = det.motivo === "rinnovo-bocciato" ? "bocciato" : "scaduto";
+    const qt  = det.quotazioneAccredito != null ? " +Q" + Number(det.quotazioneAccredito).toFixed(2) : "";
+    return `Svincolo (${mot}): ${gn}${qt}`;
+  }
+  if (det.tipo === "fine-stagione-rinnovo") {
+    const g = contratto && contratto.giocatore;
+    const nome = g ? `[${g.ruolo}] ${g.nome}` : (det.post && det.post.giocatoreId ? `#${det.post.giocatoreId}` : "?");
+    const oldStip = det.pre  && det.pre.importoOperazione  != null ? Number(det.pre.importoOperazione).toFixed(2)  : "?";
+    const newStip = det.post && det.post.importoOperazione != null ? Number(det.post.importoOperazione).toFixed(2) : "?";
+    const durata  = det.post && det.post.durataContratto ? det.post.durataContratto + "a" : "";
+    return `Rinnovo: ${nome} \u2013 stip. ${oldStip} \u2192 ${newStip} M${durata ? " (" + durata + ")" : ""}`;
+  }
+  return det.tipo || det.operazione || "Movimento";
+}
+
+// ── GET /fanta/movimenti ────────────────────────────────────────────────────
+// Estratto conto progressivo del presidente: ogni riga mostra delta e saldo
+// running calcolato in ordine ASC createdAt, id. Visualizzato in DESC.
+// Nessun filtro per stagione: i movimenti sono continui e globali.
+async function showMovimenti(req, res) {
+  const params = await parametriService.getAll();
+  const budgetIniziale = parseFloat(params.budget_iniziale || "100");
+
+  const team = await prisma.fantaTeam.findFirst({ where: { userId: req.user.id } });
+  if (!team) {
+    return res.render("fanta/movimenti", {
+      currentUser: req.user, team: null,
+      righe: [], saldoIniziale: budgetIniziale, saldoAttuale: null, params,
+    });
+  }
+
+  // Tutti i record SF del team — cerca per fantaTeamId OPPURE per nomePresidente
+  // (fallback necessario quando fantaTeamId non è stato ancora associato al record SF).
+  const nickname = req.user.nickname || req.user.email.split("@")[0];
+  const tuttiSf = await prisma.situazioneFinanziaria.findMany({
+    where: {
+      OR: [
+        { fantaTeamId: team.id },
+        { nomePresidente: { equals: nickname, mode: "insensitive" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  // Deduplica per id (OR potrebbe matchare la stessa riga su entrambi i criteri)
+  const sfById = new Map(tuttiSf.map((s) => [s.id, s]));
+  const sfIds = [...sfById.keys()];
+
+  if (sfIds.length === 0) {
+    return res.render("fanta/movimenti", {
+      currentUser: req.user, team,
+      righe: [], saldoIniziale: budgetIniziale, saldoAttuale: null, params,
+    });
+  }
+
+  // ── 1. Log diretti sulle SF (P2P, aggiustamenti, svincoli)
+  const logsSf = await prisma.log.findMany({
+    where: { entita: "situazione_finanziaria", entitaId: { in: sfIds } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+
+  // ── 2. Premi erogati: log con movimenti[].sfId in sfIds
+  const logsPremiRaw = await prisma.log.findMany({
+    where: { entita: "premi_erogati" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const logsPremi = [];
+  const sfIdSet = new Set(sfIds);
+  for (const l of logsPremiRaw) {
+    let det = {};
+    try { det = JSON.parse(l.dettaglio || "{}"); } catch { continue; }
+    if (!Array.isArray(det.movimenti)) continue;
+    const mv = det.movimenti.find((m) => sfIdSet.has(m.sfId));
+    if (!mv) continue;
+    logsPremi.push({ _raw: l, _mv: mv });
+  }
+
+  // ── 3. Rinnovi: log CREATE su contratti del team con tipo "fine-stagione-rinnovo"
+  const teamContrattiIds = await prisma.contratto.findMany({
+    where: { fantaTeamId: team.id },
+    select: { id: true },
+  });
+  const logsRinnoviRaw = teamContrattiIds.length
+    ? await prisma.log.findMany({
+        where: { entita: "contratto", azione: "CREATE", entitaId: { in: teamContrattiIds.map((c) => c.id) } },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      })
+    : [];
+  const logsRinnovi = [];
+  for (const l of logsRinnoviRaw) {
+    let det = {};
+    try { det = JSON.parse(l.dettaglio || "{}"); } catch { continue; }
+    if (det.tipo !== "fine-stagione-rinnovo") continue;
+    logsRinnovi.push({ _raw: l, _det: det });
+  }
+
+  // ── 4. Unisci e ordina ASC (createdAt ASC, id ASC — determinismo assoluto)
+  const allEntries = [
+    ...logsSf.map((l)  => ({ id: l.id, createdAt: l.createdAt, rollbacked: l.rollbacked, _src: "sf",     _log: l,        _det: null })),
+    ...logsPremi.map((x) => ({ id: x._raw.id, createdAt: x._raw.createdAt, rollbacked: x._raw.rollbacked, _src: "premi",  _log: x._raw,   _det: x._mv })),
+    ...logsRinnovi.map((x) => ({ id: x._raw.id, createdAt: x._raw.createdAt, rollbacked: x._raw.rollbacked, _src: "rinnovo", _log: x._raw, _det: x._det })),
+  ].sort((a, b) => {
+    const dt = new Date(a.createdAt) - new Date(b.createdAt);
+    if (dt !== 0) return dt;
+    return a.id - b.id;
+  });
+
+  // ── 5. Batch-fetch contratti per arricchire le descrizioni (SF + rinnovi)
+  const contrattoIds = [];
+  for (const e of allEntries) {
+    if (e._src === "sf") {
+      let det = {};
+      try { det = JSON.parse(e._log.dettaglio || "{}"); } catch { continue; }
+      if (det.contrattoId) contrattoIds.push(det.contrattoId);
+    } else if (e._src === "rinnovo") {
+      if (e._det && e._det.post && e._det.post.id) contrattoIds.push(e._det.post.id);
+    }
+  }
+  const contrattiBatch = contrattoIds.length
+    ? await prisma.contratto.findMany({
+        where: { id: { in: [...new Set(contrattoIds)] } },
+        include: { giocatore: { select: { nome: true, ruolo: true } } },
+      })
+    : [];
+  const contrattoMap = new Map(contrattiBatch.map((c) => [c.id, c]));
+
+  // ── 5. Calcolo running total (ASC → progressivo corretto)
+  let runCrediti    = budgetIniziale;
+  let runStipendi   = 0;
+  let runValoreRosa = 0;
+
+  const righe = allEntries.map((entry) => {
+    let det = {};
+    if (entry._src === "sf") {
+      try { det = JSON.parse(entry._log.dettaglio || "{}"); } catch {}
+    } else {
+      det = entry._det;
+    }
+
+    const deltas    = _mvExtractDeltas(det, entry._src);
+    // Per rinnovi il contratto si trova tramite det.post.id, non det.contrattoId
+    const contrattoLookupId = entry._src === "rinnovo"
+      ? (det.post && det.post.id)
+      : det.contrattoId;
+    const contratto = contrattoLookupId ? contrattoMap.get(contrattoLookupId) : null;
+
+    runCrediti    = Math.round((runCrediti    + deltas.crediti)    * 100) / 100;
+    runStipendi   = Math.round((runStipendi   + deltas.stipendi)   * 100) / 100;
+    runValoreRosa = Math.round((runValoreRosa + deltas.valoreRosa) * 100) / 100;
+
+    return {
+      logId:          entry.id,
+      createdAt:      entry.createdAt,
+      tipoOp:         _mvTipoOp(det, entry._src),
+      descrizione:    _mvDescrizione(det, contratto, entry._src),
+      deltaCrediti:   deltas.crediti,
+      deltaStipendi:  deltas.stipendi,
+      deltaValoreRosa: deltas.valoreRosa,
+      saldoCrediti:   runCrediti,
+      saldoStipendi:  runStipendi,
+      saldoValoreRosa: runValoreRosa,
+      rollbacked:     entry.rollbacked || false,
+    };
+  });
+
+  // Saldo attuale = ultima riga del running total (oppure budgetIniziale se nessun movimento)
+  const saldoAttuale = righe.length > 0 ? {
+    crediti:    righe[righe.length - 1].saldoCrediti,
+    stipendi:   righe[righe.length - 1].saldoStipendi,
+    valoreRosa: righe[righe.length - 1].saldoValoreRosa,
+  } : null;
+
+  // ── 6. Inverti per visualizzazione DESC (più recente in cima)
+  righe.reverse();
+
+  // ── 7. Paginazione (20 righe per pagina)
+  const PAGE_SIZE = 20;
+  const totalRighe = righe.length;
+  const totalPages = Math.max(1, Math.ceil(totalRighe / PAGE_SIZE));
+  const page = Math.min(totalPages, Math.max(1, parseInt(req.query.page) || 1));
+  const righePaginate = righe.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  res.render("fanta/movimenti", {
+    currentUser: req.user,
+    team,
+    righe: righePaginate,
+    totalRighe,
+    page,
+    totalPages,
+    saldoIniziale: budgetIniziale,
+    saldoAttuale,
+    params,
+  });
+}
+
+// ── GET /fanta/rinnovi/check ────────────────────────────────────────────────
+// Riepilogo dei rinnovi/svincoli di fine stagione per il team del presidente loggato.
+async function showRinnoviCheck(req, res) {
+  const params = await parametriService.getAll();
+  const team = await prisma.fantaTeam.findFirst({ where: { userId: req.user.id } });
+
+  if (!team) {
+    return res.render("fanta/rinnovi-check", {
+      currentUser: req.user, team: null,
+      rinnovi: [], svincoliBocciati: [], svincoliNaturali: [], confermati: [],
+      batchDate: null, totaleStipendi: 0, params,
+    });
+  }
+
+  // Tutti i contratti del team (validi e non)
+  const allContracts = await prisma.contratto.findMany({
+    where: { fantaTeamId: team.id },
+    include: { giocatore: { select: { id: true, nome: true, ruolo: true, squadra: true } } },
+  });
+  const allIds = allContracts.map((c) => c.id);
+  const contractMap = {};
+  for (const c of allContracts) contractMap[c.id] = c;
+
+  // Log fine-stagione su tutti i contratti del team
+  const logs = allIds.length
+    ? await prisma.log.findMany({
+        where: { entita: "contratto", entitaId: { in: allIds } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+
+  const rinnoviMap   = {}; // nuovoContrattoId → info
+  const svincoliMap  = {}; // oldContrattoId → info
+
+  for (const l of logs) {
+    let det = {};
+    try { det = JSON.parse(l.dettaglio || "{}"); } catch { /* ignore */ }
+
+    if (l.azione === "CREATE" && det.tipo === "fine-stagione-rinnovo") {
+      rinnoviMap[l.entitaId] = {
+        preId:          det.pre  && det.pre.id,
+        preStipendio:   det.pre  && det.pre.importoOperazione,
+        preDurata:      det.pre  && det.pre.durataContratto,
+        quotazione:     det.quotazione,
+        nuovoStipendio: det.post && det.post.importoOperazione,
+        nuovaDurata:    det.post && det.post.durataContratto,
+        nuovaDataFine:  det.post && det.post.dataFine,
+        createdAt:      l.createdAt,
+      };
+    }
+
+    if (l.azione === "UPDATE" && det.tipo === "fine-stagione-svincolo") {
+      svincoliMap[l.entitaId] = {
+        motivo:    det.motivo,
+        stipendio: det.pre && (det.pre.importoOperazione !== undefined ? det.pre.importoOperazione : null),
+        createdAt: l.createdAt,
+      };
+    }
+  }
+
+  const RUOLO_ORD = { P: 0, D: 1, C: 2, A: 3 };
+
+  // Rinnovi
+  const rinnovi = Object.entries(rinnoviMap).map(([nuovoId, info]) => {
+    const c = contractMap[parseInt(nuovoId, 10)];
+    return {
+      giocatore:      c && c.giocatore,
+      preStipendio:   info.preStipendio,
+      preDurata:      info.preDurata,
+      quotazione:     info.quotazione,
+      nuovoContrattoId: parseInt(nuovoId, 10),
+      nuovoStipendio: info.nuovoStipendio !== undefined ? info.nuovoStipendio
+                        : (c && c.importoOperazione ? Number(c.importoOperazione) : null),
+      nuovaDurata:    info.nuovaDurata !== undefined ? info.nuovaDurata : (c && c.durataContratto),
+      nuovaDataFine:  info.nuovaDataFine || (c && c.dataFine),
+    };
+  }).sort((a, b) => (RUOLO_ORD[a.giocatore && a.giocatore.ruolo] ?? 4) - (RUOLO_ORD[b.giocatore && b.giocatore.ruolo] ?? 4));
+
+  // Svincoli
+  const svincoliBocciati = [];
+  const svincoliNaturali = [];
+  for (const [oldId, info] of Object.entries(svincoliMap)) {
+    const c = contractMap[parseInt(oldId, 10)];
+    const item = {
+      giocatore:   c && c.giocatore,
+      contrattoId: parseInt(oldId, 10),
+      tipo:        c && c.tipo,
+      stipendio:   info.stipendio !== null ? info.stipendio
+                     : (c && c.importoOperazione ? Number(c.importoOperazione) : null),
+    };
+    if (info.motivo === "rinnovo-bocciato") svincoliBocciati.push(item);
+    else                                     svincoliNaturali.push(item);
+  }
+  const svSort = (a, b) => (RUOLO_ORD[a.giocatore && a.giocatore.ruolo] ?? 4) - (RUOLO_ORD[b.giocatore && b.giocatore.ruolo] ?? 4);
+  svincoliBocciati.sort(svSort);
+  svincoliNaturali.sort(svSort);
+
+  // Confermati: contratti validi non generati da rinnovo di questa stagione
+  const rinnoviNewIds = new Set(Object.keys(rinnoviMap).map(Number));
+  const confermati = allContracts
+    .filter((c) => c.valido && !rinnoviNewIds.has(c.id))
+    .sort((a, b) => {
+      const ro = (RUOLO_ORD[a.giocatore && a.giocatore.ruolo] ?? 4) - (RUOLO_ORD[b.giocatore && b.giocatore.ruolo] ?? 4);
+      return ro !== 0 ? ro : Number(b.importoOperazione || 0) - Number(a.importoOperazione || 0);
+    });
+
+  // Data del batch più recente
+  const batchDates = [...Object.values(rinnoviMap), ...Object.values(svincoliMap)]
+    .map((x) => x.createdAt).filter(Boolean).sort((a, b) => new Date(b) - new Date(a));
+  const batchDate = batchDates[0]
+    ? new Date(batchDates[0]).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  // Totale stipendi rosa attuale
+  const validContracts = allContracts.filter((c) => c.valido);
+  const totaleStipendi = validContracts.reduce((sum, c) => sum + (c.importoOperazione ? Number(c.importoOperazione) : 0), 0);
+
+  res.render("fanta/rinnovi-check", {
+    currentUser: req.user,
+    team, rinnovi, svincoliBocciati, svincoliNaturali, confermati,
+    batchDate, totaleStipendi: Math.round(totaleStipendi * 100) / 100, params,
+  });
+}
+
+module.exports = { showClassifica, showRiepilogo, showPresidente, showFinanze, showDiario, showLog, showGiocatori, showListaGiocatori, showRose, showRosaDettaglio, showRegolamento, showDashboard, showRinnoviCheck, showMovimenti };
 
 // ── GET /fanta/rose ───────────────────────────────────────────────────────────
 async function showRose(req, res) {

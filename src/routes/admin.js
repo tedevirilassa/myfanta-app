@@ -54,6 +54,7 @@ router.post("/contratti/:id/edit", ctrl.saveEditContratto);
 router.post("/contratti/:id/delete", ctrl.annullaContratto);
 router.post("/contratti/:id/annulla", ctrl.annullaContratto);
 router.get("/log", ctrl.listLog);
+router.post("/log/:id/rollback", ctrl.rollbackLog);
 router.get("/users/invite", ctrl.showInvite);
 router.post("/users/invite", ctrl.inviteUser);
 router.get("/users/:id/edit-profile", ctrl.showEditProfile);

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Movimenti' }) %>
+  <style>
+    .mv-header-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .mv-card { background: #fff; border-radius: 10px; padding: 16px 18px; box-shadow: 0 2px 10px rgba(26,58,42,.07); text-align: center; border-top: 3px solid var(--green-mid); }
+    .mv-card.c-budget { border-top-color: #6366f1; }
+    .mv-card .sv { font-size: 1.5rem; font-weight: 900; color: var(--green-dark); line-height: 1.1; }
+    .mv-card .sl { font-size: .7rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-400); margin-top: 4px; font-weight: 700; }
+
+    /* ── table ── */
+    .mv-table-wrap { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(26,58,42,.07); overflow: hidden; }
+    .mv-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    .mv-table th { padding: 9px 12px; text-align: left; font-size: .68rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-400); background: var(--gray-100); font-weight: 700; white-space: nowrap; border-bottom: 2px solid var(--gray-200); }
+    .mv-table td { padding: 9px 12px; border-top: 1px solid var(--gray-200); vertical-align: middle; white-space: nowrap; }
+    .mv-table tr:hover td { background: var(--gray-100); }
+    .mv-table tr.rollbacked td { opacity: .45; text-decoration: line-through; }
+
+    /* ── tipo badge ── */
+    .tipo-badge { display: inline-block; font-size: .65rem; font-weight: 900; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+    .tipo-ACQUISTO     { background: #dbeafe; color: #1d4ed8; }
+    .tipo-VENDITA      { background: #d1fae5; color: #065f46; }
+    .tipo-SVINCOLO     { background: #fdecea; color: var(--red); }
+    .tipo-RINNOVO      { background: #ede9fe; color: #5b21b6; }
+    .tipo-AGGIUSTAMENTO{ background: #fef9c3; color: #854d0e; }
+    .tipo-PREMIO       { background: #fef3c7; color: #92400e; }
+    .tipo-ALTRO        { background: var(--gray-200); color: var(--gray-700); }
+
+    /* ── delta / saldo ── */
+    .delta-pos { color: #15803d; font-weight: 700; }
+    .delta-neg { color: var(--red); font-weight: 700; }
+    .delta-zero{ color: var(--gray-400); }
+    .saldo-cell{ font-weight: 800; color: var(--green-dark); }
+    .saldo-cell.saldo-neg { color: var(--red); }
+
+    /* ── data ── */
+    .ts-date { font-weight: 600; color: var(--green-dark); }
+    .ts-time { font-size: .7rem; color: var(--gray-400); }
+
+    /* ── descr ── */
+    .mv-descr { max-width: 320px; white-space: normal; line-height: 1.35; }
+
+    /* ── saldo iniziale row ── */
+    .row-saldo-iniziale td { background: var(--green-pale); font-weight: 700; color: var(--green-dark); border-top: 2px solid var(--green-mid); }
+
+    /* empty */
+    .mv-empty { padding: 48px 20px; text-align: center; color: var(--gray-400); font-size: .9rem; }
+
+    /* legend bar */
+    .legend-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; font-size: .75rem; color: var(--gray-700); }
+    .legend-bar span { display: inline-flex; align-items: center; gap: 5px; }
+
+    @media (max-width: 768px) {
+      .mv-table .hide-sm { display: none; }
+      .mv-table td, .mv-table th { padding: 7px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width: 1200px;">
+    <div class="page-header">
+      <h1>💳 Movimenti</h1>
+      <% if (team) { %><span style="font-size:.85rem;color:var(--gray-400);align-self:center;"><%= team.nome %></span><% } %>
+    </div>
+
+    <% if (!team) { %>
+      <div class="alert alert-info">Nessun FantaTeam collegato al tuo account. Contatta l'admin.</div>
+    <% } else { %>
+
+    <!-- ── Riepilogo saldi calcolati ── -->
+    <div class="mv-header-cards">
+      <% if (saldoAttuale) { %>
+      <div class="mv-card">
+        <div class="sv" style="color:<%= saldoAttuale.crediti >= 0 ? 'var(--green-dark)' : 'var(--red)' %>;">
+          <%= saldoAttuale.crediti.toFixed(2) %> M
+        </div>
+        <div class="sl">Saldo crediti</div>
+      </div>
+      <div class="mv-card">
+        <div class="sv"><%= saldoAttuale.stipendi.toFixed(2) %> M</div>
+        <div class="sl">Stipendi cumulati</div>
+      </div>
+      <% } %>
+      <div class="mv-card">
+        <div class="sv"><%= totalRighe %></div>
+        <div class="sl">Operazioni totali</div>
+      </div>
+    </div>
+
+    <!-- ── Legenda badge ── -->
+    <div class="legend-bar">
+      <strong style="font-size:.7rem;text-transform:uppercase;letter-spacing:.4px;color:var(--gray-400);">Tipi:</strong>
+      <span><span class="tipo-badge tipo-ACQUISTO">Acquisto</span></span>
+      <span><span class="tipo-badge tipo-VENDITA">Vendita</span></span>
+      <span><span class="tipo-badge tipo-SVINCOLO">Svincolo</span></span>
+      <span><span class="tipo-badge tipo-RINNOVO">Rinnovo</span></span>
+      <span><span class="tipo-badge tipo-AGGIUSTAMENTO">Aggiustamento</span></span>
+      <span><span class="tipo-badge tipo-PREMIO">Premio</span></span>
+    </div>
+
+    <!-- ── Tabella movimenti ── -->
+    <div class="mv-table-wrap">
+      <% if (righe.length === 0) { %>
+        <div class="mv-empty">
+          Nessun movimento registrato.<br>
+          <small>I movimenti vengono registrati automaticamente ad ogni operazione finanziaria.</small>
+        </div>
+      <% } else { %>
+      <table class="mv-table">
+        <thead>
+          <tr>
+            <th>Data/Ora</th>
+            <th>Tipo</th>
+            <th>Descrizione</th>
+            <th class="hide-sm" style="text-align:right;">Δ Crediti</th>
+            <th class="hide-sm" style="text-align:right;">Δ Stipendi</th>
+            <th class="hide-sm" style="text-align:right;">Δ V.Rosa</th>
+            <th class="hide-sm" style="text-align:right;">V.Rosa</th>
+            <th style="text-align:right;">Saldo Crediti</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%
+            // Riga saldo iniziale (fondo della tabella, mostrata per ultima = operazione fittizia di apertura)
+            // viene dopo l'ultima riga visibile (= la più vecchia in DESC)
+          %>
+          <% righe.forEach(function(r) { %>
+          <tr class="<%= r.rollbacked ? 'rollbacked' : '' %>">
+            <td>
+              <%
+                const d = new Date(r.createdAt);
+                const dateStr = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                const timeStr = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+              %>
+              <div class="ts-date"><%= dateStr %></div>
+              <div class="ts-time"><%= timeStr %></div>
+            </td>
+            <td><span class="tipo-badge tipo-<%= r.tipoOp %>"><%= r.tipoOp %></span></td>
+            <td class="mv-descr"><%= r.descrizione %></td>
+            <td class="hide-sm" style="text-align:right;">
+              <% if (r.deltaCrediti > 0) { %>
+                <span class="delta-pos">+<%= r.deltaCrediti.toFixed(2) %></span>
+              <% } else if (r.deltaCrediti < 0) { %>
+                <span class="delta-neg"><%= r.deltaCrediti.toFixed(2) %></span>
+              <% } else { %>
+                <span class="delta-zero">—</span>
+              <% } %>
+            </td>
+            <td class="hide-sm" style="text-align:right;">
+              <% if (r.deltaStipendi > 0) { %>
+                <span class="delta-neg">+<%= r.deltaStipendi.toFixed(2) %></span>
+              <% } else if (r.deltaStipendi < 0) { %>
+                <span class="delta-pos"><%= r.deltaStipendi.toFixed(2) %></span>
+              <% } else { %>
+                <span class="delta-zero">—</span>
+              <% } %>
+            </td>
+            <td class="hide-sm" style="text-align:right;">
+              <% if (r.deltaValoreRosa !== 0) { %>
+                <span class="<%= r.deltaValoreRosa > 0 ? 'delta-pos' : 'delta-neg' %>">
+                  <%= r.deltaValoreRosa > 0 ? '+' : '' %><%= r.deltaValoreRosa.toFixed(2) %>
+                </span>
+              <% } else { %>
+                <span class="delta-zero">—</span>
+              <% } %>
+            </td>
+            <td class="hide-sm" style="text-align:right;">
+              <span style="font-weight:700;color:var(--green-dark);"><%= r.saldoValoreRosa.toFixed(2) %> M</span>
+            </td>
+            <td style="text-align:right;">
+              <span class="saldo-cell <%= r.saldoCrediti < 0 ? 'saldo-neg' : '' %>">
+                <%= r.saldoCrediti.toFixed(2) %> M
+              </span>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <%# ── Paginazione ── %>
+    <% if (totalPages > 1) { %>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:20px;">
+      <% if (page > 1) { %>
+        <a href="/fanta/movimenti?page=<%= page - 1 %>" class="btn btn-secondary" style="font-size:.8rem;padding:6px 16px;">&#8592; Precedenti</a>
+      <% } else { %>
+        <span class="btn btn-secondary" style="font-size:.8rem;padding:6px 16px;opacity:.4;cursor:default;">&#8592; Precedenti</span>
+      <% } %>
+      <span style="font-size:.8rem;color:var(--gray-400);">Pagina <strong><%= page %></strong> di <strong><%= totalPages %></strong></span>
+      <% if (page < totalPages) { %>
+        <a href="/fanta/movimenti?page=<%= page + 1 %>" class="btn btn-secondary" style="font-size:.8rem;padding:6px 16px;">Successivi &#8594;</a>
+      <% } else { %>
+        <span class="btn btn-secondary" style="font-size:.8rem;padding:6px 16px;opacity:.4;cursor:default;">Successivi &#8594;</span>
+      <% } %>
+    </div>
+    <% } %>
+
+    <% } %> <%/* end if team */%>
+  </div>
+</body>
+</html>

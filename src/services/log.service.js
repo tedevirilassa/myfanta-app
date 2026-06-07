@@ -60,7 +60,29 @@ async function logAction({ azione, entita, entitaId = null, dettaglio = null, ad
   }
 }
 
-module.exports = { logAction, runWithContext, getContext, sfRollbackSQL };
+/**
+ * Wrapper per logAction che produce un dettaglio standardizzato per il rollback.
+ * @param {object} opts
+ * @param {"INSERT"|"UPDATE"|"DELETE"} opts.tipo_operazione
+ * @param {string}  opts.entita
+ * @param {number}  [opts.entitaId]
+ * @param {object|null} opts.stato_precedente - record PRIMA della mutazione (null per INSERT)
+ * @param {object|null} opts.stato_successivo - record DOPO la mutazione (null per DELETE)
+ * @param {number}  opts.adminId
+ */
+async function logMutation({ tipo_operazione, entita, entitaId, stato_precedente = null, stato_successivo = null, adminId }) {
+  const azioneMap = { INSERT: "CREATE", UPDATE: "UPDATE", DELETE: "DELETE" };
+  const azione = azioneMap[tipo_operazione] || tipo_operazione;
+  await logAction({
+    azione,
+    entita,
+    entitaId,
+    dettaglio: { tipo_operazione, stato_precedente, stato_successivo },
+    adminId,
+  });
+}
+
+module.exports = { logAction, logMutation, runWithContext, getContext, sfRollbackSQL };
 
 /**
  * Genera la query SQL per ripristinare una SituazioneFinanziaria allo stato

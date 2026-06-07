@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Riepilogo Rinnovi Check' }) %>
+  <style>
+    /* ── layout ── */
+    .page-intro { font-size: .85rem; color: var(--gray-400); margin-top: -12px; margin-bottom: 24px; }
+
+    /* ── sezioni ── */
+    .section-block { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(26,58,42,.07); overflow: hidden; margin-bottom: 28px; }
+    .section-header { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--gray-200); }
+    .section-header h2 { font-size: .95rem; font-weight: 800; color: var(--green-dark); text-transform: uppercase; letter-spacing: .5px; margin: 0; }
+    .section-header .count-badge { background: var(--green-pale); color: var(--green-dark); font-size: .72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+    .section-header .count-badge.red { background: #fdecea; color: var(--red); }
+    .section-header .count-badge.amber { background: #fff8e1; color: #b45309; }
+
+    /* ── table ── */
+    .check-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+    .check-table th { padding: 8px 14px; text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-400); background: var(--gray-100); font-weight: 700; white-space: nowrap; }
+    .check-table td { padding: 10px 14px; border-top: 1px solid var(--gray-200); vertical-align: middle; }
+    .check-table tr:hover td { background: var(--gray-100); }
+
+    .ruolo-badge { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 4px; font-size: .68rem; font-weight: 900; color: #fff; }
+    .rb-P { background: #6366f1; }
+    .rb-D { background: #22c55e; }
+    .rb-C { background: #f59e0b; }
+    .rb-A { background: #ef4444; }
+
+    .gname { font-weight: 700; color: var(--green-dark); }
+    .gmeta { font-size: .75rem; color: var(--gray-400); margin-top: 2px; }
+
+    .stip-old { color: var(--gray-400); text-decoration: line-through; font-size: .8rem; }
+    .stip-new { font-weight: 800; color: var(--green-dark); }
+    .stip-up   { color: #b45309; }
+    .stip-same { color: var(--gray-400); }
+
+    .arrow-cell { color: var(--gray-400); font-size: 1rem; text-align: center; padding: 10px 6px; }
+
+    .quota-pill { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--gray-200); color: var(--gray-700); white-space: nowrap; }
+
+    .durata-pill { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .durata-1 { background: #e0f2fe; color: #0369a1; }
+    .durata-2 { background: #d1fae5; color: #065f46; }
+    .durata-3 { background: #ede9fe; color: #5b21b6; }
+
+    .motivo-pill { font-size: .7rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; text-transform: uppercase; letter-spacing: .4px; }
+    .motivo-bocciato  { background: #fdecea; color: var(--red); }
+    .motivo-naturale  { background: var(--gray-200); color: var(--gray-700); }
+
+    /* ── summary card ── */
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .summary-card { background: #fff; border-radius: 10px; padding: 16px 18px; box-shadow: 0 2px 10px rgba(26,58,42,.07); text-align: center; border-top: 3px solid var(--green-mid); }
+    .summary-card .sv { font-size: 1.6rem; font-weight: 900; color: var(--green-dark); line-height: 1; }
+    .summary-card .sl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: var(--gray-400); margin-top: 5px; font-weight: 700; }
+    .summary-card.red-top { border-top-color: var(--red); }
+    .summary-card.amber-top { border-top-color: #f59e0b; }
+
+    .empty-state { padding: 24px 20px; color: var(--gray-400); font-size: .85rem; text-align: center; }
+
+    @media (max-width: 700px) {
+      .check-table .hide-mobile { display: none; }
+      .check-table td, .check-table th { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>📋 Riepilogo Rinnovi Check</h1>
+      <a href="/fanta/rinnovi" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">← Rinnovi</a>
+    </div>
+
+    <% if (!team) { %>
+      <div class="alert alert-info">Nessun FantaTeam collegato al tuo account. Contatta l'admin.</div>
+    <% } else { %>
+
+    <p class="page-intro">
+      Squadra: <strong><%= team.nome %></strong>
+      <% if (batchDate) { %> · Fine stagione elaborata il <strong><%= batchDate %></strong><% } %>
+    </p>
+
+    <!-- ── SUMMARY ── -->
+    <%
+      const nRosa = rinnovi.length + confermati.length;
+      const nRinnovi = rinnovi.length;
+      const nSvincoli = svincoliBocciati.length + svincoliNaturali.length;
+      const ruoliCount = { P: 0, D: 0, C: 0, A: 0 };
+      [...rinnovi.map(r => r.giocatore), ...confermati.map(c => c.giocatore)]
+        .forEach(g => { if (g && g.ruolo) ruoliCount[g.ruolo] = (ruoliCount[g.ruolo] || 0) + 1; });
+    %>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="sv"><%= nRosa %></div>
+        <div class="sl">Giocatori in rosa</div>
+      </div>
+      <div class="summary-card">
+        <div class="sv" style="color:#22c55e;"><%= nRinnovi %></div>
+        <div class="sl">Rinnovati</div>
+      </div>
+      <div class="summary-card red-top">
+        <div class="sv" style="color:var(--red);"><%= nSvincoli %></div>
+        <div class="sl">Svincolati</div>
+      </div>
+      <div class="summary-card amber-top">
+        <div class="sv" style="color:#b45309;"><%= totaleStipendi.toFixed(2) %> M</div>
+        <div class="sl">Stipendi totali</div>
+      </div>
+      <div class="summary-card" style="border-top-color:#6366f1;">
+        <div class="sv"><%= ruoliCount.P %>P · <%= ruoliCount.D %>D · <%= ruoliCount.C %>C · <%= ruoliCount.A %>A</div>
+        <div class="sl">Distribuzione ruoli</div>
+      </div>
+    </div>
+
+    <!-- ── RINNOVI ── -->
+    <div class="section-block">
+      <div class="section-header">
+        <h2>✅ Rinnovi effettuati</h2>
+        <span class="count-badge"><%= rinnovi.length %></span>
+      </div>
+      <% if (rinnovi.length === 0) { %>
+        <div class="empty-state">Nessun rinnovo registrato.</div>
+      <% } else { %>
+      <table class="check-table">
+        <thead>
+          <tr>
+            <th>Giocatore</th>
+            <th>Stipendio vecchio</th>
+            <th></th>
+            <th>Stipendio nuovo</th>
+            <th class="hide-mobile">Durata</th>
+            <th class="hide-mobile">Scadenza</th>
+            <th class="hide-mobile">Quotazione</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% rinnovi.forEach(function(r) {
+               const g = r.giocatore || {};
+               const stipOld = r.preStipendio !== null && r.preStipendio !== undefined ? Number(r.preStipendio) : null;
+               const stipNew = r.nuovoStipendio !== null && r.nuovoStipendio !== undefined ? Number(r.nuovoStipendio) : null;
+               const isUp = stipOld !== null && stipNew !== null && stipNew > stipOld;
+          %>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="ruolo-badge rb-<%= g.ruolo || 'A' %>"><%= g.ruolo || '?' %></span>
+                <div>
+                  <div class="gname"><%= g.nome || '—' %></div>
+                  <div class="gmeta"><%= g.squadra || '' %></div>
+                </div>
+              </div>
+            </td>
+            <td><span class="stip-old"><%= stipOld !== null ? stipOld.toFixed(2) + ' M' : '—' %></span></td>
+            <td class="arrow-cell">→</td>
+            <td>
+              <span class="stip-new <%= isUp ? 'stip-up' : 'stip-same' %>">
+                <%= stipNew !== null ? stipNew.toFixed(2) + ' M' : '—' %>
+                <% if (isUp) { %><span style="font-size:.7rem;"> ▲</span><% } %>
+              </span>
+            </td>
+            <td class="hide-mobile">
+              <% if (r.nuovaDurata) { %>
+                <span class="durata-pill durata-<%= r.nuovaDurata %>"><%= r.nuovaDurata %> <%= r.nuovaDurata === 1 ? 'anno' : 'anni' %></span>
+              <% } else { %>—<% } %>
+            </td>
+            <td class="hide-mobile"><%= r.nuovaDataFine || '—' %></td>
+            <td class="hide-mobile">
+              <% if (r.quotazione) { %><span class="quota-pill">Q <%= r.quotazione %></span><% } else { %>—<% } %>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <!-- ── SVINCOLI ── -->
+    <div class="section-block">
+      <div class="section-header">
+        <h2>❌ Svincolati</h2>
+        <span class="count-badge red"><%= svincoliBocciati.length + svincoliNaturali.length %></span>
+      </div>
+      <% if (svincoliBocciati.length === 0 && svincoliNaturali.length === 0) { %>
+        <div class="empty-state">Nessuno svincolo registrato.</div>
+      <% } else { %>
+      <table class="check-table">
+        <thead>
+          <tr>
+            <th>Giocatore</th>
+            <th>Tipo contratto</th>
+            <th>Stipendio</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <%
+            const tuttiSvincoli = [
+              ...svincoliBocciati.map(s => Object.assign({}, s, { _motivo: 'rinnovo-bocciato' })),
+              ...svincoliNaturali.map(s => Object.assign({}, s, { _motivo: 'scadenza-naturale' })),
+            ];
+            tuttiSvincoli.sort(function(a, b) {
+              const ro = { P: 0, D: 1, C: 2, A: 3 };
+              const ra = (a.giocatore && ro[a.giocatore.ruolo]) !== undefined ? ro[a.giocatore.ruolo] : 4;
+              const rb = (b.giocatore && ro[b.giocatore.ruolo]) !== undefined ? ro[b.giocatore.ruolo] : 4;
+              return ra - rb;
+            });
+          %>
+          <% tuttiSvincoli.forEach(function(s) {
+               const g = s.giocatore || {};
+               const stip = s.stipendio !== null && s.stipendio !== undefined ? Number(s.stipendio) : null;
+          %>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="ruolo-badge rb-<%= g.ruolo || 'A' %>"><%= g.ruolo || '?' %></span>
+                <div>
+                  <div class="gname"><%= g.nome || '—' %></div>
+                  <div class="gmeta"><%= g.squadra || '' %></div>
+                </div>
+              </div>
+            </td>
+            <td><%= s.tipo || '—' %></td>
+            <td><%= stip !== null ? stip.toFixed(2) + ' M' : '—' %></td>
+            <td>
+              <% if (s._motivo === 'rinnovo-bocciato') { %>
+                <span class="motivo-pill motivo-bocciato">Bocciato</span>
+              <% } else { %>
+                <span class="motivo-pill motivo-naturale">Scaduto</span>
+              <% } %>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <!-- ── CONFERMATI ── -->
+    <div class="section-block">
+      <div class="section-header">
+        <h2>🔒 Contratti confermati</h2>
+        <span class="count-badge amber"><%= confermati.length %></span>
+      </div>
+      <% if (confermati.length === 0) { %>
+        <div class="empty-state">Nessun contratto confermato.</div>
+      <% } else { %>
+      <table class="check-table">
+        <thead>
+          <tr>
+            <th>Giocatore</th>
+            <th>Tipo</th>
+            <th>Stipendio</th>
+            <th class="hide-mobile">Durata</th>
+            <th class="hide-mobile">Scadenza</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% confermati.forEach(function(c) {
+               const g = c.giocatore || {};
+               const stip = c.importoOperazione ? Number(c.importoOperazione) : null;
+          %>
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="ruolo-badge rb-<%= g.ruolo || 'A' %>"><%= g.ruolo || '?' %></span>
+                <div>
+                  <div class="gname"><%= g.nome || '—' %></div>
+                  <div class="gmeta"><%= g.squadra || '' %></div>
+                </div>
+              </div>
+            </td>
+            <td><%= c.tipo || '—' %></td>
+            <td><%= stip !== null ? stip.toFixed(2) + ' M' : '—' %></td>
+            <td class="hide-mobile">
+              <% if (c.durataContratto) { %>
+                <span class="durata-pill durata-<%= c.durataContratto %>"><%= c.durataContratto %> <%= c.durataContratto === 1 ? 'anno' : 'anni' %></span>
+              <% } else { %>—<% } %>
+            </td>
+            <td class="hide-mobile"><%= c.dataFine || '—' %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <% } %> <%/* end if team */%>
+  </div>
+</body>
+</html>

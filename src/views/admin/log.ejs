@@ -29,6 +29,20 @@
       font-size: .72rem; font-weight: 700; letter-spacing: .4px;
     }
 
+    /* ── riga rollbacked ──────────────────────────────── */
+    tr.rollbacked { opacity: 0.45; text-decoration: line-through; }
+    tr.rollbacked .azione-badge { opacity: .6; }
+
+    /* ── pulsante undo ────────────────────────────────── */
+    .btn-undo {
+      background: none; border: 1.5px solid var(--gray-200);
+      border-radius: 6px; padding: 3px 9px; font-size: .72rem;
+      cursor: pointer; color: var(--gray-600); white-space: nowrap;
+    }
+    .btn-undo:hover { background: #fef3c7; border-color: #f59e0b; color: #92400e; }
+    .btn-undo:disabled { opacity: .3; cursor: not-allowed; }
+    .btn-undo.done { background: #dcfce7; border-color: #86efac; color: #166534; cursor: default; }
+
     /* ── entità badge ─────────────────────────────────── */
     .entita-badge {
       display: inline-block; padding: 2px 9px; border-radius: 6px;
@@ -154,18 +168,19 @@
             <th style="width:60px;">ID</th>
             <th>Admin</th>
             <th>Dettaglio</th>
+            <th style="width:80px;">Azioni</th>
           </tr>
         </thead>
         <tbody>
           <% if (logs.length === 0) { %>
           <tr>
-            <td colspan="6" style="text-align:center; color:#94a3b8; padding:36px;">
+            <td colspan="7" style="text-align:center; color:#94a3b8; padding:36px;">
               Nessuna voce trovata.
             </td>
           </tr>
           <% } %>
           <% logs.forEach(function(l, idx) { %>
-          <tr>
+          <tr<%= l.rollbacked ? ' class="rollbacked"' : '' %>>
             <td style="font-size:.78rem; color:var(--gray-700);">
               <%= l.createdAt.toLocaleString('it-IT', { dateStyle:'short', timeStyle:'short', timeZone:'Europe/Rome' }) %>
             </td>
@@ -279,6 +294,16 @@
                 <span style="color:var(--gray-300); font-size:.78rem;">—</span>
               <% } %>
             </td>
+            <td style="text-align:center;">
+              <% const canUndo = !l.rollbacked && ['CREATE','UPDATE','DELETE'].includes(l.azione) && l.dettaglio; %>
+              <% if (l.rollbacked) { %>
+                <span style="font-size:.7rem; color:var(--gray-400);">↩ annullato</span>
+              <% } else if (canUndo) { %>
+                <button class="btn-undo" data-log-id="<%= l.id %>" onclick="confermaRollback(this)">↶ Annulla</button>
+              <% } else { %>
+                <span style="color:var(--gray-300); font-size:.72rem;">—</span>
+              <% } %>
+            </td>
           </tr>
           <% }) %>
         </tbody>
@@ -317,6 +342,40 @@
       const panel = btn.nextElementSibling;
       panel.classList.toggle('open');
       btn.textContent = panel.classList.contains('open') ? '▲ chiudi' : '▼ dettaglio';
+    }
+
+    async function confermaRollback(btn) {
+      const logId = btn.dataset.logId;
+      const ok = confirm(
+        "Sei sicuro di voler annullare questa operazione?\n\n" +
+        "Le modifiche verranno ripristinate allo stato precedente. " +
+        "Questa azione è irreversibile."
+      );
+      if (!ok) return;
+
+      btn.disabled = true;
+      btn.textContent = '⏳…';
+
+      try {
+        const resp = await fetch('/admin/log/' + logId + '/rollback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await resp.json();
+        if (data.ok) {
+          btn.textContent = '✓ Annullato';
+          btn.classList.add('done');
+          btn.closest('tr').classList.add('rollbacked');
+        } else {
+          alert('Errore: ' + (data.error || 'sconosciuto'));
+          btn.disabled = false;
+          btn.textContent = '↶ Annulla';
+        }
+      } catch (err) {
+        alert('Errore di rete: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = '↶ Annulla';
+      }
     }
   </script>
 </body>

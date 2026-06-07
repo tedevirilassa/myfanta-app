@@ -21,6 +21,8 @@ router.get("/regolamento",       ctrl.showRegolamento);
 
 // ── Rinnovi ──────────────────────────────────────────────
 router.get("/rinnovi",                  rinnoviCtrl.showMieProposte);
+router.get("/rinnovi/check",            ctrl.showRinnoviCheck);
+router.get("/movimenti",                ctrl.showMovimenti);
 router.get("/rinnovi/pubblico",         rinnoviCtrl.showRinnoviPubblico);
 router.post("/rinnovi/proposte",        rinnoviCtrl.createProposta);
 router.post("/rinnovi/proposte/:id/delete", rinnoviCtrl.deleteProposta);
