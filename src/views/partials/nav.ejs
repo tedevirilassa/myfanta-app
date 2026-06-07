@@ -59,6 +59,14 @@
     .nav-right { display:none !important; }
     .nav-hamburger { display:flex; }
   }
+  .nav-home-btn {
+    display:inline-flex; align-items:center; gap:5px;
+    background:rgba(255,255,255,.15); border:1.5px solid rgba(255,255,255,.3);
+    color:#fff !important; border-radius:7px; padding:5px 13px;
+    font-weight:800; font-size:.85rem; text-decoration:none !important;
+    transition:background .15s;
+  }
+  .nav-home-btn:hover { background:rgba(255,255,255,.28); }
 </style>
 <% if (typeof impersonator !== 'undefined' && impersonator) { %>
 <div style="background:#7d5a00; color:#fff; padding:10px 20px; text-align:center; font-size:.88rem; font-weight:600; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; position:sticky; top:0; z-index:200;">
@@ -77,6 +85,12 @@
   <span class="brand">MyFanta</span>
   <% if (typeof currentUser !== 'undefined' && currentUser) { %>
   <div class="nav-right">
+    <%
+      const _homeUrl = (currentUser.fantaTeam && currentUser.fantaTeam.id)
+        ? '/fanta/rose/' + currentUser.fantaTeam.id
+        : (currentUser.role === 'ADMIN' ? '/admin/pannello' : '/fanta/rose');
+    %>
+    <a href="<%= _homeUrl %>" class="nav-home-btn" title="La mia Rosa">🏠 Home</a>
     <div class="nav-dropdown">
       <button class="nav-dd-btn">
         👤 <%= currentUser.nickname || currentUser.email.split('@')[0] %> ▾
@@ -131,6 +145,12 @@
 
 <% if (typeof currentUser !== 'undefined' && currentUser) { %>
 <div class="nav-mobile" id="nav-mobile">
+  <%
+    const _homeUrlM = (currentUser.fantaTeam && currentUser.fantaTeam.id)
+      ? '/fanta/rose/' + currentUser.fantaTeam.id
+      : (currentUser.role === 'ADMIN' ? '/admin/pannello' : '/fanta/rose');
+  %>
+  <a href="<%= _homeUrlM %>" style="font-weight:800;color:#fff;">🏠 Home — La mia Rosa</a>
   <span class="nav-mobile-section-title">👤 <%= currentUser.nickname || currentUser.email.split('@')[0] %></span>
   <a href="/profilo">✏️ Il mio profilo</a>
   <a href="/auth/change-password">🔑 Cambia password</a>
