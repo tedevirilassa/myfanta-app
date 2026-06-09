@@ -22,6 +22,10 @@
     "prod:migrate": "node scripts/sync-to-prod.js --migrate-only",
     "prod:sync": "node scripts/sync-to-prod.js",
     "prod:migrate-and-sync": "node scripts/sync-to-prod.js --migrate",
+    "prod:deploy": "node scripts/deploy-to-prod.js",
+    "prod:deploy-install": "node scripts/deploy-to-prod.js --install",
+    "prod:deploy-safe": "node scripts/deploy-to-prod.js --no-delete",
+    "prod:deploy-dry": "node scripts/deploy-to-prod.js --dry-run",
     "db:backup": "node scripts/backup-db.js",
     "db:backup-remote": "node scripts/backup-db.js --remote",
     "db:restore": "node scripts/restore-db.js"

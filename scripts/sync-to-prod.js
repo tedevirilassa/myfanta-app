@@ -509,6 +509,22 @@ async function main() {
       });
       await resetSequence(remotePool, "trattative_mercato");
 
+      // ── movimenti_finanziari ──
+      // Richiede che CausaleFinanziaria + tabella esistano già su PROD.
+      // Una tantum: lanciare `scripts/_apply-movimenti-finanziari-ddl.js` e
+      // `scripts/_add-causale-pluriennale-enum.js` puntando DATABASE_URL al
+      // tunnel PROD prima del primo sync.
+      logSection("Sync tabella: movimenti_finanziari");
+      await syncTable({
+        localPool, remotePool,
+        table: "movimenti_finanziari",
+        columns: [
+          '"id"', '"fantaTeamId"', '"sfId"', '"stagione"',
+          '"importo"', '"causale"', '"contesto"', '"logId"', '"createdAt"',
+        ],
+      });
+      await resetSequence(remotePool, "movimenti_finanziari");
+
       logSection("Sincronizzazione DEV → PROD completata con successo");
     } catch (err) {
       console.error("\nERRORE durante la sincronizzazione:", err.message);

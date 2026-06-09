@@ -6,11 +6,23 @@
     .danger-card { background:#fef3c7; border:2px solid #f59e0b; border-radius:10px; padding:20px 24px; margin-bottom:24px; }
     .danger-card h2 { color:#92400e; margin:0 0 10px; font-size:1.1rem; }
     .step-card { background:#fff; border-radius:10px; padding:16px 20px; box-shadow:0 2px 10px rgba(26,58,42,.08); margin-bottom:14px; border-left:4px solid var(--green-mid); }
+    .step-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
     .step-num { display:inline-block; width:26px; height:26px; line-height:26px; text-align:center; border-radius:50%; background:var(--green-dark); color:#fff; font-weight:800; font-size:.78rem; margin-right:8px; }
+    .step-actions { display:flex; gap:8px; flex-shrink:0; }
+    .step-body { font-size:.85rem; color:var(--gray-700); margin-top:8px; line-height:1.5; }
+    .step-output { display:none; margin-top:12px; }
+    .step-output pre { background:#0f1f16; color:#a7d7b8; font-family:"Courier New",Courier,monospace; font-size:.75rem; padding:14px; border-radius:8px; white-space:pre-wrap; word-break:break-word; max-height:340px; overflow:auto; line-height:1.55; margin:0; }
+    .step-output .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+    .step-output .head .lbl { font-size:.72rem; font-weight:700; color:var(--gray-700); }
+    .step-output .head .close { background:none; border:none; cursor:pointer; font-size:.75rem; color:var(--gray-400); }
     .preview-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px; }
     .preview-grid .card { padding:14px 18px; }
     .preview-grid .num { font-size:1.6rem; font-weight:800; color:var(--green-dark); }
     .preview-grid .lbl { font-size:.72rem; color:var(--gray-400); text-transform:uppercase; letter-spacing:.5px; }
+    details.advanced { background:#fff; border-radius:10px; padding:16px 20px; box-shadow:0 2px 10px rgba(26,58,42,.08); margin-top:30px; }
+    details.advanced summary { font-weight:700; color:var(--gray-700); cursor:pointer; font-size:.95rem; }
+    details.advanced[open] summary { margin-bottom:14px; }
+    .btn-mini { padding:6px 12px; font-size:.78rem; }
   </style>
 </head>
 <body>
@@ -27,47 +39,176 @@
     <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
 
     <div class="preview-grid">
-      <div class="card">
-        <div class="lbl">Stagione corrente</div>
-        <div class="num"><%= stagioneOld %></div>
-      </div>
-      <div class="card">
-        <div class="lbl">Stagione successiva</div>
-        <div class="num"><%= stagioneNew %></div>
-      </div>
-      <div class="card">
-        <div class="lbl">Contratti validi</div>
-        <div class="num"><%= contrattiValidi %></div>
-      </div>
-      <div class="card">
-        <div class="lbl">Proposte rinnovo</div>
-        <div class="num"><%= proposteAttese %></div>
-      </div>
-      <div class="card">
-        <div class="lbl">Scadenze naturali</div>
-        <div class="num"><%= scadenzeNaturali %></div>
-      </div>
+      <div class="card"><div class="lbl">Stagione corrente</div><div class="num"><%= stagioneOld %></div></div>
+      <div class="card"><div class="lbl">Stagione successiva</div><div class="num"><%= stagioneNew %></div></div>
+      <div class="card"><div class="lbl">Contratti validi</div><div class="num"><%= contrattiValidi %></div></div>
+      <div class="card"><div class="lbl">Proposte rinnovo</div><div class="num"><%= proposteAttese %></div></div>
+      <div class="card"><div class="lbl">Scadenze naturali</div><div class="num"><%= scadenzeNaturali %></div></div>
     </div>
 
-    <div class="step-card"><span class="step-num">1</span><strong>Decremento temporale</strong> — su <code>Contratto</code> validi: <code>durataContratto -= 1</code>.</div>
-    <div class="step-card"><span class="step-num">2</span><strong>Simulazione rinnovi</strong> — proposte PENDING per <%= stagioneNew %> ordinate per priorità, ingaggi ricalcolati su ultima <code>Quotazione.valore × 10%</code>, marcate APPROVED/REJECTED in base al salary cap.</div>
-    <div class="step-card"><span class="step-num">3</span><strong>Svincoli</strong> — contratti con <code>durataContratto ≤ 0</code> non rinnovati + proposte REJECTED. SF: <code>crediti += quot</code>, <code>valoreRose -= quot</code>, <code>giocatoriTesserati -= 1</code>, <code>stipendi -= stipendio_old</code>. Riga <code>RosaGiocatore</code> stagione vecchia eliminata.</div>
-    <div class="step-card"><span class="step-num">4</span><strong>Rinnovi APPROVED</strong> — nuovo contratto Acquisto con <code>dataStipula = "07-<%= (parseInt(stagioneOld.split('-')[1],10)) %>"</code>, <code>durataContratto = nuovaDurata</code>, <code>importoOperazione = quot × 10%</code>, <code>prezzoAcquisto = quot</code>, <code>valido = true</code>. <code>RosaGiocatore.stagione → <%= stagioneNew %></code>.</div>
-    <div class="step-card"><span class="step-num">5</span><strong>Log</strong> — ogni svincolo SF e nuovo contratto generano un record in <code>log_azioni</code> con <code>dettaglio.pre</code> / <code>dettaglio.post</code> + batch riepilogativo finale.</div>
+    <p style="font-size:.85rem; color:var(--gray-700); margin-bottom:16px; line-height:1.55;">
+      Ogni step gira in una <strong>transazione separata</strong>. L'ordine consigliato è
+      <strong>1 → 2 → 3</strong>, ma puoi rilanciare singoli step se serve.
+      Usa <strong>🔍 Anteprima</strong> per vedere cosa verrà fatto senza modificare il DB.
+      <br><em>La durata residua dei contratti è calcolata dinamicamente da <code>dataFine</code>, quindi non serve più alcun decremento al rollover.</em>
+    </p>
 
-    <div class="danger-card">
-      <h2>⚠ Operazione transazionale e irreversibile</h2>
-      <p style="font-size:.9rem; line-height:1.5; color:#7d5a00; margin-bottom:14px;">
-        L'intero rollover gira in una <strong>transazione ACID</strong>. Se uno qualsiasi degli step fallisce
-        viene eseguito <strong>ROLLBACK completo</strong> del DB.
-        L'esecuzione corretta è invece <strong>NON annullabile</strong> dalla UI (resta solo nei log).
-      </p>
-      <form action="/admin/fine-stagione/esegui" method="POST"
-            onsubmit="return confirm('Eseguire il rollover fine stagione per TUTTI i team?\n\nDecrementa durata, svincola scaduti/bocciati, rinnova approvati. Transazione atomica.\n\nProcedere?');"
-            style="margin:0;">
-        <button type="submit" class="btn btn-danger">▶ Esegui rollover <%= stagioneOld %> → <%= stagioneNew %></button>
-      </form>
+    <!-- STEP 1 -->
+    <div class="step-card">
+      <div class="step-head">
+        <div><span class="step-num">1</span><strong>Decisione rinnovi</strong></div>
+        <div class="step-actions">
+          <button class="btn btn-mini" data-step="2" data-action="preview">🔍 Anteprima</button>
+          <button class="btn btn-mini btn-danger" data-step="2" data-action="esegui"
+                  data-confirm="Marca le proposte PENDING di <%= stagioneNew %> come APPROVED o REJECTED in base al salary cap. NON tocca i contratti. Procedere?">▶ Esegui</button>
+        </div>
+      </div>
+      <div class="step-body">Proposte <code>PENDING</code> per <%= stagioneNew %> ordinate per priorità, ingaggio = ultima quotazione × stipendio%. Aggiorna solo <code>PropostaRinnovo.status</code>.</div>
+      <div class="step-output" id="out-2"><div class="head"><span class="lbl">Output Step 1</span><button class="close" type="button">✕ Chiudi</button></div><pre></pre></div>
     </div>
+
+    <!-- STEP 2 -->
+    <div class="step-card">
+      <div class="step-head">
+        <div><span class="step-num">2</span><strong>Svincoli</strong></div>
+        <div class="step-actions">
+          <button class="btn btn-mini" data-step="3" data-action="preview">🔍 Anteprima</button>
+          <button class="btn btn-mini btn-danger" data-step="3" data-action="esegui"
+                  data-confirm="Svincola: contratti scaduti, proposte REJECTED, dataFine scaduta. Aggiorna SF e rimuove RosaGiocatore. Procedere?">▶ Esegui</button>
+        </div>
+      </div>
+      <div class="step-body">
+        Candidati: proposte <code>REJECTED</code>, o <code>dataFine</code> con anno ≤ stagione corrente.
+        Esclude U21 e <code>dataFine</code> futura. Per ciascuno: <code>valido=false</code>, <code>SF.crediti += quot</code>, <code>valoreRose -= quot</code>, <code>stipendi -= stipendio</code>, <code>giocatoriTesserati -= 1</code>, rimuove <code>RosaGiocatore</code>.
+      </div>
+      <div class="step-output" id="out-3"><div class="head"><span class="lbl">Output Step 2</span><button class="close" type="button">✕ Chiudi</button></div><pre></pre></div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="step-card" data-step-label="2B">
+      <div class="step-head">
+        <div><span class="step-num">2B</span><strong>Stipendi pluriennali</strong></div>
+        <div class="step-actions">
+          <button class="btn btn-mini" data-step="2b" data-action="preview">🔍 Anteprima</button>
+          <button class="btn btn-mini btn-danger" data-step="2b" data-action="esegui"
+                  data-confirm="Addebita lo stipendio annuale di tutti i contratti pluriennali (dataFine > stagione corrente, esclusi quelli rinnovati nello Step 3). Per i contratti firmati in sessione invernale di questa stagione raddoppia importoOperazione (5%→10%) e ne addebita lo stipendio pieno. Non c'è blocco di capienza: team in rosso vengono solo segnalati. Procedere?">▶ Esegui</button>
+          <button class="btn btn-mini" data-step="2b" data-action="annulla" disabled
+                  data-confirm="Annulla l'ULTIMO batch eseguito: ripristina importoOperazione dei contratti riallineati, stoma gli addebiti dalle SF, cancella i movimenti finanziari. Procedere?">↩ Annulla ultimo</button>
+        </div>
+      </div>
+      <div class="step-body">
+        Per ogni contratto <code>valido=true</code> con <code>dataFine</code> ad anno <strong>&gt; <%= stagioneOld.split("-")[0] %>+1</strong> (proseguono in <%= stagioneNew %>) e NON oggetto di rinnovo APPROVED:
+        <ul style="margin:6px 0 0 18px;">
+          <li>Se <code>dataStipula</code> = <code>01-<%= stagioneOld.split("-")[0] %>+1</code> (acquisto invernale di questa stagione): <code>importoOperazione *= 2</code> + addebito stipendio pieno.</li>
+          <li>Altrimenti: addebito <code>importoOperazione</code> attuale.</li>
+        </ul>
+        Causale: <code>PAGAMENTO_STIPENDIO_PLURIENNALE</code>. Saldi negativi consentiti (warning nel report). U21 inclusi.
+        Ogni esecuzione genera un <code>batchId</code> che abilita il bottone <em>Annulla ultimo</em>.
+      </div>
+      <div class="step-output" id="out-2b"><div class="head"><span class="lbl">Output Step 2B</span><button class="close" type="button">✕ Chiudi</button></div><pre></pre></div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="step-card">
+      <div class="step-head">
+        <div><span class="step-num">3</span><strong>Rinnovi APPROVED</strong></div>
+        <div class="step-actions">
+          <button class="btn btn-mini" data-step="4" data-action="preview">🔍 Anteprima</button>
+          <button class="btn btn-mini btn-danger" data-step="4" data-action="esegui"
+                  data-confirm="Chiude i contratti vecchi delle proposte APPROVED e crea i nuovi per <%= stagioneNew %>. Procedere?">▶ Esegui</button>
+        </div>
+      </div>
+      <div class="step-body">Per ogni proposta <code>APPROVED</code>: chiude contratto vecchio (<code>valido=false</code>), crea nuovo <code>Acquisto</code> con <code>dataStipula/dataFine/durataContratto/importoOperazione/prezzoAcquisto</code> calcolati, sposta <code>RosaGiocatore</code> in <%= stagioneNew %>.</div>
+      <div class="step-output" id="out-4"><div class="head"><span class="lbl">Output Step 3</span><button class="close" type="button">✕ Chiudi</button></div><pre></pre></div>
+    </div>
+
+    <details class="advanced">
+      <summary>⚙️ Avanzato — rollover monolitico (tutto-in-uno in unica transazione)</summary>
+      <div class="danger-card" style="margin-top:14px;">
+        <h2>⚠ Operazione transazionale e irreversibile</h2>
+        <p style="font-size:.9rem; line-height:1.5; color:#7d5a00; margin-bottom:14px;">
+          Esegue gli step 1→4 in <strong>una sola transazione ACID</strong>. Se uno qualunque fallisce, ROLLBACK totale.
+          Sconsigliato se non sai esattamente cosa fa: preferisci i 4 step manuali sopra.
+        </p>
+        <form action="/admin/fine-stagione/esegui" method="POST"
+              onsubmit="return confirm('Eseguire il rollover COMPLETO per TUTTI i team?\n\nDecremento + decisione rinnovi + svincoli + rinnovi in unica transazione.\n\nProcedere?');"
+              style="margin:0;">
+          <button type="submit" class="btn btn-danger">▶ Esegui rollover monolitico <%= stagioneOld %> → <%= stagioneNew %></button>
+        </form>
+      </div>
+    </details>
   </div>
+
+  <script>
+    (function () {
+      function fmt(obj) { return JSON.stringify(obj, null, 2); }
+
+      async function runStep(step, action, btn) {
+        const card = btn.closest('.step-card');
+        const out  = card.querySelector('.step-output');
+        const pre  = out.querySelector('pre');
+        const allBtns = card.querySelectorAll('button[data-step]');
+        allBtns.forEach(b => b.disabled = true);
+        const verbo = action === 'preview' ? 'Anteprima'
+                   : action === 'annulla' ? 'Annullamento'
+                   : 'Esecuzione';
+        pre.textContent = '⏳ ' + verbo + ' in corso...';
+        pre.style.color = '#fbbf24';
+        out.style.display = 'block';
+        try {
+          const opts = { method: 'POST' };
+          // Per l'azione 'annulla' invio il batchId dell'ultimo run salvato sulla card
+          if (action === 'annulla') {
+            const batchId = card.dataset.lastBatchId || '';
+            if (!batchId) throw new Error('Nessun batch da annullare: esegui prima lo step.');
+            const fd = new URLSearchParams();
+            fd.set('batchId', batchId);
+            opts.body = fd;
+            opts.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+          }
+          const res = await fetch(`/admin/fine-stagione/step/${step}/${action}`, opts);
+          const data = await res.json();
+          pre.textContent = fmt(data);
+          pre.style.color = data.ok ? '#a7d7b8' : '#f97066';
+
+          // Memorizza l'ultimo batchId per riabilitare 'annulla' dopo 'esegui'
+          if (action === 'esegui' && data.ok && data.batchId) {
+            card.dataset.lastBatchId = data.batchId;
+          }
+          if (action === 'annulla' && data.ok) {
+            delete card.dataset.lastBatchId;
+          }
+        } catch (e) {
+          pre.textContent = 'Errore: ' + e.message;
+          pre.style.color = '#f97066';
+        } finally {
+          // Riabilita i bottoni; 'annulla' resta disabilitato se non c'è un batch valido
+          allBtns.forEach(b => {
+            if (b.dataset.action === 'annulla') {
+              b.disabled = !card.dataset.lastBatchId;
+            } else {
+              b.disabled = false;
+            }
+          });
+        }
+      }
+
+      document.querySelectorAll('button[data-step]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const step   = btn.dataset.step;
+          const action = btn.dataset.action;
+          if (action === 'esegui' || action === 'annulla') {
+            const msg = btn.dataset.confirm || ('Eseguire lo step ' + step + '?');
+            if (!confirm(msg)) return;
+          }
+          runStep(step, action, btn);
+        });
+      });
+
+      document.querySelectorAll('.step-output .close').forEach(b => {
+        b.addEventListener('click', () => { b.closest('.step-output').style.display = 'none'; });
+      });
+    })();
+  </script>
 </body>
 </html>

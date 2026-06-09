@@ -40,6 +40,18 @@ router.post("/svincoli-inattivi/applica", ctrl.approveSvincoliInattivi);
 const fineStagioneCtrl = require("../controllers/fine-stagione.controller");
 router.get("/fine-stagione",         fineStagioneCtrl.showFineStagione);
 router.post("/fine-stagione/esegui", fineStagioneCtrl.eseguiFineStagione);
+// Step manuali (preview + esegui, ognuno in transazione a sé, ordine libero)
+router.post("/fine-stagione/step/1/preview", fineStagioneCtrl.previewStep1);
+router.post("/fine-stagione/step/1/esegui",  fineStagioneCtrl.eseguiStep1);
+router.post("/fine-stagione/step/2/preview", fineStagioneCtrl.previewStep2);
+router.post("/fine-stagione/step/2/esegui",  fineStagioneCtrl.eseguiStep2);
+router.post("/fine-stagione/step/2b/preview", fineStagioneCtrl.previewStep2B);
+router.post("/fine-stagione/step/2b/esegui",  fineStagioneCtrl.eseguiStep2B);
+router.post("/fine-stagione/step/2b/annulla", fineStagioneCtrl.annullaStep2B);
+router.post("/fine-stagione/step/3/preview", fineStagioneCtrl.previewStep3);
+router.post("/fine-stagione/step/3/esegui",  fineStagioneCtrl.eseguiStep3);
+router.post("/fine-stagione/step/4/preview", fineStagioneCtrl.previewStep4);
+router.post("/fine-stagione/step/4/esegui",  fineStagioneCtrl.eseguiStep4);
 
 router.get("/users", ctrl.listUsers);
 router.post("/users/:id/save-fields", ctrl.saveUserFields);

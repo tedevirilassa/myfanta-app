@@ -48,9 +48,7 @@
             <th class="sortable" data-sort-key="crediti" data-sort-dir="desc">Crediti<span class="sort-arrow">▼</span></th>
             <th>Giocatori</th>
             <th>Età media</th>
-            <th>Stipendi</th>
             <th>Prestiti IN</th>
-            <th>Ultimo ±</th>
           </tr>
         </thead>
         <tbody>
@@ -58,7 +56,6 @@
             const pos = idx + 1;
             const rowClass = pos === 1 ? 'rank-1' : pos === 2 ? 'rank-2' : pos === 3 ? 'rank-3' : '';
             const barWidth = Math.round((p.patrimonio / maxPat) * 100);
-            const pmClass = p.ultimoPlusMinus > 0 ? 'pm-pos' : p.ultimoPlusMinus < 0 ? 'pm-neg' : 'pm-zero';
           %>
           <tr class="<%= rowClass %>" data-patrimonio="<%= p.patrimonio %>" data-rosa="<%= p.valoreRose %>" data-crediti="<%= p.crediti %>">
             <td class="rank-cell" style="text-align:center; font-weight:700;"><%= pos %></td>
@@ -79,11 +76,7 @@
             <td><%= p.crediti.toFixed(2) %></td>
             <td style="text-align:center;"><%= p.giocatoriTesserati %></td>
             <td style="text-align:center;"><%= p.etaMedia.toFixed(2) %></td>
-            <td><%= p.stipendi.toFixed(2) %></td>
             <td><%= p.montePrestiti.toFixed(2) %></td>
-            <td class="<%= pmClass %>">
-              <%= p.ultimoPlusMinus > 0 ? '+' : '' %><%= p.ultimoPlusMinus.toFixed(2) %>
-            </td>
           </tr>
           <% }); %>
         </tbody>

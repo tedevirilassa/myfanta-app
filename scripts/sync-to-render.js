@@ -354,6 +354,21 @@ async function main() {
     });
     await resetSequence(remotePool, "trattative_mercato");
 
+    // ── movimenti_finanziari ──
+    // Richiede che CausaleFinanziaria + tabella esistano già su remote
+    // (eseguire `scripts/_apply-movimenti-finanziari-ddl.js` puntato a Render
+    // o `npx prisma db push` con DATABASE_URL=Render una tantum).
+    logSection("Sync tabella: movimenti_finanziari");
+    await syncTable({
+      localPool, remotePool,
+      table: "movimenti_finanziari",
+      columns: [
+        '"id"', '"fantaTeamId"', '"sfId"', '"stagione"',
+        '"importo"', '"causale"', '"contesto"', '"logId"', '"createdAt"',
+      ],
+    });
+    await resetSequence(remotePool, "movimenti_finanziari");
+
     logSection("Sincronizzazione completata con successo");
   } catch (err) {
     console.error("\nERRORE durante la sincronizzazione:", err.message);

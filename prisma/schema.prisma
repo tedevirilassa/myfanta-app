@@ -171,8 +171,34 @@ model Log {
   adminId    Int
   admin      User     @relation(fields: [adminId], references: [id])
   createdAt  DateTime @default(now())
+  movimenti  MovimentoFinanziario[]
 
   @@map("log_azioni")
+}
+
+enum CausaleFinanziaria {
+  PAGAMENTO_STIPENDIO_RINNOVO
+  PAGAMENTO_STIPENDIO_P2P
+  PAGAMENTO_STIPENDIO_PLURIENNALE
+  STORNO_STIPENDIO_P2P
+  ALTRO
+}
+
+model MovimentoFinanziario {
+  id          Int                 @id @default(autoincrement())
+  fantaTeamId Int
+  sfId        Int                 // riferimento a SituazioneFinanziaria
+  stagione    String
+  importo     Decimal             @db.Decimal(10, 2)  // segno: <0 addebito, >0 accredito
+  causale     CausaleFinanziaria
+  contesto    String?             @db.Text             // JSON libero (contrattoId, giocatoreNome, ...)
+  logId       Int?                                     // log collegato per audit/rollback
+  log         Log?                @relation(fields: [logId], references: [id])
+  createdAt   DateTime            @default(now())
+
+  @@index([fantaTeamId, stagione])
+  @@index([causale])
+  @@map("movimenti_finanziari")
 }
 
 model Parametro {
