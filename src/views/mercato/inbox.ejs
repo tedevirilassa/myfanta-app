@@ -79,7 +79,7 @@
       <% if (ricevute.length === 0) { %>
         <div class="empty-state">Nessuna offerta ricevuta.</div>
       <% } else { ricevute.forEach(t => { %>
-        <div class="trattativa-card <%= t.stato.toLowerCase() %>">
+        <div class="trattativa-card <%= t.stato.toLowerCase() %>" data-id="<%= t.id %>">
           <div class="card-header">
             <div>
               <span class="card-title">⚽ <%= t.giocatore.nome %></span>
@@ -95,10 +95,15 @@
             <br>
             <span class="card-meta">
               Valore TM: <%= Number(t.valoreRiferimento).toFixed(2) %> M
-              · Ricevuta il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
-              <% if (t.scadenzaAt) { %> · Scade il <%= new Date(t.scadenzaAt).toLocaleDateString('it-IT') %><% } %>
-              <% if (t.dataDecorrenza) { %> · Decorrenza: <strong><%= t.dataDecorrenza %></strong><% } %>
+              &middot; Ricevuta il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
+              <% if (t.scadenzaAt) { %> &middot; Scade il <%= new Date(t.scadenzaAt).toLocaleDateString('it-IT') %><% } %>
+              <% if (t.dataDecorrenza) { %> &middot; Decorrenza: <strong><%= t.dataDecorrenza %></strong><% } %>
             </span>
+            <% if (t.anniContrattoProposti || t.categoriaProposta) { %>
+              <br><span style="font-size:.78rem; color:var(--green-dark); margin-top:4px; display:inline-block;">
+                📋 Proposta contratto: <strong><%= t.anniContrattoProposti || '—' %> anni</strong> &middot; <strong><%= t.categoriaProposta || '—' %></strong>
+              </span>
+            <% } %>
             <% if (t.motivoRifiuto) { %><br><em>Motivo rifiuto: <%= t.motivoRifiuto %></em><% } %>
           </div>
           <% if (t.stato === 'PENDING') { %>
@@ -131,9 +136,14 @@
             <br>
             <span class="card-meta">
               Valore TM: <%= Number(t.valoreRiferimento).toFixed(2) %> M
-              · Inviata il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
-              <% if (t.dataDecorrenza) { %> · Decorrenza: <strong><%= t.dataDecorrenza %></strong><% } %>
+              &middot; Inviata il <%= new Date(t.createdAt).toLocaleDateString('it-IT') %>
+              <% if (t.dataDecorrenza) { %> &middot; Decorrenza: <strong><%= t.dataDecorrenza %></strong><% } %>
             </span>
+            <% if (t.anniContrattoProposti || t.categoriaProposta) { %>
+              <br><span style="font-size:.78rem; color:var(--green-dark); margin-top:4px; display:inline-block;">
+                📋 Proposta contratto: <strong><%= t.anniContrattoProposti || '—' %> anni</strong> &middot; <strong><%= t.categoriaProposta || '—' %></strong>
+              </span>
+            <% } %>
             <% if (t.motivoRifiuto) { %><br><em>Motivo rifiuto: <%= t.motivoRifiuto %></em><% } %>
           </div>
           <% if (t.stato === 'ACCEPTED') { %>
@@ -269,6 +279,33 @@
     document.querySelectorAll('.modal-overlay').forEach(el => {
       el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
     });
+
+    // ── Deep link: evidenzia e scrolla automaticamente all'offerta dal link email ──────
+    (function() {
+      const targetId = <%- trattativaId !== null && trattativaId !== undefined ? JSON.stringify(trattativaId) : 'null' %>;
+      if (!targetId) return;
+
+      // Cerca prima nelle ricevute, poi nelle inviate
+      const cardRicevuta = document.querySelector(`#panel-ricevute .trattativa-card[data-id="${targetId}"]`);
+      const cardInviata  = document.querySelector(`#panel-inviate  .trattativa-card[data-id="${targetId}"]`);
+      const card = cardRicevuta || cardInviata;
+      if (!card) return;
+
+      // Attiva il tab corretto
+      const tabTarget = cardRicevuta ? 'ricevute' : 'inviate';
+      document.querySelectorAll('.tab-inline').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelector(`[data-tab="${tabTarget}"]`).classList.add('active');
+      document.getElementById(`panel-${tabTarget}`).classList.add('active');
+
+      // Scroll alla card e highlight
+      setTimeout(() => {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.style.outline = '3px solid #28a745';
+        card.style.boxShadow = '0 0 0 6px rgba(40,167,69,.20)';
+        card.style.transition = 'outline .3s, box-shadow .3s';
+      }, 80);
+    })();
   </script>
 </body>
 </html>

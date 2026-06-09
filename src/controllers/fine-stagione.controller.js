@@ -72,9 +72,17 @@ async function showFineStagione(req, res) {
   const proposteAttese  = await prisma.propostaRinnovo.count({
     where: { stagione: stagioneNew, status: "PENDING" },
   });
-  const scadenzeNaturali = await prisma.contratto.count({
-    where: { valido: true, durataContratto: { lte: 1 } }, // scenderanno a 0
+  // "scadenze naturali" = durataContratto<=1 escludendo i contratti con dataFine
+  // in anni futuri (protetti dal rollover)
+  const annoFineStagione = annoStagione + 1;
+  const candidati = await prisma.contratto.findMany({
+    where: { valido: true, durataContratto: { lte: 1 } },
+    select: { id: true, dataFine: true },
   });
+  const scadenzeNaturali = candidati.filter((c) => {
+    if (!c.dataFine || !/^\d{2}-\d{4}$/.test(c.dataFine)) return true;
+    return parseInt(c.dataFine.split("-")[1], 10) <= annoFineStagione;
+  }).length;
 
   res.render("admin/fine-stagione", {
     currentUser: req.user,
@@ -105,9 +113,31 @@ async function eseguiFineStagione(req, res) {
 
   try {
     const report = await prisma.$transaction(async (tx) => {
-      // ── Step 1: Decremento Temporale ─────────────────────────────────────
-      const dec = await tx.contratto.updateMany({
+      const annoFineStagione = sCorrente.annoInizio + 1; // es. 2026 per stagione 2025-2026
+
+      // ── PROTEZIONE: contratti con dataFine in anni FUTURI non sono mai candidati
+      // né per svincolo né per rinnovo. La loro vita è governata solo da dataFine.
+      const tuttiValidiPreDec = await tx.contratto.findMany({
         where: { valido: true },
+        select: { id: true, dataFine: true },
+      });
+      const idsDataFineFutura = new Set(
+        tuttiValidiPreDec
+          .filter((c) => {
+            if (!c.dataFine || !/^\d{2}-\d{4}$/.test(c.dataFine)) return false;
+            return parseInt(c.dataFine.split("-")[1], 10) > annoFineStagione;
+          })
+          .map((c) => c.id)
+      );
+
+      // ── Step 1: Decremento Temporale ─────────────────────────────────────
+      // Escludiamo i contratti dataFine-futura: il loro durataContratto è considerato
+      // un dato accessorio (può essere 0 per import legacy) e non deve essere decrementato.
+      const dec = await tx.contratto.updateMany({
+        where: {
+          valido: true,
+          NOT: [{ id: { in: Array.from(idsDataFineFutura) } }],
+        },
         data:  { durataContratto: { decrement: 1 } },
       });
 
@@ -125,6 +155,8 @@ async function eseguiFineStagione(req, res) {
         });
         let speso = 0;
         for (const p of proposte) {
+          // PROTEZIONE: ignora proposte su contratti con dataFine futura
+          if (idsDataFineFutura.has(p.contrattoId)) continue;
           const quotValore = await ultimaQuotazione(tx, p.giocatoreId, p.giocatore.valore);
           const ingaggio = Math.round(quotValore * PCT_STIPENDIO * 100) / 100;
           if (cap > 0 && speso + ingaggio <= cap + 1e-9) {
@@ -149,7 +181,7 @@ async function eseguiFineStagione(req, res) {
       // NOTA: i giocatori in slot U21 sono SEMPRE esclusi dagli svincoli di fine stagione.
       //       Lo slot U21 "congela" il giocatore: contratto valido indipendentemente da
       //       dataFine, durataContratto o assenza dallo scraping Transfermarkt.
-      const annoFineStagione = sCorrente.annoInizio + 1; // es. 2026 per stagione 2025-2026
+      // NOTA: i contratti con dataFine in anni futuri (idsDataFineFutura) sono SEMPRE esclusi.
 
       // Raccogli tutti i giocatoreId in slot U21 per la stagione corrente (per team)
       const rosaU21Rows = await tx.rosaGiocatore.findMany({
@@ -185,6 +217,8 @@ async function eseguiFineStagione(req, res) {
           NOT: [
             // Esclude i contratti rinnovati (verranno chiusi nel passo Rinnovi)
             { id: { in: Array.from(idsApprovedContrattoVecchio) } },
+            // PROTEZIONE: esclude contratti con dataFine in anni futuri (mai svincolabili)
+            { id: { in: Array.from(idsDataFineFutura) } },
           ],
         },
         include: { giocatore: true, fantaTeam: { include: { user: true } } },

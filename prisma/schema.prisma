@@ -229,6 +229,8 @@ model TrattativaMercato {
   tipoContratto        TipoContratto     @default(Acquisto)  // Acquisto | Prestito
   clausola             ClausolaContratto?                    // DirittoRiscatto | ObbligoRiscatto | DirittoRicompra | ObbligoRicompra
   importoClausola      Decimal?          @db.Decimal(10, 2) // importo riscatto/ricompra
+  anniContrattoProposti Int?                                // anni di contratto proposti dall'acquirente
+  categoriaProposta     CategoriaRosa?                     // categoria rosa proposta dall'acquirente
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   scadenzaAt           DateTime?         // opzionale: data entro cui rispondere

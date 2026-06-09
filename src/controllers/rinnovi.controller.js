@@ -130,8 +130,6 @@ async function showMieProposte(req, res) {
     team, sCorrente, sTarget, salaryCap, params,
     contrattiInScadenza, contrattiDisponibili,
     proposte: propostaSim,
-    meseAnticipo: parseInt(params.mese_anticipo_scadenze || "6", 10),
-    isAnticipo: (new Date().getMonth() + 1) === parseInt(params.mese_anticipo_scadenze || "6", 10),
     error: req.query.error ? decodeURIComponent(req.query.error) : null,
     message: req.query.saved === "1" ? "Proposta salvata."
            : req.query.deleted === "1" ? "Proposta rimossa."

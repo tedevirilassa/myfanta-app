@@ -106,6 +106,20 @@
             Mese in cui l'operazione diventerà effettiva. Deve rientrare nella finestra di mercato privato.
           </div>
 
+          <label for="anniContrattoProposti">Durata contratto proposta (anni)</label>
+          <select name="anniContrattoProposti" id="anniContrattoProposti" required>
+            <option value="1">1 anno</option>
+            <option value="2" selected>2 anni</option>
+            <option value="3">3 anni</option>
+          </select>
+
+          <label for="categoriaProposta">Categoria in rosa proposta</label>
+          <select name="categoriaProposta" id="categoriaProposta" required>
+            <option value="InRosa">In Rosa</option>
+            <option value="FuoriRosa">Fuori Rosa</option>
+            <option value="U21">U21</option>
+          </select>
+
           <div style="margin-top:22px;">
             <button type="submit" class="btn btn-success" id="btn-offerta">
               📨 Invia Offerta

@@ -15,3 +15,6 @@ backup del db su render
 
 npm run render:pull <— esegue la sync Render → locale
 npm run render:pull-dry <— mostra cosa farebbe senza scrivere (dry-run)
+
+\\per fare sync da mrpower a fantaserver
+node scripts/sync-to-render.js

@@ -2,6 +2,7 @@
 const sheets = require("../services/sheets.service");
 const prisma  = require("../lib/prisma");
 const parametriService = require("../services/parametri.service");
+const { getRemainingContractYears } = require("../utils/contractUtils");
 
 async function showClassifica(req, res) {
   try {
@@ -974,24 +975,8 @@ async function showRosaDettaglio(req, res) {
 
     const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };
 
-    // Calcola anni rimanenti dalla dataFine del contratto.
-    // Se il mese corrente è il mese di anticipo scadenze (default: giugno),
-    // la visualizzazione scala di 1 anno per riflettere il rollover imminente.
-    // Il dato reale in DB NON viene toccato.
-    const meseAnticipo = parseInt(params.mese_anticipo_scadenze || "6", 10);
-    const meseCorrente = now.getMonth() + 1;
-    const annoCorrente = now.getFullYear();
-    const isAnticipo   = (meseCorrente === meseAnticipo);
-
     const giocatori = fantaTeam.contratti.map((c) => {
-      let anniRimanenti = c.durataContratto;
-      if (c.dataFine && /^\d{2}-\d{4}$/.test(c.dataFine)) {
-        const [mmFine, yyyyFine] = c.dataFine.split("-").map(Number);
-        const diffMesi = (yyyyFine - annoCorrente) * 12 + (mmFine - meseCorrente);
-        anniRimanenti = Math.max(0, Math.ceil(diffMesi / 12));
-      }
-      // Presentazione: nel mese di anticipo scadenze, mostra 1 anno in meno (senza toccare il DB)
-      const anniVisibili = isAnticipo ? Math.max(0, anniRimanenti - 1) : anniRimanenti;
+      const anni = getRemainingContractYears(c.dataFine);
       return {
         id: c.giocatore.id,
         nome: c.giocatore.nome,
@@ -999,7 +984,7 @@ async function showRosaDettaglio(req, res) {
         squadra: c.giocatore.squadra,
         eta: c.giocatore.eta,
         valore: c.giocatore.valore ? +c.giocatore.valore : null,
-        anniContratto: anniVisibili,
+        anniContratto: anni != null ? anni : c.durataContratto,
         tipo: c.tipo,
         dataFine: c.dataFine || null,
         categoria: rosaMap[c.giocatore.id] || "InRosa",
@@ -1011,8 +996,6 @@ async function showRosaDettaglio(req, res) {
       presidente: fantaTeam.user?.nickname || fantaTeam.user?.email || "—",
       giocatori,
       stagione,
-      meseAnticipo,
-      isAnticipo,
       currentUser: req.user,
       error: null,
     });
@@ -1070,14 +1053,8 @@ async function showDashboard(req, res) {
     const categoriaMap = {};
     for (const r of rosaAssegnazioni) categoriaMap[r.giocatoreId] = r.categoria;
 
-    // anni rimanenti dal contratto dataFine (MM-YYYY)
-    function anniRimanenti(dataFine) {
-      if (!dataFine) return null;
-      const [mm, yyyy] = dataFine.split("-").map(Number);
-      if (!mm || !yyyy) return null;
-      const diffMesi = (yyyy - now.getFullYear()) * 12 + (mm - (now.getMonth() + 1));
-      return Math.max(0, Math.ceil(diffMesi / 12));
-    }
+    // anni rimanenti via helper centralizzato (Regola di Giugno applicata)
+    const anniRimanenti = (dataFine) => getRemainingContractYears(dataFine);
 
     // Aggreghiamo solo i contratti Acquisto, evitando duplicati per giocatore
     const ruoloOrdine = { P: 0, D: 1, C: 2, A: 3 };

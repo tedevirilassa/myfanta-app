@@ -147,6 +147,21 @@ function runMigrations(remoteUrl) {
     console.error("Errore durante le migration:", err.message);
     process.exit(1);
   }
+
+  // Applica anche eventuali tabelle/colonne presenti nello schema ma non ancora
+  // nelle migration (create localmente via prisma db push senza file .sql).
+  log("Esecuzione: prisma db push (allineamento schema completo)");
+  try {
+    execSync("npx prisma db push --accept-data-loss", {
+      env,
+      stdio: "inherit",
+      cwd: path.resolve(__dirname, ".."),
+    });
+    log("Schema remoto allineato con successo.");
+  } catch (err) {
+    console.error("Errore durante db push:", err.message);
+    process.exit(1);
+  }
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -157,20 +172,21 @@ async function main() {
   const onlyMigrate = args.includes("--migrate-only");
 
   // Leggi le due configurazioni
-  const localEnv = parseEnvFile(path.join(__dirname, "../.env"));
+  const localEnv  = parseEnvFile(path.join(__dirname, "../.env"));
   const remoteEnv = parseEnvFile(path.join(__dirname, "../.envpublic"));
 
   const localUrl = localEnv.DATABASE_URL;
-  const remoteUrl = remoteEnv.DATABASE_URL;
+  // DATABASE_URL_PROD in .env ha priorità su DATABASE_URL di .envpublic
+  const remoteUrl = localEnv.DATABASE_URL_PROD || remoteEnv.DATABASE_URL;
 
-  if (!localUrl) throw new Error("DATABASE_URL mancante in .env");
-  if (!remoteUrl) throw new Error("DATABASE_URL mancante in .envpublic");
+  if (!localUrl)  throw new Error("DATABASE_URL mancante in .env");
+  if (!remoteUrl) throw new Error("DATABASE_URL_PROD mancante in .env (o DATABASE_URL mancante in .envpublic)");
 
-  // Verifica che il file .envpublic sia stato configurato
-  if (remoteUrl.includes("USER:PASSWORD") || remoteUrl.includes("HOST")) {
+  // Verifica che il DB remoto non sia un placeholder non configurato
+  if (remoteUrl.includes("USER:PASSWORD") || remoteUrl.includes("<HOST>")) {
     console.error(
-      "\nERRORE: .envpublic non è ancora stato configurato.\n" +
-        "Sostituisci USER, PASSWORD, HOST, DBNAME con i valori reali da Render.\n"
+      "\nERRORE: il DB remoto non è ancora stato configurato.\n" +
+        "Imposta DATABASE_URL_PROD in .env oppure compila .envpublic.\n"
     );
     process.exit(1);
   }
@@ -188,9 +204,11 @@ async function main() {
   logSection("Connessione ai database");
 
   const localPool = new Pool({ connectionString: localUrl });
+  // SSL solo se richiesto dall'URL (es. Render); per server LAN locali si disabilita
+  const remoteNeedsSsl = remoteUrl.includes("sslmode=require") || remoteUrl.includes("render.com");
   const remotePool = new Pool({
     connectionString: remoteUrl,
-    ssl: { rejectUnauthorized: false }, // necessario per Render
+    ...(remoteNeedsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 
   // Verifica connessioni
@@ -211,8 +229,25 @@ async function main() {
   }
 
   try {
-    // ── fantapresidenti: SKIP ──
-    logSection("Tabella fantapresidenti: SALTATA (utenti e password preservati su Render)");
+    // ── fantapresidenti ──
+    // Se il DB remoto ha già utenti, li preserviamo (comportamento Render legacy).
+    // Su un DB nuovo/vuoto copiamo tutto.
+    const { rows: existingUsers } = await remotePool.query("SELECT COUNT(*) AS cnt FROM fantapresidenti");
+    if (parseInt(existingUsers[0].cnt, 10) > 0) {
+      logSection("Tabella fantapresidenti: SALTATA (utenti già presenti nel DB remoto)");
+    } else {
+      logSection("Sync tabella: fantapresidenti (DB remoto vuoto → copia completa)");
+      await syncTable({
+        localPool,
+        remotePool,
+        table: "fantapresidenti",
+        columns: [
+          "id", "email", '"passwordHash"', "role", "nickname",
+          '"createdAt"', '"updatedAt"',
+        ],
+      });
+      await resetSequence(remotePool, "fantapresidenti");
+    }
 
     // ── fanta_teams ──
     logSection("Sync tabella: fanta_teams");
