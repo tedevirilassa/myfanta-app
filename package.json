@@ -12,19 +12,13 @@
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.js",
-    "render:migrate": "node scripts/sync-to-render.js --migrate-only",
-    "render:sync": "node scripts/sync-to-render.js",
-    "render:migrate-and-sync": "node scripts/sync-to-render.js --migrate",
-    "render:pull": "node scripts/sync-from-render.js",
-    "render:pull-dry": "node scripts/sync-from-render.js --dry-run",
-    "render:pull-fantapresidenti": "node scripts/pull-fantapresidenti.js",
-    "render:pull-fantapresidenti-dry": "node scripts/pull-fantapresidenti.js --dry-run",
     "prod:migrate": "node scripts/sync-to-prod.js --migrate-only",
     "prod:sync": "node scripts/sync-to-prod.js",
     "prod:migrate-and-sync": "node scripts/sync-to-prod.js --migrate",
-    "prod:deploy": "node scripts/deploy-to-prod.js",
-    "prod:deploy-install": "node scripts/deploy-to-prod.js --install",
-    "prod:deploy-safe": "node scripts/deploy-to-prod.js --no-delete",
+    "prod:restart": "node scripts/restart-prod.js",
+    "prod:upload-env": "node scripts/prod-upload-env.js",
+    "prod:deploy": "node scripts/deploy-to-prod.js --no-install",
+    "prod:deploy-install": "node scripts/deploy-to-prod.js",
     "prod:deploy-dry": "node scripts/deploy-to-prod.js --dry-run",
     "db:backup": "node scripts/backup-db.js",
     "db:backup-remote": "node scripts/backup-db.js --remote",
@@ -52,6 +46,7 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "ssh2": "^1.17.0"
   }
 }

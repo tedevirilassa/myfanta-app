@@ -9,104 +9,57 @@ async function showClassifica(req, res) {
     const params = await parametriService.getAll();
     const rawRecords = await prisma.situazioneFinanziaria.findMany({
       orderBy: { patrimonio: "desc" },
-      include: { fantaTeam: true },
-    });
-
-    // Fallback: alcune righe SF non hanno fantaTeamId valorizzato (assegnazione admin manuale).
-    // Risolviamo via nomePresidente con cascading: nickname esatto → email prefix esatto → substring nell'email.
-    const usersWithTeam = await prisma.user.findMany({
-      where: { fantaTeam: { isNot: null } },
-      select: { nickname: true, email: true, fantaTeam: { select: { id: true, nome: true } } },
-    });
-    const norm = (s) => (s || "").trim().toLowerCase();
-    // I nickname letterali "null" sono un bug a monte: filtriamoli.
-    const isValidNick = (n) => n && norm(n) !== "null" && norm(n) !== "";
-
-    function resolveTeam(nomePresidente) {
-      const nN = norm(nomePresidente);
-      if (!nN) return null;
-      // 1. Nickname esatto
-      for (const u of usersWithTeam) {
-        if (isValidNick(u.nickname) && norm(u.nickname) === nN) return u.fantaTeam;
-      }
-      // 2. Email prefix esatto
-      for (const u of usersWithTeam) {
-        if (u.email && norm(u.email.split("@")[0]) === nN) return u.fantaTeam;
-      }
-      // 3. nomePresidente come substring dell'email (es. "Giulio" in "giuliosergente@…")
-      for (const u of usersWithTeam) {
-        if (u.email && norm(u.email).includes(nN)) return u.fantaTeam;
-      }
-      return null;
-    }
-
-    // Risolvi fantaTeamId effettivo per ciascun record SF: usa quello esplicito
-    // se presente, altrimenti tenta resolveTeam(nomePresidente). Indispensabile
-    // perché molti record SF storici hanno fantaTeamId=null e senza questo
-    // mapping il fallback usa il valoreRose STORATO (stale, pre-scraping).
-    const effectiveTeamIdByRow = rawRecords.map((r) => r.fantaTeamId || resolveTeam(r.nomePresidente)?.id || null);
-
-    // Calcola valori dinamicamente dai contratti validi e giocatori attivi
-    const teamIds = effectiveTeamIdByRow.filter((id) => id != null);
-    const contrattiValidi = teamIds.length > 0
-      ? await prisma.contratto.findMany({
-          where: {
-            fantaTeamId: { in: teamIds },
-            valido: true,
+      include: {
+        fantaTeam: {
+          include: {
+            contratti: {
+              where: { valido: true },
+              include: { giocatore: { select: { id: true, valore: true, eta: true } } },
+            },
           },
-          include: { giocatore: { select: { id: true, valore: true, eta: true, active: true } } },
-        })
-      : [];
+        },
+      },
+    });
 
-    // Mappa fantaTeamId → statistiche calcolate
-    const statsMap = {};
-    for (const c of contrattiValidi) {
-      // NON filtrare per giocatore.active: finché esiste un contratto valido,
-      // il giocatore concorre alla rosa del team. Lo svincolo definitivo
-      // (active=false E rimborso crediti) si applica solo via
-      // /admin/svincoli-inattivi, che setta contratto.valido=false.
-      if (!statsMap[c.fantaTeamId]) {
-        statsMap[c.fantaTeamId] = {
-          valoreRose: 0, giocatoriIds: new Set(), etaSomma: 0, etaCount: 0,
-          stipendi: 0, montePrestiti: 0,
-        };
+    // Calcola statistiche dinamicamente dai contratti validi per ogni record SF
+    const classifica = rawRecords.map((p) => {
+      const contratti = p.fantaTeam?.contratti ?? [];
+
+      // Deduplicazione: un giocatore con più contratti validi conta una volta
+      const seen = new Set();
+      let valoreRose = 0, stipendi = 0, montePrestiti = 0;
+      let etaSomma = 0, etaCount = 0;
+
+      for (const c of contratti) {
+        if (seen.has(c.giocatore.id)) continue;
+        seen.add(c.giocatore.id);
+
+        if (c.tipo === "Acquisto") {
+          valoreRose += c.giocatore.valore ? +c.giocatore.valore : 0;
+          stipendi   += c.importoOperazione ? +c.importoOperazione : 0;
+        } else if (c.tipo === "Prestito") {
+          montePrestiti += c.importoOperazione ? +c.importoOperazione : 0;
+        }
+
+        if (c.giocatore.eta != null) {
+          etaSomma += c.giocatore.eta;
+          etaCount++;
+        }
       }
-      const s = statsMap[c.fantaTeamId];
 
-      // Evita duplicati per giocatore (prende solo il primo contratto valido trovato)
-      if (s.giocatoriIds.has(c.giocatore.id)) continue;
-      s.giocatoriIds.add(c.giocatore.id);
-
-      if (c.tipo === "Acquisto") {
-        s.valoreRose += c.giocatore.valore ? +c.giocatore.valore : 0;
-        s.stipendi += c.importoOperazione ? +c.importoOperazione : 0;
-      } else if (c.tipo === "Prestito") {
-        s.montePrestiti += c.importoOperazione ? +c.importoOperazione : 0;
-      }
-
-      if (c.giocatore.eta != null) {
-        s.etaSomma += c.giocatore.eta;
-        s.etaCount++;
-      }
-    }
-
-    // Converte Decimal → Number e sovrascrive con valori calcolati
-    const classifica = rawRecords.map((p, idx) => {
-      const effId = effectiveTeamIdByRow[idx];
-      const s = effId && statsMap[effId] ? statsMap[effId] : null;
-      const valoreRoseCalcolato = s ? Math.round(s.valoreRose * 100) / 100 : +p.valoreRose;
-      const crediti = +p.crediti;
-      const giocatoriTesserati = s ? s.giocatoriIds.size : p.giocatoriTesserati;
-      const etaMedia = s && s.etaCount > 0 ? Math.round((s.etaSomma / s.etaCount) * 100) / 100 : +p.etaMedia;
-      const stipendi = s ? Math.round(s.stipendi * 100) / 100 : +p.stipendi;
-      const montePrestiti = s ? Math.round(s.montePrestiti * 100) / 100 : +p.montePrestiti;
+      const giocatoriTesserati = seen.size;
+      const etaMedia = etaCount > 0 ? Math.round((etaSomma / etaCount) * 100) / 100 : 0;
+      const crediti  = +p.crediti;
+      valoreRose     = Math.round(valoreRose * 100) / 100;
+      stipendi       = Math.round(stipendi * 100) / 100;
+      montePrestiti  = Math.round(montePrestiti * 100) / 100;
+      const patrimonio = Math.round((valoreRose + crediti) * 100) / 100;
 
       return {
         ...p,
-        fantaTeam:       p.fantaTeam || resolveTeam(p.nomePresidente),
-        valoreRose:      valoreRoseCalcolato,
+        valoreRose,
         crediti,
-        patrimonio:      Math.round((valoreRoseCalcolato + crediti) * 100) / 100,
+        patrimonio,
         giocatoriTesserati,
         etaMedia,
         stipendi,
@@ -115,24 +68,16 @@ async function showClassifica(req, res) {
       };
     });
 
-    // Riordina per patrimonio (ora ricalcolato)
+    // Riordina per patrimonio ricalcolato
     classifica.sort((a, b) => b.patrimonio - a.patrimonio);
 
-    // ── Dettaglio rosa admin-only ──────────────────────────────────────────
-    // Se ?teamDetail=<fantaTeamId> e utente ADMIN: carica i giocatori che
-    // compongono il valoreRose della classifica per quel team (Acquisto
-    // valido + active). Lista usata per popolare combobox = teams in classifica.
-    // NB: usa p.fantaTeam direttamente (già risolto via resolveTeam) per
-    // evitare disallineamenti di indici dopo classifica.sort().
+    // Lista team per combobox admin
     const teamsPerCombobox = classifica
-      .map((p) => ({
-        id: p.fantaTeam && p.fantaTeam.id ? p.fantaTeam.id : null,
-        nome: p.fantaTeam ? p.fantaTeam.nome : p.nomePresidente,
-        nomePresidente: p.nomePresidente,
-      }))
-      .filter((t) => t.id != null)
+      .filter((p) => p.fantaTeam?.id)
+      .map((p) => ({ id: p.fantaTeam.id, nome: p.fantaTeam.nome, nomePresidente: p.nomePresidente }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
 
+    // ── Admin: dettaglio rosa per team ──────────────────────────────────────
     let teamDetail = null;
     if (req.user && req.user.role === "ADMIN" && req.query.teamDetail) {
       const tid = parseInt(req.query.teamDetail, 10);
@@ -149,8 +94,6 @@ async function showClassifica(req, res) {
         const giocatoriDett = [];
         let totale = 0;
         for (const c of contratti) {
-          // Include anche giocatori active=false con contratto valido (svincolo
-          // non ancora applicato → giocatore conta ancora come sotto contratto).
           if (seen.has(c.giocatore.id)) continue;
           seen.add(c.giocatore.id);
           const val = c.giocatore.valore ? Number(c.giocatore.valore) : 0;
@@ -167,7 +110,6 @@ async function showClassifica(req, res) {
             contrattoId: c.id,
           });
         }
-        // Ordina alfabeticamente per nome giocatore crescente
         giocatoriDett.sort((a, b) => a.nome.localeCompare(b.nome, "it", { sensitivity: "base" }));
         teamDetail = {
           team: teamInfo,
@@ -850,7 +792,6 @@ async function showRose(req, res) {
           include: { giocatore: true },
         },
         rosaGiocatori: {
-          where: { stagione },
           select: { giocatoreId: true, categoria: true },
         },
       },
@@ -931,7 +872,6 @@ async function showRosaDettaglio(req, res) {
           include: { giocatore: true },
         },
         rosaGiocatori: {
-          where: { stagione },
           select: { giocatoreId: true, categoria: true },
         },
       },

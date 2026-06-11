@@ -1,20 +1,26 @@
-npm run render:migrate-and-sync
-per allineare il Db su render con i dati in locale
+npm run prod:deploy-install
+sync codice DEV → fantasserver (SSH+SFTP) + npm ci + prisma generate
+
+npm run prod:deploy
+sync solo codice (senza npm ci)
+
+npm run prod:deploy-dry
+mostra cosa verrebbe copiato senza scrivere
+
+npm run prod:migrate-and-sync
+applica migration + sync dati DB locale → fantasserver (via SSH tunnel)
+
+npm run prod:sync
+sync solo dati DB (senza migration)
+
+npm run prod:migrate
+solo migration, niente sync dati
 
 npm run dev
-per eseguito il sito 
-
-dan24l77tesf5mj10kretecer1c0llaud0Prova
-
+avvia il sito in locale
 
 npm run db:backup
-backup local db
+backup DB locale
 
 npm run db:backup-remote
-backup del db su render
-
-npm run render:pull <— esegue la sync Render → locale
-npm run render:pull-dry <— mostra cosa farebbe senza scrivere (dry-run)
-
-\\per fare sync da mrpower a fantaserver
-node scripts/sync-to-render.js
+backup del DB su fantasserver

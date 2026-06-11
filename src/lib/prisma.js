@@ -41,10 +41,10 @@ function convertTrattativaData(data) {
 // ─── Factory ─────────────────────────────────────────────────────────────────
 
 function createPrismaClient() {
-  const isProduction = process.env.NODE_ENV === "production";
+  // SSL: disabilitato sia in dev che in prod (il DB prod è locale su fantaserver)
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
+    ssl: false,
   });
 
   const base = new PrismaClient({ adapter });
