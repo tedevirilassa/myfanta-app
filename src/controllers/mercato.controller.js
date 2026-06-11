@@ -3,7 +3,7 @@
 // Flusso: invio offerta → accetta/rifiuta → finalizza trasferimento (transazione ACID).
 
 const prisma = require("../lib/prisma");
-const { logAction, sfRollbackSQL } = require("../services/log.service");
+const { logAction, logMutation, sfRollbackSQL } = require("../services/log.service");
 const { sendEmailToUser } = require("../services/email.service");
 const parametriService = require("../services/parametri.service");
 
@@ -366,14 +366,18 @@ async function _eseguiTransferimento(trattativa, anniContratto, categoria, userI
   const immediato      = !dataDecorrenza || isDecorrenzaImmediata(dataDecorrenza);
 
   const oggi        = new Date();
-  const dataStipula = immediato ? oggi.toISOString().slice(0, 10) : dataDecorrenza;
+  // dataStipula: se immediato usa la data odierna come oggetto Date, altrimenti usa dataDecorrenza (MM-YYYY, convertita da fromMMYYYY)
+  const dataStipula = immediato
+    ? new Date(Date.UTC(oggi.getUTCFullYear(), oggi.getUTCMonth(), oggi.getUTCDate(), 12, 0, 0))
+    : dataDecorrenza;
 
+  // dataFine: sempre un Date object per evitare che Prisma riceva una plain date string non valida
   let dataFine;
   if (immediato) {
-    dataFine = `${oggi.getFullYear() + anniContratto}-06-30`;
+    dataFine = new Date(Date.UTC(oggi.getUTCFullYear() + anniContratto, 5, 30, 12, 0, 0));
   } else {
     const [mm, yyyy] = dataDecorrenza.split("-").map(Number);
-    dataFine = `${yyyy + anniContratto}-06-30`;
+    dataFine = new Date(Date.UTC(yyyy + anniContratto, 5, 30, 12, 0, 0));
   }
 
   let movimentoBuyer  = null;
@@ -708,6 +712,22 @@ async function rispondiOfferta(req, res) {
     const result = await _eseguiTransferimento(trattativa, anniContratto, categoria, req.user.id, params);
     return res.json({ ok: true, stato: result.differito ? "COMPLETED_DEFERRED" : "COMPLETED", ...result });
   } catch (err) {
+    await logAction({
+      azione:    "ERROR",
+      entita:    "trattativa_mercato",
+      entitaId:  id,
+      dettaglio: {
+        fase:           "accettazione",
+        errore:         err.message,
+        giocatoreId:    trattativa.giocatoreId,
+        giocatoreNome:  trattativa.giocatore.nome,
+        mittente:       trattativa.fantaTeamMittente.nome,
+        ricevente:      trattativa.fantaTeamRicevente.nome,
+        importoOfferta: Number(trattativa.importoOfferta),
+        dataDecorrenza: trattativa.dataDecorrenza,
+      },
+      adminId: req.user.id,
+    }).catch(() => {});
     return res.status(400).json({ error: err.message });
   }
 }
@@ -754,6 +774,22 @@ async function finalizzaTransferimento(req, res) {
     const result = await _eseguiTransferimento(trattativa, anniContratto, categoria, req.user.id, params);
     return res.json({ ok: true, ...result });
   } catch (err) {
+    await logAction({
+      azione:    "ERROR",
+      entita:    "trattativa_mercato",
+      entitaId:  id,
+      dettaglio: {
+        fase:           "finalizzazione",
+        errore:         err.message,
+        giocatoreId:    trattativa.giocatoreId,
+        giocatoreNome:  trattativa.giocatore.nome,
+        mittente:       trattativa.fantaTeamMittente.nome,
+        ricevente:      trattativa.fantaTeamRicevente.nome,
+        importoOfferta: Number(trattativa.importoOfferta),
+        dataDecorrenza: trattativa.dataDecorrenza,
+      },
+      adminId: req.user.id,
+    }).catch(() => {});
     return res.status(400).json({ error: err.message });
   }
 }
@@ -942,4 +978,230 @@ async function attivaTrattativeDifferite() {
   return risultati;
 }
 
-module.exports = { showInviaOfferta, showInbox, creaOfferta, rispondiOfferta, finalizzaTransferimento, attivaTrattativeDifferite };
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /admin/mercato/differiti  — lista trattative COMPLETED_DEFERRED (solo admin)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function showAdminDifferiti(req, res) {
+  try {
+    const differiti = await prisma.trattativaMercato.findMany({
+      where:   { stato: "COMPLETED_DEFERRED" },
+      orderBy: { createdAt: "asc" },
+      include: {
+        giocatore:          { select: { id: true, nome: true, ruolo: true, squadra: true } },
+        fantaTeamMittente:  { include: { user: { select: { nickname: true } } } },
+        fantaTeamRicevente: { include: { user: { select: { nickname: true } } } },
+      },
+    });
+
+    // Carica i contratti pre-creati (valido:false) per ciascuna trattativa
+    const contrattoIds = differiti.map(t => t.contrattoNuovoId).filter(Boolean);
+    const contratti = contrattoIds.length
+      ? await prisma.contratto.findMany({ where: { id: { in: contrattoIds } } })
+      : [];
+    const contrattoMap = Object.fromEntries(contratti.map(c => [c.id, c]));
+    differiti.forEach(t => { t.contratto = t.contrattoNuovoId ? (contrattoMap[t.contrattoNuovoId] || null) : null; });
+
+    const params = await parametriService.getAll();
+    const durataMin = parseInt(params.contratto_durata_min || "1", 10);
+    const durataMax = parseInt(params.contratto_durata_max || "3", 10);
+
+    res.render("admin/mercato-differiti", {
+      currentUser: req.user,
+      differiti,
+      durataMin,
+      durataMax,
+      error:   req.query.error   ? decodeURIComponent(req.query.error)   : null,
+      success: req.query.success ? decodeURIComponent(req.query.success) : null,
+    });
+  } catch (err) {
+    console.error("showAdminDifferiti error:", err.message);
+    res.render("admin/mercato-differiti", {
+      currentUser: req.user,
+      differiti: [],
+      durataMin: 1, durataMax: 3,
+      error: "Errore nel caricamento: " + err.message,
+      success: null,
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /admin/mercato/differiti/:id/modifica  — modifica trattativa differita
+// Campi modificabili: importoOfferta, dataDecorrenza (MM-YYYY), anniContrattoProposti,
+//                     categoriaProposta, e ricalcola stipendio sul contratto pre-creato
+// ═══════════════════════════════════════════════════════════════════════════════
+async function adminModificaDifferito(req, res) {
+  const id                  = parseInt(req.params.id, 10);
+  const importoOfferta      = parseFloat(req.body.importoOfferta);
+  const dataDecorrenza      = (req.body.dataDecorrenza || "").trim();
+  const anniContrattoProposti = parseInt(req.body.anniContrattoProposti, 10);
+  const categoriaProposta   = (req.body.categoriaProposta || "").trim();
+  const CATEGORIE_VALIDE    = ["InRosa", "FuoriRosa", "U21"];
+
+  const redir = (err) => res.redirect(`/admin/mercato/differiti?error=${encodeURIComponent(err)}`);
+
+  if (isNaN(importoOfferta) || importoOfferta <= 0) return redir("importoOfferta non valido.");
+  if (!dataDecorrenza || !/^\d{2}-\d{4}$/.test(dataDecorrenza)) return redir("dataDecorrenza deve essere MM-YYYY.");
+  if (isNaN(anniContrattoProposti) || anniContrattoProposti < 1) return redir("anniContrattoProposti non valido.");
+  if (!CATEGORIE_VALIDE.includes(categoriaProposta)) return redir("categoriaProposta non valida.");
+
+  try {
+    const trattativa = await prisma.trattativaMercato.findUnique({ where: { id } });
+    if (!trattativa) return redir("Trattativa non trovata.");
+    if (trattativa.stato !== "COMPLETED_DEFERRED") return redir("La trattativa non è in stato COMPLETED_DEFERRED.");
+
+    // Carica stato precedente del contratto pre-creato (per rollback)
+    const contrattoPre = trattativa.contrattoNuovoId
+      ? await prisma.contratto.findUnique({ where: { id: trattativa.contrattoNuovoId } })
+      : null;
+
+    const params = await parametriService.getAll();
+
+    // Ricalcola stipendio in base alla nuova dataDecorrenza
+    const estivo        = isDecorrenzaEstiva(dataDecorrenza);
+    const stipendioPct  = estivo
+      ? parseFloat(params.stipendio_percentuale           || "0.10")
+      : parseFloat(params.stipendio_percentuale_invernale || "0.05");
+    const ultimaQuot = await prisma.quotazione.findFirst({
+      where:   { giocatoreId: trattativa.giocatoreId },
+      orderBy: { createdAt: "desc" },
+    });
+    const quotVal     = ultimaQuot?.valore ? Number(ultimaQuot.valore) : Number(trattativa.valoreRiferimento);
+    const stipendioNuovo = calcolaStipendio(quotVal, stipendioPct);
+
+    // Ricalcola dataStipula e dataFine sul contratto pre-creato (Date objects)
+    const [mm, yyyy] = dataDecorrenza.split("-").map(Number);
+    const dataStipula = new Date(Date.UTC(yyyy, mm - 1, 1, 12, 0, 0));
+    const dataFine    = new Date(Date.UTC(yyyy + anniContrattoProposti, 5, 30, 12, 0, 0));
+
+    await prisma.$transaction(async (tx) => {
+      await tx.trattativaMercato.update({
+        where: { id },
+        data: {
+          importoOfferta,
+          dataDecorrenza,
+          anniContrattoProposti,
+          categoriaProposta,
+        },
+      });
+      // Aggiorna anche il contratto pre-creato (valido:false)
+      if (trattativa.contrattoNuovoId) {
+        await tx.contratto.update({
+          where: { id: trattativa.contrattoNuovoId },
+          data: {
+            prezzoAcquisto:    importoOfferta,
+            importoOperazione: stipendioNuovo,
+            durataContratto:   anniContrattoProposti,
+            dataStipula,
+            dataFine,
+          },
+        });
+      }
+    });
+
+    // stato_precedente FLAT (solo campi della trattativa) = compatibile con rollbackLog
+    // I dati del contratto vanno in un campo extra non usato dal rollback automatico
+    const statoPrecedente = {
+      importoOfferta:       Number(trattativa.importoOfferta),
+      dataDecorrenza:       trattativa.dataDecorrenza,
+      anniContrattoProposti: trattativa.anniContrattoProposti,
+      categoriaProposta:    trattativa.categoriaProposta,
+      _contratto_pre: contrattoPre ? {
+        id:                contrattoPre.id,
+        prezzoAcquisto:    contrattoPre.prezzoAcquisto ? Number(contrattoPre.prezzoAcquisto) : null,
+        importoOperazione: contrattoPre.importoOperazione ? Number(contrattoPre.importoOperazione) : null,
+        durataContratto:   contrattoPre.durataContratto,
+        dataStipula:       contrattoPre.dataStipula,
+        dataFine:          contrattoPre.dataFine,
+      } : null,
+    };
+    const statoSuccessivo = {
+      importoOfferta,
+      dataDecorrenza,
+      anniContrattoProposti,
+      categoriaProposta,
+    };
+
+    await logMutation({
+      tipo_operazione: "UPDATE",
+      entita:          "trattativa_mercato",
+      entitaId:        id,
+      stato_precedente: statoPrecedente,
+      stato_successivo: statoSuccessivo,
+      adminId:         req.user.id,
+    });
+
+    res.redirect(`/admin/mercato/differiti?success=${encodeURIComponent("Trattativa aggiornata con successo.")}`);
+  } catch (err) {
+    console.error("adminModificaDifferito error:", err.message);
+    redir("Errore durante la modifica: " + err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /admin/mercato/differiti/:id/annulla  — annulla trattativa differita
+// Elimina il contratto pre-creato (valido:false) e imposta stato = REJECTED
+// ═══════════════════════════════════════════════════════════════════════════════
+async function adminAnnullaDifferito(req, res) {
+  const id    = parseInt(req.params.id, 10);
+  const motivo = (req.body.motivo || "Annullato dall'admin").trim();
+
+  const redir = (err) => res.redirect(`/admin/mercato/differiti?error=${encodeURIComponent(err)}`);
+
+  try {
+    const trattativa = await prisma.trattativaMercato.findUnique({ where: { id } });
+    if (!trattativa) return redir("Trattativa non trovata.");
+    if (trattativa.stato !== "COMPLETED_DEFERRED") return redir("La trattativa non è in stato COMPLETED_DEFERRED.");
+
+    // Carica stato precedente (trattativa + contratto pre-creato) per rollback
+    const contrattoPre = trattativa.contrattoNuovoId
+      ? await prisma.contratto.findUnique({ where: { id: trattativa.contrattoNuovoId } })
+      : null;
+
+    await prisma.$transaction(async (tx) => {
+      // Elimina il contratto pre-creato (valido:false)
+      if (trattativa.contrattoNuovoId) {
+        await tx.contratto.delete({ where: { id: trattativa.contrattoNuovoId } });
+      }
+      await tx.trattativaMercato.update({
+        where: { id },
+        data:  { stato: "REJECTED", motivoRifiuto: motivo, contrattoNuovoId: null },
+      });
+    });
+
+    await logMutation({
+      tipo_operazione: "UPDATE",
+      entita:          "trattativa_mercato",
+      entitaId:        id,
+      stato_precedente: {
+        stato:                trattativa.stato,
+        motivoRifiuto:        trattativa.motivoRifiuto,
+        contrattoNuovoId:     trattativa.contrattoNuovoId,
+        importoOfferta:       Number(trattativa.importoOfferta),
+        dataDecorrenza:       trattativa.dataDecorrenza,
+        anniContrattoProposti: trattativa.anniContrattoProposti,
+        categoriaProposta:    trattativa.categoriaProposta,
+        _contratto_pre: contrattoPre ? {
+          id:                contrattoPre.id,
+          prezzoAcquisto:    contrattoPre.prezzoAcquisto ? Number(contrattoPre.prezzoAcquisto) : null,
+          importoOperazione: contrattoPre.importoOperazione ? Number(contrattoPre.importoOperazione) : null,
+          durataContratto:   contrattoPre.durataContratto,
+          dataStipula:       contrattoPre.dataStipula,
+          dataFine:          contrattoPre.dataFine,
+        } : null,
+        _non_rollbackable: "annullo_admin: il contratto pre-creato è stato eliminato, il rollback automatico non è supportato. Ripristinare manualmente.",
+      },
+      stato_successivo: {
+        stato: "REJECTED", motivoRifiuto: motivo, contrattoNuovoId: null,
+      },
+      adminId: req.user.id,
+    });
+
+    res.redirect(`/admin/mercato/differiti?success=${encodeURIComponent("Trattativa annullata.")}`);
+  } catch (err) {
+    console.error("adminAnnullaDifferito error:", err.message);
+    redir("Errore durante l'annullamento: " + err.message);
+  }
+}
+
+module.exports = { showInviaOfferta, showInbox, creaOfferta, rispondiOfferta, finalizzaTransferimento, attivaTrattativeDifferite, showAdminDifferiti, adminModificaDifferito, adminAnnullaDifferito };

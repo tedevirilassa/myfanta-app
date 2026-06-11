@@ -9,6 +9,13 @@
     .pm-pos { color: #15803d; font-weight: 700; }
     .pm-neg { color: #b91c1c; font-weight: 700; }
     .pm-zero{ color: #94a3b8; }
+    .delta-deferred {
+      font-size: .72rem; font-weight: 600;
+      margin-left: 5px; vertical-align: middle;
+      white-space: nowrap;
+    }
+    .delta-deferred.neg { color: #b91c1c; }
+    .delta-deferred.pos { color: #15803d; }
     .patrimonio-bar {
       height: 6px; border-radius: 3px;
       background: var(--green-light); display: block; margin-top: 4px;
@@ -37,7 +44,7 @@
     <% if (classifica.length > 0) {
       const maxPat = classifica[0].patrimonio;
     %>
-    <div class="card" style="padding:0; overflow:hidden;">
+    <div class="card" style="padding:0; overflow-x:auto;">
       <table>
         <thead>
           <tr>
@@ -73,7 +80,11 @@
               <span class="patrimonio-bar" style="width:<%= barWidth %>%"></span>
             </td>
             <td><%= p.valoreRose.toFixed(2) %></td>
-            <td><%= p.crediti.toFixed(2) %></td>
+            <td><%= p.crediti.toFixed(2) %><%
+              if (p.deltaCreditiDeferred && p.deltaCreditiDeferred !== 0) {
+                const cls = p.deltaCreditiDeferred < 0 ? 'neg' : 'pos';
+                const sign = p.deltaCreditiDeferred < 0 ? '' : '+';
+            %><span class="delta-deferred <%= cls %>" title="Trattative differite in attesa">(<%= sign %><%= p.deltaCreditiDeferred.toFixed(2) %>)</span><% } %></td>
             <td style="text-align:center;"><%= p.giocatoriTesserati %></td>
             <td style="text-align:center;"><%= p.etaMedia.toFixed(2) %></td>
             <td><%= p.montePrestiti.toFixed(2) %></td>

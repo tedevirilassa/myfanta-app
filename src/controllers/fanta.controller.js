@@ -14,7 +14,14 @@ async function showClassifica(req, res) {
           include: {
             contratti: {
               where: { valido: true },
-              include: { giocatore: { select: { id: true, valore: true, eta: true } } },
+              // select esplicito: esclude dataStipula/dataFine per evitare il bug
+              // Prisma result.$extends + adapter-pg su include annidato (column "not available")
+              select: {
+                id: true,
+                tipo: true,
+                importoOperazione: true,
+                giocatore: { select: { id: true, valore: true, eta: true } },
+              },
             },
           },
         },
@@ -67,6 +74,25 @@ async function showClassifica(req, res) {
         ultimoPlusMinus: +p.ultimoPlusMinus,
       };
     });
+
+    // ── Trattative differite (COMPLETED_DEFERRED): delta crediti per team ─────
+    // Per ogni team: somma degli importi che saranno addebitati (mittente) o
+    // accreditati (ricevente) quando la trattativa diverrà effettiva.
+    const trattativeDiff = await prisma.trattativaMercato.findMany({
+      where: { stato: "COMPLETED_DEFERRED" },
+      select: { fantaTeamMittenteId: true, fantaTeamRiceventeId: true, importoOfferta: true },
+    });
+    // deltaCrediti: { [fantaTeamId]: numero (negativo = pagherà, positivo = incasserà) }
+    const deltaCrediti = {};
+    for (const t of trattativeDiff) {
+      const imp = Number(t.importoOfferta);
+      deltaCrediti[t.fantaTeamMittenteId]  = Math.round(((deltaCrediti[t.fantaTeamMittenteId]  ?? 0) - imp) * 100) / 100;
+      deltaCrediti[t.fantaTeamRiceventeId] = Math.round(((deltaCrediti[t.fantaTeamRiceventeId] ?? 0) + imp) * 100) / 100;
+    }
+    // Inietta deltaCreditiDeferred in ogni riga della classifica
+    for (const row of classifica) {
+      row.deltaCreditiDeferred = row.fantaTeam ? (deltaCrediti[row.fantaTeam.id] ?? 0) : 0;
+    }
 
     // Riordina per patrimonio ricalcolato
     classifica.sort((a, b) => b.patrimonio - a.patrimonio);
@@ -949,11 +975,12 @@ async function showDashboard(req, res) {
         orderBy: { createdAt: "desc" },
       }),
       prisma.situazioneFinanziaria.findFirst({
-        where:  { fantaTeamId: user.fantaTeam.id, stagione },
+        where:   { fantaTeamId: user.fantaTeam.id },
+        orderBy: { updatedAt: "desc" },
         select: { crediti: true },
       }),
       prisma.rosaGiocatore.findMany({
-        where:  { fantaTeamId: user.fantaTeam.id, stagione },
+        where:  { fantaTeamId: user.fantaTeam.id },
         select: { giocatoreId: true, categoria: true },
       }),
     ]);

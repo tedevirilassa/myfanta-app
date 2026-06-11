@@ -8,6 +8,7 @@
 
     /* ── sezioni ── */
     .section-block { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(26,58,42,.07); overflow: hidden; margin-bottom: 28px; }
+    .section-block-inner { overflow-x: auto; }
     .section-header { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--gray-200); }
     .section-header h2 { font-size: .95rem; font-weight: 800; color: var(--green-dark); text-transform: uppercase; letter-spacing: .5px; margin: 0; }
     .section-header .count-badge { background: var(--green-pale); color: var(--green-dark); font-size: .72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
@@ -122,6 +123,7 @@
       <% if (rinnovi.length === 0) { %>
         <div class="empty-state">Nessun rinnovo registrato.</div>
       <% } else { %>
+      <div class="section-block-inner">
       <table class="check-table">
         <thead>
           <tr>
@@ -172,6 +174,7 @@
           <% }); %>
         </tbody>
       </table>
+      </div>
       <% } %>
     </div>
 
@@ -184,6 +187,7 @@
       <% if (svincoliBocciati.length === 0 && svincoliNaturali.length === 0) { %>
         <div class="empty-state">Nessuno svincolo registrato.</div>
       <% } else { %>
+      <div class="section-block-inner">
       <table class="check-table">
         <thead>
           <tr>
@@ -233,6 +237,7 @@
           <% }); %>
         </tbody>
       </table>
+      </div>
       <% } %>
     </div>
 
@@ -245,6 +250,7 @@
       <% if (confermati.length === 0) { %>
         <div class="empty-state">Nessun contratto confermato.</div>
       <% } else { %>
+      <div class="section-block-inner">
       <table class="check-table">
         <thead>
           <tr>
@@ -282,10 +288,9 @@
           <% }); %>
         </tbody>
       </table>
+      </div>
       <% } %>
     </div>
-
-    <% } %> <%/* end if team */%>
   </div>
 </body>
 </html>

@@ -1,49 +1,89 @@
 /**
  * scripts/restore-db.js
  *
- * Ripristina il DB locale da una cartella di backup prodotta da scripts/backup-db.js.
+ * Ripristina il DB da una cartella di backup prodotta da scripts/backup-db.js.
  * Mostra l'elenco dei backup disponibili, fa scegliere quale, chiede conferma,
  * poi TRUNCATE + INSERT in ordine FK e reset delle sequence.
  *
  * Uso:
- *   node scripts/restore-db.js                    → menu interattivo, solo backup "locale"
- *   node scripts/restore-db.js --all              → include anche backup "render"
- *   node scripts/restore-db.js --dir <path>       → restore non-interattivo da cartella specifica
- *   node scripts/restore-db.js --yes              → skip conferma finale (USARE CON CAUTELA)
+ *   node scripts/restore-db.js                    → menu interattivo, backup DEV
+ *   node scripts/restore-db.js --env dev           → menu interattivo, backup DEV
+ *   node scripts/restore-db.js --env prod          → menu interattivo, backup PROD (via SSH tunnel)
+ *   node scripts/restore-db.js --all               → mostra backup di tutti gli env
+ *   node scripts/restore-db.js --dir <path>        → restore non-interattivo da cartella specifica
+ *   node scripts/restore-db.js --yes               → skip conferma finale (USARE CON CAUTELA)
  *
- * Nota: l'operazione è DISTRUTTIVA. Tutte le tabelle elencate in TABLES_ORDER
- *       vengono svuotate (TRUNCATE ... RESTART IDENTITY CASCADE) e ripopolate
- *       dai file JSON.
+ * ⚠ ATTENZIONE: operazione DISTRUTTIVA. Tutte le tabelle in TABLES_ORDER vengono
+ *   svuotate (TRUNCATE ... RESTART IDENTITY CASCADE) e ripopolate dai file JSON.
+ *
+ * REGOLA: ogni volta che si aggiunge/modifica/elimina una tabella o colonna
+ *         aggiornare TABLES (backup-db.js) e TABLES_ORDER (restore-db.js).
  */
 
 "use strict";
 
+require("dotenv").config();
+
 const fs       = require("fs");
 const path     = require("path");
+const net      = require("net");
 const readline = require("readline");
-const { Pool } = require("pg");
+const { Client } = require("ssh2");
+const { Pool }   = require("pg");
 
-// ─── env loader ──────────────────────────────────────────────────────────────
+const TUNNEL_LOCAL_PORT = 5455;
 
-function parseEnvFile(filePath) {
-  const abs = path.resolve(filePath);
-  if (!fs.existsSync(abs)) throw new Error(`File non trovato: ${abs}`);
-  const lines = fs.readFileSync(abs, "utf8").split(/\r?\n/);
-  const result = {};
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let value = trimmed.slice(eqIdx + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
+// ─── Config SSH prod ──────────────────────────────────────────────────────────
+
+function extractHost(connStr) {
+  try { return new URL(connStr).hostname; } catch { return null; }
+}
+
+const DATABASE_URL      = process.env.DATABASE_URL;
+const DATABASE_URL_PROD = process.env.DATABASE_URL_PROD;
+const SSH_HOST          = process.env.PROD_SSH_HOST || extractHost(DATABASE_URL_PROD) || "fantaserver";
+const SSH_PORT          = parseInt(process.env.PROD_SSH_PORT || "22", 10);
+const SSH_USER          = process.env.PROD_SSH_USER || "fantauser";
+const SSH_PASS          = process.env.PROD_SSH_PASSWORD;
+const REMOTE_DB_HOST    = process.env.PROD_DB_REMOTE_HOST || "localhost";
+const REMOTE_DB_PORT    = 5432;
+
+// ─── Tunnel SSH ───────────────────────────────────────────────────────────────
+
+function buildTunnelUrl(originalUrl) {
+  try {
+    const u = new URL(originalUrl);
+    u.hostname = "127.0.0.1";
+    u.port     = String(TUNNEL_LOCAL_PORT);
+    return u.toString();
+  } catch {
+    return originalUrl.replace(/@[^/]+\//, `@127.0.0.1:${TUNNEL_LOCAL_PORT}/`);
   }
-  return result;
+}
+
+function startTunnel() {
+  return new Promise((resolve, reject) => {
+    const conn   = new Client();
+    const server = net.createServer((socket) => {
+      conn.forwardOut("127.0.0.1", 0, REMOTE_DB_HOST, REMOTE_DB_PORT, (err, channel) => {
+        if (err) { socket.destroy(); return; }
+        socket.pipe(channel).pipe(socket);
+        socket.on("error",  () => channel.destroy());
+        channel.on("error", () => socket.destroy());
+        channel.on("close", () => socket.destroy());
+        socket.on("close",  () => channel.destroy());
+      });
+    });
+    server.on("error", (err) => reject(new Error(`Tunnel server: ${err.message}`)));
+    conn.on("ready", () => {
+      server.listen(TUNNEL_LOCAL_PORT, "127.0.0.1", () => {
+        log(`Tunnel SSH attivo: 127.0.0.1:${TUNNEL_LOCAL_PORT} → ${REMOTE_DB_HOST}:${REMOTE_DB_PORT}`);
+        resolve({ conn, server });
+      });
+    });
+    conn.on("error", (err) => { server.close(); reject(new Error(`SSH: ${err.message}`)); });
+    conn.connect({ host: SSH_HOST, port: SSH_PORT, username: SSH_USER, password: SSH_PASS, readyTimeout: 20000 });
+  });
 }
 
 // ─── ordine FK ────────────────────────────────────────────────────────────────
@@ -91,7 +131,7 @@ function readSummary(dir) {
   catch { return null; }
 }
 
-function listBackups(baseDir, includeAll) {
+function listBackups(baseDir, envFilter, includeAll) {
   if (!fs.existsSync(baseDir)) return [];
   const entries = fs.readdirSync(baseDir)
     .map(name => ({ name, full: path.join(baseDir, name) }))
@@ -100,13 +140,19 @@ function listBackups(baseDir, includeAll) {
   const items = [];
   for (const e of entries) {
     const summary = readSummary(e.full);
-    const source = summary?.source || (e.name.includes("render") ? "render" : "locale");
-    if (!includeAll && source !== "locale") continue;
+    // Supporta sia il vecchio formato (source: locale/render) che il nuovo (env: dev/prod)
+    const rawEnv = summary?.env || summary?.source || null;
+    const detectedEnv =
+      rawEnv === "locale" ? "dev" :
+      rawEnv === "render" ? "prod" :
+      rawEnv || (e.name.includes("prod") ? "prod" : "dev");
+
+    if (!includeAll && detectedEnv !== envFilter) continue;
     items.push({
       name:      e.name,
       full:      e.full,
       timestamp: summary?.timestamp || null,
-      source,
+      env:       detectedEnv,
       size:      dirSize(e.full),
       tables:    summary?.tables || null,
     });
@@ -205,23 +251,43 @@ async function restoreFromDir(pool, backupDir) {
 // ─── main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const args = process.argv.slice(2);
-  const includeAll = args.includes("--all");
+  const args        = process.argv.slice(2);
+  const envIdx      = args.indexOf("--env");
+  const envTarget   = envIdx !== -1 ? args[envIdx + 1] : "dev";
+  const includeAll  = args.includes("--all");
   const skipConfirm = args.includes("--yes") || args.includes("-y");
-  const dirIdx = args.indexOf("--dir");
+  const dirIdx      = args.indexOf("--dir");
   const explicitDir = dirIdx !== -1 ? args[dirIdx + 1] : null;
 
-  // Connessione DB locale
-  const env = parseEnvFile(path.join(__dirname, "../.env"));
-  const dbUrl = env.DATABASE_URL;
-  if (!dbUrl) throw new Error("DATABASE_URL mancante in .env");
-  const pool = new Pool({ connectionString: dbUrl });
+  if (!["dev", "prod"].includes(envTarget)) {
+    console.error(`--env deve essere 'dev' o 'prod' (ricevuto: '${envTarget}')`);
+    process.exit(1);
+  }
+
+  const isProd = envTarget === "prod";
+
+  // ── Connessione ──────────────────────────────────────────────────────────
+  let tunnel = null;
+  let pool;
+
+  if (isProd) {
+    if (!DATABASE_URL_PROD) { console.error("DATABASE_URL_PROD mancante in .env"); process.exit(1); }
+    if (!SSH_PASS)          { console.error("PROD_SSH_PASSWORD mancante in .env"); process.exit(1); }
+    log("Apertura tunnel SSH verso PROD...");
+    tunnel = await startTunnel();
+    const tunnelUrl = buildTunnelUrl(DATABASE_URL_PROD);
+    pool = new Pool({ connectionString: tunnelUrl, ssl: false });
+  } else {
+    if (!DATABASE_URL) { console.error("DATABASE_URL mancante in .env"); process.exit(1); }
+    pool = new Pool({ connectionString: DATABASE_URL, ssl: false });
+  }
 
   try {
     await pool.query("SELECT 1");
-    log("Connesso al DB locale");
+    log(`Connesso al DB ${envTarget.toUpperCase()}`);
   } catch (e) {
-    console.error("Impossibile connettersi al DB locale:", e.message);
+    console.error(`Impossibile connettersi al DB ${envTarget}:`, e.message);
+    if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
     process.exit(1);
   }
 
@@ -231,33 +297,37 @@ async function main() {
     chosenDir = path.resolve(explicitDir);
     if (!fs.existsSync(chosenDir) || !fs.statSync(chosenDir).isDirectory()) {
       console.error(`Cartella non valida: ${chosenDir}`);
+      if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
+      await pool.end();
       process.exit(1);
     }
   } else {
-    const baseDir = path.resolve(__dirname, "../backups");
-    const backups = listBackups(baseDir, includeAll);
+    const baseDir  = path.resolve(__dirname, "../backups");
+    const backups  = listBackups(baseDir, envTarget, includeAll);
     if (backups.length === 0) {
-      console.error(`Nessun backup ${includeAll ? "" : "locale "}trovato in ${baseDir}`);
-      console.error(`Suggerimento: esegui prima 'npm run db:backup' oppure usa --all per includere backup remoti.`);
+      console.error(`Nessun backup ${includeAll ? "" : `'${envTarget}' `}trovato in ${baseDir}`);
+      console.error(`Suggerimento: esegui 'npm run db:backup' oppure '--all' per tutti gli env.`);
+      if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
       await pool.end();
       process.exit(1);
     }
 
-    console.log(`\nBackup disponibili (${backups.length}):\n`);
+    console.log(`\nBackup disponibili (${backups.length}) — env: ${includeAll ? "tutti" : envTarget}:\n`);
     backups.forEach((b, i) => {
       const tables = b.tables
         ? Object.values(b.tables).filter(v => typeof v === "number").reduce((a, n) => a + n, 0)
         : "?";
       console.log(`  [${String(i + 1).padStart(2, " ")}] ${b.name}  ` +
-                  `(${b.source}, ${fmtBytes(b.size)}, ~${tables} righe)`);
+                  `(${b.env}, ${fmtBytes(b.size)}, ~${tables} righe)`);
     });
     console.log();
 
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const rl  = readline.createInterface({ input: process.stdin, output: process.stdout });
     const sel = await ask(rl, `Seleziona numero backup (1-${backups.length}) o 'q' per uscire: `);
     if (sel.toLowerCase() === "q" || sel === "") {
       console.log("Annullato.");
       rl.close();
+      if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
       await pool.end();
       return;
     }
@@ -265,18 +335,21 @@ async function main() {
     if (isNaN(idx) || idx < 0 || idx >= backups.length) {
       console.error("Selezione non valida.");
       rl.close();
+      if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
       await pool.end();
       process.exit(1);
     }
     chosenDir = backups[idx].full;
 
     if (!skipConfirm) {
-      console.log(`\n⚠ ATTENZIONE: tutte le tabelle del DB locale verranno SVUOTATE e ripopolate da:`);
+      const envLabel = isProd ? "⚠ PROD (PRODUZIONE!)" : "DEV";
+      console.log(`\n⚠ ATTENZIONE: tutte le tabelle del DB ${envLabel} verranno SVUOTATE e ripopolate da:`);
       console.log(`  ${chosenDir}\n`);
       const conf = await ask(rl, `Confermi il ripristino? digita 'SI' per procedere: `);
       if (conf !== "SI") {
         console.log("Annullato.");
         rl.close();
+        if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
         await pool.end();
         return;
       }
@@ -284,11 +357,11 @@ async function main() {
     rl.close();
   }
 
-  log(`Restore da: ${chosenDir}`);
+  log(`Restore da: ${chosenDir} → DB ${envTarget.toUpperCase()}`);
   try {
     await restoreFromDir(pool, chosenDir);
     console.log(`\n${"═".repeat(50)}`);
-    console.log("  Ripristino completato");
+    console.log(`  Ripristino ${envTarget.toUpperCase()} completato`);
     console.log("═".repeat(50));
     console.log(`  📁 ${chosenDir}\n`);
   } catch (err) {
@@ -296,6 +369,7 @@ async function main() {
     process.exit(1);
   } finally {
     await pool.end();
+    if (tunnel) { tunnel.server.close(); tunnel.conn.end(); }
   }
 }
 

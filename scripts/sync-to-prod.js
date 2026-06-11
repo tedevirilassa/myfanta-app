@@ -145,6 +145,7 @@ function runMigrate(tunnelUrl) {
 const TABLES = [
   "fanta_teams",
   "giocatori",
+  "quotazioni",
   "contratti",
   "situazione_finanziaria",
   "rosa_giocatori",

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <%- include('../partials/head', { title: 'Trasferimenti differiti' }) %>
+  <style>
+    .diff-table th  { background: var(--green-dark); color:#a7d7b8; font-size:.72rem; white-space:nowrap; }
+    .diff-table td  { padding:9px 12px; font-size:.85rem; vertical-align:top; }
+    .diff-table tr:hover td { background:#f0fdf4; }
+
+    .pill-cat { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:700; }
+    .cat-InRosa    { background:#eafaf1; color:#145a32; border:1px solid #58d68d; }
+    .cat-FuoriRosa { background:#fef3c7; color:#92400e; border:1px solid #fbbf24; }
+    .cat-U21       { background:#e0f2fe; color:#075985; border:1px solid #38bdf8; }
+
+    .ruolo-P { background:#fce7f3; color:#831843; border:1px solid #f9a8d4; }
+    .ruolo-D { background:#dcfce7; color:#14532d; border:1px solid #86efac; }
+    .ruolo-C { background:#dbeafe; color:#1e3a8a; border:1px solid #93c5fd; }
+    .ruolo-A { background:#fef9c3; color:#713f12; border:1px solid #fde047; }
+
+    /* drawer modifica */
+    .drawer        { display:none; background:#f8fafc; border-top:2px solid var(--green-light);
+                     padding:18px 20px; margin-top:4px; border-radius:0 0 10px 10px; }
+    .drawer.open   { display:block; }
+    .drawer-grid   { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:12px; align-items:end; }
+    .drawer-grid label { display:block; font-size:.78rem; color:var(--gray-500); margin-bottom:4px; }
+    .drawer-grid input, .drawer-grid select {
+      width:100%; padding:7px 10px; border:1.5px solid var(--gray-200);
+      border-radius:6px; font-size:.9rem;
+    }
+    .drawer-grid input:focus, .drawer-grid select:focus {
+      outline:none; border-color:var(--green-mid);
+    }
+    .btn-save   { background:var(--green-mid); color:#fff; border:none; padding:8px 18px; border-radius:6px; font-weight:700; cursor:pointer; }
+    .btn-save:hover { background:var(--green-dark); }
+    .btn-cancel { background:var(--gray-200); color:var(--gray-700); border:none; padding:8px 14px; border-radius:6px; cursor:pointer; }
+
+    /* annulla */
+    .annulla-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+    .annulla-form input[type=text] { flex:1; min-width:160px; padding:6px 10px;
+      border:1.5px solid var(--gray-200); border-radius:6px; font-size:.85rem; }
+    .btn-annulla { background:#fee2e2; color:#991b1b; border:1.5px solid #fca5a5;
+      padding:7px 14px; border-radius:6px; font-weight:700; cursor:pointer; }
+    .btn-annulla:hover { background:#fca5a5; }
+
+    .stipendio-note { font-size:.72rem; color:var(--gray-500); margin-top:3px; }
+  </style>
+</head>
+<body>
+  <%- include('../partials/nav') %>
+  <%- include('./_tabs') %>
+
+  <div class="container" style="max-width:1100px;">
+    <div class="page-header">
+      <h1>📅 Trasferimenti differiti</h1>
+      <a href="/admin/pannello" class="btn btn-sm" style="background:var(--gray-200);color:var(--gray-700);">← Pannello</a>
+    </div>
+
+    <% if (success) { %><div class="alert alert-success">✔ <%= success %></div><% } %>
+    <% if (error)   { %><div class="alert alert-error">❌ <%= error %></div><% } %>
+
+    <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:10px; padding:12px 18px; margin-bottom:20px; font-size:.85rem; color:#1e3a8a;">
+      <strong>Trattative in stato COMPLETED_DEFERRED.</strong>
+      Sono trasferimenti accettati con decorrenza futura: il contratto del giocatore è già pre-creato (non valido)
+      ma crediti, stipendi e rosa non sono ancora stati spostati.
+      L'admin può correggere importo, data di decorrenza, durata contratto e categoria, oppure annullare la trattativa.
+    </div>
+
+    <% if (differiti.length === 0) { %>
+      <div class="alert alert-info" style="text-align:center; padding:30px;">Nessun trasferimento differito in attesa.</div>
+    <% } else { %>
+    <div class="card" style="padding:0; overflow-x:auto;">
+      <table class="diff-table" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="width:32px;">#</th>
+            <th>Giocatore</th>
+            <th>Da</th>
+            <th>A</th>
+            <th>Offerta (M)</th>
+            <th>Decorrenza</th>
+            <th>Anni</th>
+            <th>Cat.</th>
+            <th>Stipendio pre-calc.</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% differiti.forEach(function(t, idx) {
+            const stipendio = t.contratto ? Number(t.contratto.importoOperazione) : null;
+            const mittenteLabel  = t.fantaTeamMittente.user?.nickname  || t.fantaTeamMittente.nome;
+            const riceventeLabel = t.fantaTeamRicevente.user?.nickname || t.fantaTeamRicevente.nome;
+          %>
+          <tr id="row-<%= t.id %>">
+            <td style="text-align:center; color:var(--gray-400); font-size:.8rem;"><%= t.id %></td>
+            <td>
+              <span class="pill-cat ruolo-<%= t.giocatore.ruolo %>" style="border-radius:999px; padding:1px 6px; font-size:.68rem; font-weight:700;"><%= t.giocatore.ruolo %></span>
+              <strong style="margin-left:4px;"><%= t.giocatore.nome %></strong>
+              <span style="font-size:.75rem; color:var(--gray-400); display:block;"><%= t.giocatore.squadra %></span>
+            </td>
+            <td style="font-size:.82rem;"><strong><%= t.fantaTeamRicevente.nome %></strong><br><span style="color:var(--gray-500);">(<%= riceventeLabel %>)</span></td>
+            <td style="font-size:.82rem;"><strong><%= t.fantaTeamMittente.nome %></strong><br><span style="color:var(--gray-500);">(<%= mittenteLabel %>)</span></td>
+            <td style="font-weight:700; color:var(--green-dark);"><%= Number(t.importoOfferta).toFixed(2) %></td>
+            <td><%= t.dataDecorrenza || '—' %></td>
+            <td style="text-align:center;"><%= t.anniContrattoProposti || '—' %></td>
+            <td><span class="pill-cat cat-<%= t.categoriaProposta %>"><%= t.categoriaProposta %></span></td>
+            <td>
+              <% if (stipendio !== null) { %>
+                <strong><%= stipendio.toFixed(2) %></strong>
+                <div class="stipendio-note">su contratto id=<%= t.contrattoNuovoId %></div>
+              <% } else { %>
+                <span style="color:var(--gray-400);">—</span>
+              <% } %>
+            </td>
+            <td style="white-space:nowrap;">
+              <button type="button" class="btn btn-sm" onclick="toggleDrawer(<%= t.id %>)"
+                style="background:#eef2ff; color:#3730a3; border:1.5px solid #c7d2fe;">✏️ Modifica</button>
+            </td>
+          </tr>
+          <!-- Drawer modifica -->
+          <tr id="drawer-row-<%= t.id %>">
+            <td colspan="10" style="padding:0; border-top:none;">
+              <div class="drawer" id="drawer-<%= t.id %>">
+                <form method="POST" action="/admin/mercato/differiti/<%= t.id %>/modifica"
+                      onsubmit="return confirm('Confermi la modifica della trattativa #<%= t.id %>?');">
+                  <div class="drawer-grid">
+                    <div>
+                      <label>Importo offerta (M)</label>
+                      <input type="number" name="importoOfferta" step="0.01" min="0.01"
+                             value="<%= Number(t.importoOfferta).toFixed(2) %>" required>
+                    </div>
+                    <div>
+                      <label>Data decorrenza (MM-YYYY)</label>
+                      <input type="text" name="dataDecorrenza" pattern="\d{2}-\d{4}" placeholder="07-2027"
+                             value="<%= t.dataDecorrenza || '' %>" required>
+                    </div>
+                    <div>
+                      <label>Anni contratto (<%= durataMin %>–<%= durataMax %>)</label>
+                      <input type="number" name="anniContrattoProposti" min="<%= durataMin %>" max="<%= durataMax %>"
+                             value="<%= t.anniContrattoProposti || 1 %>" required>
+                    </div>
+                    <div>
+                      <label>Categoria in rosa</label>
+                      <select name="categoriaProposta">
+                        <option value="InRosa"    <%= t.categoriaProposta==='InRosa'    ? 'selected' : '' %>>InRosa</option>
+                        <option value="FuoriRosa" <%= t.categoriaProposta==='FuoriRosa' ? 'selected' : '' %>>FuoriRosa</option>
+                        <option value="U21"       <%= t.categoriaProposta==='U21'       ? 'selected' : '' %>>U21</option>
+                      </select>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:flex-end;">
+                      <button type="submit" class="btn-save">💾 Salva</button>
+                      <button type="button" class="btn-cancel" onclick="toggleDrawer(<%= t.id %>)">Annulla</button>
+                    </div>
+                  </div>
+                  <div style="margin-top:10px; font-size:.78rem; color:var(--gray-500);">
+                    ℹ️ Lo stipendio verrà ricalcolato automaticamente in base alla nuova data di decorrenza e al valore attuale del giocatore.
+                  </div>
+                </form>
+
+                <form method="POST" action="/admin/mercato/differiti/<%= t.id %>/annulla"
+                      onsubmit="return confirm('Annullare definitivamente la trattativa #<%= t.id %>?\n\nIl contratto pre-creato verrà eliminato e la trattativa passera in REJECTED.');">
+                  <div class="annulla-form">
+                    <span style="font-size:.82rem; color:#991b1b; font-weight:600;">⚠ Annulla trattativa:</span>
+                    <input type="text" name="motivo" placeholder="Motivo annullamento (es. errore data)" value="Annullato dall'admin">
+                    <button type="submit" class="btn-annulla">🗑 Annulla trattativa</button>
+                  </div>
+                </form>
+              </div>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </div>
+
+  <script>
+    function toggleDrawer(id) {
+      const d = document.getElementById('drawer-' + id);
+      d.classList.toggle('open');
+    }
+  </script>
+</body>
+</html>

@@ -1113,15 +1113,18 @@ async function rollbackLog(req, res) {
         case "UPDATE": {
           // Rollback UPDATE = ripristino stato precedente
           if (!statoPrecedente) throw new Error("stato_precedente/prima non presente nel dettaglio: impossibile ripristinare.");
+          // Blocca rollback se il log è marcato come non rollbackable
+          if (statoPrecedente._non_rollbackable) throw new Error(statoPrecedente._non_rollbackable);
           const targetId = entityId || statoPrecedente.id;
           if (!targetId) throw new Error("ID del record da ripristinare non trovato.");
-          // Rimuovi campi non-data (id, createdAt, updatedAt, relations)
+          // Rimuovi campi non-data (id, createdAt, updatedAt, relations, campi _*)
           const dataToRestore = { ...statoPrecedente };
           delete dataToRestore.id;
           delete dataToRestore.createdAt;
           delete dataToRestore.updatedAt;
-          // Rimuovi eventuali chiavi relation (oggetti annidati)
+          // Rimuovi chiavi relation (oggetti annidati) e campi interni (_*)
           for (const [k, v] of Object.entries(dataToRestore)) {
+            if (k.startsWith("_")) { delete dataToRestore[k]; continue; }
             if (v && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date)) {
               delete dataToRestore[k];
             }

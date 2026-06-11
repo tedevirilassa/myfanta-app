@@ -20,9 +20,10 @@
     "prod:deploy": "node scripts/deploy-to-prod.js --no-install",
     "prod:deploy-install": "node scripts/deploy-to-prod.js",
     "prod:deploy-dry": "node scripts/deploy-to-prod.js --dry-run",
-    "db:backup": "node scripts/backup-db.js",
-    "db:backup-remote": "node scripts/backup-db.js --remote",
-    "db:restore": "node scripts/restore-db.js"
+    "db:backup": "node scripts/backup-db.js --env dev",
+    "db:backup-prod": "node scripts/backup-db.js --env prod",
+    "db:restore": "node scripts/restore-db.js --env dev",
+    "db:restore-prod": "node scripts/restore-db.js --env prod"
   },
   "keywords": [],
   "author": "",
@@ -46,6 +47,7 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
+    "archiver": "^8.0.0",
     "nodemon": "^3.1.14",
     "ssh2": "^1.17.0"
   }

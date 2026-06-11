@@ -4,7 +4,7 @@ const router = express.Router();
 const { requireAuth, requireAdmin } = require("../middleware/auth.middleware");
 const ctrl = require("../controllers/admin.controller");
 const rinnoviCtrl = require("../controllers/rinnovi.controller");
-const { attivaTrattativeDifferite } = require("../controllers/mercato.controller");
+const { attivaTrattativeDifferite, showAdminDifferiti, adminModificaDifferito, adminAnnullaDifferito } = require("../controllers/mercato.controller");
 
 // ── Stop impersonate (PRIMA di requireAdmin!) ────────────
 // Accessibile anche all'utente impersonato (potrebbe non essere admin):
@@ -106,5 +106,9 @@ router.post("/sync-transfermarkt/scrape", ctrl.runScrapeTransfermarkt);
 router.post("/sync-transfermarkt/import", ctrl.importTransfermarkt);
 router.get("/realign-ruoli", ctrl.showRealignRuoli);
 router.post("/realign-ruoli/apply", ctrl.applyRealignRuoli);
+
+router.get("/mercato/differiti",              showAdminDifferiti);
+router.post("/mercato/differiti/:id/modifica", adminModificaDifferito);
+router.post("/mercato/differiti/:id/annulla",  adminAnnullaDifferito);
 
 module.exports = router;

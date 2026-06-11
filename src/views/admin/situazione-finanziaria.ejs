@@ -15,7 +15,7 @@
     .pres-name { font-weight: 700; font-size: .9rem; min-width: 160px; }
     .pres-crediti { font-size: .82rem; color: var(--gray-500); min-width: 100px; font-variant-numeric: tabular-nums; }
 
-    .crediti-form { display: flex; gap: 5px; align-items: center; flex-wrap: nowrap; }
+    .crediti-form { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
     .crediti-form input[type="number"] {
       width: 75px; padding: 5px 7px; border: 1.5px solid var(--gray-200);
       border-radius: 6px; font-size: .82rem; text-align: right;
@@ -49,7 +49,7 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
-    <div class="card" style="padding:0; overflow:hidden;">
+    <div class="card" style="padding:0; overflow-x:auto;">
       <ul class="sf-list" id="sfList">
         <% situazioni.forEach(function(sf) { %>
         <li>

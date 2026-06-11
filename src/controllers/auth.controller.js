@@ -35,13 +35,35 @@ async function login(req, res) {
 
     res.cookie(COOKIE_NAME, token, COOKIE_OPTS);
 
-    logAction({ azione: "LOGIN", entita: "utente", entitaId: user.id, adminId: user.id });
+    logAction({
+      azione: "LOGIN",
+      entita: "utente",
+      entitaId: user.id,
+      dettaglio: {
+        email: user.email,
+        ip: req.ip || req.headers["x-forwarded-for"] || null,
+        userAgent: req.headers["user-agent"] || null,
+      },
+      adminId: user.id,
+    });
 
     if (user.mustChangePassword) {
       return res.redirect("/auth/change-password");
     }
     return res.redirect("/");
   } catch (err) {
+    // Traccia i tentativi di login falliti (fire-and-forget, no adminId disponibile)
+    logAction({
+      azione: "LOGIN_FAILED",
+      entita: "utente",
+      entitaId: null,
+      dettaglio: {
+        email: email || null,
+        ip: req.ip || req.headers["x-forwarded-for"] || null,
+        motivo: err.message,
+      },
+      adminId: null,
+    }).catch(() => {});
     return res.render("auth/login", { error: err.message });
   }
 }
@@ -92,6 +114,18 @@ async function changePassword(req, res) {
 
 // POST /auth/logout
 function logout(req, res) {
+  if (req.user) {
+    logAction({
+      azione: "LOGOUT",
+      entita: "utente",
+      entitaId: req.user.id,
+      dettaglio: {
+        email: req.user.email,
+        ip: req.ip || req.headers["x-forwarded-for"] || null,
+      },
+      adminId: req.user.id,
+    });
+  }
   res.clearCookie(COOKIE_NAME);
   res.redirect("/auth/login");
 }

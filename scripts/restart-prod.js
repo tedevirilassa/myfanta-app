@@ -76,8 +76,18 @@ async function main() {
     console.log(`  PID ${pid} terminato`);
   }
 
-  conn.end();
-  console.log("Fatto. Il service manager dovrebbe riavviare il server automaticamente.");
+  // Riavvia il server dopo il kill (non c'è service manager automatico)
+  const remotePath = process.env.PROD_REMOTE_PATH || "C:\\user\\fantauser\\fantaprod";
+  await execRemote(conn, `powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path '${remotePath}\\logs' | Out-Null"`, true);
+  console.log("Avvio il server...");
+  await new Promise((res) => {
+    conn.exec(`cd /d ${remotePath} && node src\\server.js >> ${remotePath}\\logs\\server.log 2>> ${remotePath}\\logs\\server-error.log`, (err, stream) => {
+      if (err) { console.error("Errore exec:", err.message); res(); return; }
+      setTimeout(() => { stream.destroy(); conn.destroy(); res(); }, 2000);
+    });
+  });
+  console.log("Server riavviato.");
+  process.exit(0);
 }
 
 main().catch((e) => { console.error("Errore:", e.message); process.exit(1); });
