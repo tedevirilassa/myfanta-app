@@ -45,7 +45,6 @@ model FantaTeam {
 model SituazioneFinanziaria {
   id                 Int        @id @default(autoincrement())
   nomePresidente     String
-  stagione           String     // es. "2025-2026"
   valoreRose         Decimal    @db.Decimal(10, 2)
   crediti            Decimal    @db.Decimal(10, 2)
   patrimonio         Decimal    @db.Decimal(10, 2)
@@ -54,13 +53,12 @@ model SituazioneFinanziaria {
   stipendi           Decimal    @db.Decimal(10, 2)
   montePrestiti      Decimal    @db.Decimal(10, 2)
   ultimoPlusMinus    Decimal    @db.Decimal(10, 2)
-  fantaTeamId        Int?
+  fantaTeamId        Int?       @unique
   fantaTeam          FantaTeam? @relation(fields: [fantaTeamId], references: [id])
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @default(now()) @updatedAt
 
-  @@unique([nomePresidente, stagione])
-  @@unique([fantaTeamId, stagione])
+  @@unique([nomePresidente])
   @@map("situazione_finanziaria")
 }
 
@@ -73,7 +71,7 @@ model Giocatore {
   eta             Int?
   anniContratto   Int?
   valore          Decimal?    @db.Decimal(10, 2)
-  dataNascita     String?
+  dataNascita     DateTime?
   nazionalita     String?
   transfermarktId String?     @unique
   active          Boolean     @default(true)
@@ -93,7 +91,6 @@ model Quotazione {
   giocatoreId Int
   valore      Decimal?  @db.Decimal(10, 2)
   fonte       String?   @default("transfermarkt")
-  stagione    String?
   createdAt   DateTime  @default(now())
   giocatore   Giocatore @relation(fields: [giocatoreId], references: [id])
 
@@ -104,9 +101,9 @@ model Contratto {
   id                Int                   @id @default(autoincrement())
   tipo              TipoContratto
   clausola          ClausolaContratto?
-  dataStipula       String
+  dataStipula       DateTime
   durataContratto   Int
-  dataFine          String?
+  dataFine          DateTime?
   giocatoreId       Int
   valoreGiocatore   Decimal?              @db.Decimal(10, 2)
   importoOperazione Decimal?              @db.Decimal(10, 2)
@@ -188,7 +185,6 @@ model MovimentoFinanziario {
   id          Int                 @id @default(autoincrement())
   fantaTeamId Int
   sfId        Int                 // riferimento a SituazioneFinanziaria
-  stagione    String
   importo     Decimal             @db.Decimal(10, 2)  // segno: <0 addebito, >0 accredito
   causale     CausaleFinanziaria
   contesto    String?             @db.Text             // JSON libero (contrattoId, giocatoreNome, ...)
@@ -196,7 +192,7 @@ model MovimentoFinanziario {
   log         Log?                @relation(fields: [logId], references: [id])
   createdAt   DateTime            @default(now())
 
-  @@index([fantaTeamId, stagione])
+  @@index([fantaTeamId])
   @@index([causale])
   @@map("movimenti_finanziari")
 }
@@ -222,14 +218,13 @@ model RosaGiocatore {
   id           Int            @id @default(autoincrement())
   fantaTeamId  Int
   giocatoreId  Int
-  stagione     String         // es. "2025-2026"
   categoria    CategoriaRosa  @default(InRosa)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @default(now()) @updatedAt
   fantaTeam    FantaTeam      @relation(fields: [fantaTeamId], references: [id])
   giocatore    Giocatore      @relation(fields: [giocatoreId], references: [id])
 
-  @@unique([fantaTeamId, giocatoreId, stagione])
+  @@unique([fantaTeamId, giocatoreId])
   @@map("rosa_giocatori")
 }
 
@@ -251,7 +246,7 @@ model TrattativaMercato {
   valoreRiferimento    Decimal           @db.Decimal(10, 2)  // valore TM al momento dell'offerta
   stato                StatoTrattativa   @default(PENDING)
   motivoRifiuto        String?
-  dataDecorrenza       String?           // MM-YYYY: mese di decorrenza effettiva dell'operazione
+  dataDecorrenza       DateTime?         // MM-YYYY: mese di decorrenza effettiva dell'operazione
   tipoContratto        TipoContratto     @default(Acquisto)  // Acquisto | Prestito
   clausola             ClausolaContratto?                    // DirittoRiscatto | ObbligoRiscatto | DirittoRicompra | ObbligoRicompra
   importoClausola      Decimal?          @db.Decimal(10, 2) // importo riscatto/ricompra
@@ -279,7 +274,6 @@ model PropostaRinnovo {
   contrattoId     Int          @unique
   fantaTeamId     Int
   giocatoreId     Int
-  stagione        String       // stagione di destinazione del rinnovo (es. "2026-2027")
   nuovaDurata     Int          // anni (1..3 secondo parametri)
   nuovoIngaggio   Decimal      @db.Decimal(10, 2)
   ordinePriorita  Int          // 1 = priorità massima
@@ -291,7 +285,7 @@ model PropostaRinnovo {
   fantaTeam       FantaTeam    @relation(fields: [fantaTeamId], references: [id])
   giocatore       Giocatore    @relation(fields: [giocatoreId], references: [id])
 
-  @@unique([fantaTeamId, stagione, ordinePriorita])
+  @@unique([fantaTeamId, ordinePriorita])
   @@index([fantaTeamId, ordinePriorita])
   @@map("proposte_rinnovo")
 }

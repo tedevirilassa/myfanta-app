@@ -112,7 +112,7 @@ async function showMieProposte(req, res) {
   const [contrattiInScadenza, propostePendenti, salaryCap] = await Promise.all([
     findContrattiInScadenza(team.id, sCorrente),
     prisma.propostaRinnovo.findMany({
-      where: { fantaTeamId: team.id, stagione: sTarget, status: "PENDING" },
+      where: { fantaTeamId: team.id, status: "PENDING" },
       include: { giocatore: true, contratto: true },
       orderBy: { ordinePriorita: "asc" },
     }),
@@ -189,7 +189,7 @@ async function createProposta(req, res) {
 
     if (errors.length === 0) {
       const ultimaPriorita = await prisma.propostaRinnovo.findFirst({
-        where: { fantaTeamId: team.id, stagione: sTarget },
+        where: { fantaTeamId: team.id },
         orderBy: { ordinePriorita: "desc" },
       });
       const ordine = (ultimaPriorita?.ordinePriorita || 0) + 1;
@@ -199,7 +199,6 @@ async function createProposta(req, res) {
           contrattoId: cId,
           fantaTeamId: team.id,
           giocatoreId: contratto.giocatoreId,
-          stagione: sTarget,
           nuovaDurata: durata,
           nuovoIngaggio: ingaggio,
           ordinePriorita: ordine,
@@ -208,7 +207,7 @@ async function createProposta(req, res) {
       });
       await logAction({
         azione: "CREATE", entita: "proposta_rinnovo", entitaId: nuova.id,
-        dettaglio: { dopo: { fantaTeamId: team.id, contrattoId: cId, giocatoreId: contratto.giocatoreId, stagione: sTarget, durata, ingaggio, ordine, formula: "valore * stipendio_percentuale" } },
+        dettaglio: { dopo: { fantaTeamId: team.id, contrattoId: cId, giocatoreId: contratto.giocatoreId, durata, ingaggio, ordine, formula: "valore * stipendio_percentuale" } },
         adminId: req.user.id,
       });
       return res.redirect("/fanta/rinnovi?saved=1");
@@ -236,13 +235,13 @@ async function deleteProposta(req, res) {
     adminId: req.user.id,
   });
   // Compatta ordinePriorita (1..N) per team+stagione
-  await renumber(p.fantaTeamId, p.stagione);
+  await renumber(p.fantaTeamId);
   res.redirect("/fanta/rinnovi?deleted=1");
 }
 
-async function renumber(fantaTeamId, stagione) {
+async function renumber(fantaTeamId) {
   const lista = await prisma.propostaRinnovo.findMany({
-    where: { fantaTeamId, stagione, status: "PENDING" },
+    where: { fantaTeamId, status: "PENDING" },
     orderBy: { ordinePriorita: "asc" },
   });
   // Strategia: prima sposto tutti in negativo per evitare collisione con UNIQUE,
@@ -276,10 +275,6 @@ async function reorderProposte(req, res) {
   if (proposte.length !== ids.length) {
     return res.status(400).json({ error: "Alcune proposte non sono tue o non sono PENDING." });
   }
-  const stagione = proposte[0].stagione;
-  if (proposte.some((p) => p.stagione !== stagione)) {
-    return res.status(400).json({ error: "Proposte di stagioni diverse non mescolabili." });
-  }
 
   // Reorder: prima negativi, poi positivi (evita collisione UNIQUE).
   await prisma.$transaction(async (tx) => {
@@ -293,7 +288,7 @@ async function reorderProposte(req, res) {
 
   // Risimula budget post-reorder e ritorna stato aggiornato
   const aggiornate = await prisma.propostaRinnovo.findMany({
-    where: { fantaTeamId: team.id, stagione, status: "PENDING" },
+    where: { fantaTeamId: team.id, status: "PENDING" },
     orderBy: { ordinePriorita: "asc" },
     include: { giocatore: { select: { id: true, nome: true, ruolo: true, valore: true } } },
   });
@@ -301,7 +296,7 @@ async function reorderProposte(req, res) {
   const sim = simulateBudget(aggiornate, cap);
   await logAction({
     azione: "UPDATE", entita: "proposta_rinnovo", entitaId: null,
-    dettaglio: { tipo: "reorder", fantaTeamId: team.id, stagione, ordine: ids },
+    dettaglio: { tipo: "reorder", fantaTeamId: team.id, ordine: ids },
     adminId: req.user.id,
   });
   res.json({ salaryCap: cap, proposte: sim });
@@ -315,7 +310,7 @@ async function showRinnoviPubblico(req, res) {
   const cap = await calcSalaryCapGlobale();
 
   const allProposte = await prisma.propostaRinnovo.findMany({
-    where: { stagione: sTarget },
+    where: {},
     include: { giocatore: true, fantaTeam: true },
     orderBy: [{ fantaTeamId: "asc" }, { ordinePriorita: "asc" }],
   });
@@ -346,7 +341,7 @@ async function showAdminRinnovi(req, res) {
   const cap = await calcSalaryCapGlobale();
 
   const allProposte = await prisma.propostaRinnovo.findMany({
-    where: { stagione: sTarget },
+    where: {},
     include: { giocatore: true, fantaTeam: true, contratto: true },
     orderBy: [{ fantaTeamId: "asc" }, { ordinePriorita: "asc" }],
   });
@@ -404,7 +399,7 @@ async function finalizzaRinnovi(req, res) {
 
     for (const team of teams) {
       const pendenti = await prisma.propostaRinnovo.findMany({
-        where: { fantaTeamId: team.id, stagione: sTarget, status: "PENDING" },
+        where: { fantaTeamId: team.id, status: "PENDING" },
         orderBy: { ordinePriorita: "asc" },
         include: { contratto: true, giocatore: true },
       });
@@ -464,19 +459,18 @@ async function finalizzaRinnovi(req, res) {
         else rifiutati.push(p);
       }
 
-      // Trova SF target del team per stagione corrente (svincolo) e prossima (nuovo contratto).
-      // Strategia: i movimenti finanziari del rinnovo agiscono sulla SF della stagione di destinazione.
+      // Trova SF target del team
       const presidenteNome = team.user ? (team.user.nickname || team.user.email) : null;
       let sfTarget = await prisma.situazioneFinanziaria.findFirst({
-        where: { fantaTeamId: team.id, stagione: sTarget },
+        where: { fantaTeamId: team.id },
       });
       if (!sfTarget && presidenteNome) {
         sfTarget = await prisma.situazioneFinanziaria.findFirst({
-          where: { nomePresidente: presidenteNome, stagione: sTarget },
+          where: { nomePresidente: presidenteNome },
         });
       }
       if (!sfTarget) {
-        risultati.push({ team: team.nome, errore: `SF stagione ${sTarget} mancante; skip team.` });
+        risultati.push({ team: team.nome, errore: `SF mancante; skip team.` });
         continue;
       }
 
@@ -584,7 +578,7 @@ async function finalizzaRinnovi(req, res) {
 
     await logAction({
       azione: "UPDATE", entita: "rinnovi", entitaId: null,
-      dettaglio: { tipo: "finalize-batch", stagione: sTarget, salaryCap: cap, risultati },
+      dettaglio: { tipo: "finalize-batch", salaryCap: cap, risultati },
       adminId: req.user.id,
     });
     res.redirect("/admin/rinnovi?finalized=1");

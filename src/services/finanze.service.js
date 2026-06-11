@@ -7,7 +7,6 @@
 //
 //   await modificaCreditiTeam(tx, {
 //     fantaTeamId,
-//     stagione: "2026-2027",
 //     deltaCrediti:  -ingaggio,
 //     deltaStipendi: +ingaggio,
 //     causale: "PAGAMENTO_STIPENDIO_RINNOVO",
@@ -37,10 +36,10 @@ class InsufficientCreditiError extends Error {
 
 function r2(n) { return Math.round(n * 100) / 100; }
 
-async function _findSF(tx, { sfId, fantaTeamId, stagione }) {
+async function _findSF(tx, { sfId, fantaTeamId }) {
   if (sfId) return tx.situazioneFinanziaria.findUnique({ where: { id: sfId } });
   return tx.situazioneFinanziaria.findFirst({
-    where: { fantaTeamId, stagione },
+    where: { fantaTeamId },
   });
 }
 
@@ -49,9 +48,8 @@ async function _findSF(tx, { sfId, fantaTeamId, stagione }) {
  *
  * @param {PrismaClient|TransactionClient} tx
  * @param {object} opts
- * @param {number}   [opts.sfId]                  alternativa a (fantaTeamId,stagione)
+ * @param {number}   [opts.sfId]                  alternativa a fantaTeamId
  * @param {number}   opts.fantaTeamId
- * @param {string}   opts.stagione
  * @param {number}   opts.deltaCrediti            segno: <0 addebito, >0 accredito
  * @param {number}   [opts.deltaStipendi=0]       segno: <0 storno, >0 nuovo carico
  * @param {keyof CAUSALI} opts.causale
@@ -63,7 +61,7 @@ async function _findSF(tx, { sfId, fantaTeamId, stagione }) {
  */
 async function modificaCreditiTeam(tx, opts) {
   const {
-    sfId, fantaTeamId, stagione,
+    sfId, fantaTeamId,
     deltaCrediti = 0,
     deltaStipendi = 0,
     causale,
@@ -81,9 +79,9 @@ async function modificaCreditiTeam(tx, opts) {
   }
   if (!adminId) throw new Error("adminId obbligatorio per modificaCreditiTeam.");
 
-  const sf = await _findSF(tx, { sfId, fantaTeamId, stagione });
+  const sf = await _findSF(tx, { sfId, fantaTeamId });
   if (!sf) {
-    throw new Error(`SituazioneFinanziaria non trovata (sfId=${sfId} fantaTeamId=${fantaTeamId} stagione=${stagione}).`);
+    throw new Error(`SituazioneFinanziaria non trovata (sfId=${sfId} fantaTeamId=${fantaTeamId}).`);
   }
 
   const pre = {
@@ -111,7 +109,6 @@ async function modificaCreditiTeam(tx, opts) {
     causale,
     sfId: sf.id,
     fantaTeamId: sf.fantaTeamId,
-    stagione: sf.stagione,
     deltaCrediti, deltaStipendi,
     pre, post,
     contesto: contesto || null,
@@ -130,7 +127,6 @@ async function modificaCreditiTeam(tx, opts) {
     data: {
       fantaTeamId: sf.fantaTeamId,
       sfId: sf.id,
-      stagione: sf.stagione,
       importo: deltaCrediti, // segno reale del movimento di crediti
       causale,
       contesto: contesto ? JSON.stringify(contesto) : null,

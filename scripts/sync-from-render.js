@@ -13,15 +13,30 @@
  *   - Il DB remoto deve essere raggiungibile dalla tua macchina
  *
  * Uso:
- *   node scripts/sync-from-render.js
- *   node scripts/sync-from-render.js --dry-run   → mostra cosa farebbe senza scrivere
+ *   node scripts/sync-from-render.js              → copia tutto (chiede per fantapresidenti)
+ *   node scripts/sync-from-render.js --force-users → sovrascrive fantapresidenti senza chiedere
+ *   node scripts/sync-from-render.js --skip-users  → salta fantapresidenti senza chiedere
+ *   node scripts/sync-from-render.js --dry-run     → mostra cosa farebbe senza scrivere
  */
 
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
+const readline = require("readline");
 const { Pool } = require("pg");
+
+// ─── Prompt interattivo ─────────────────────────────────────────────────────
+
+function askQuestion(question) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
 
 // ─── Parsing env file ────────────────────────────────────────────────────────
 
@@ -124,25 +139,27 @@ async function syncTable(opts) {
 
 async function main() {
   const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run");
+  const dryRun      = args.includes("--dry-run");
+  const forceUsers  = args.includes("--force-users");
+  const skipUsers   = args.includes("--skip-users");
 
   if (dryRun) {
-    console.log("\n🔍 MODALITÀ DRY-RUN: nessuna scrittura verrà effettuata\n");
+    console.log("\n[DRY-RUN] Nessuna scrittura verrà effettuata\n");
   }
 
-  const localEnv = parseEnvFile(path.join(__dirname, "../.env"));
+  const localEnv  = parseEnvFile(path.join(__dirname, "../.env"));
   const remoteEnv = parseEnvFile(path.join(__dirname, "../.envpublic"));
 
-  const localUrl = localEnv.DATABASE_URL;
-  const remoteUrl = remoteEnv.DATABASE_URL;
+  const localUrl  = localEnv.DATABASE_URL;
+  const remoteUrl = localEnv.DATABASE_URL_PROD || remoteEnv.DATABASE_URL;
 
-  if (!localUrl) throw new Error("DATABASE_URL mancante in .env");
-  if (!remoteUrl) throw new Error("DATABASE_URL mancante in .envpublic");
+  if (!localUrl)  throw new Error("DATABASE_URL mancante in .env");
+  if (!remoteUrl) throw new Error("DATABASE_URL_PROD mancante in .env (o DATABASE_URL mancante in .envpublic)");
 
-  if (remoteUrl.includes("USER:PASSWORD") || remoteUrl.includes("HOST")) {
+  if (remoteUrl.includes("USER:PASSWORD") || remoteUrl.includes("<HOST>")) {
     console.error(
-      "\nERRORE: .envpublic non è ancora stato configurato.\n" +
-        "Sostituisci USER, PASSWORD, HOST, DBNAME con i valori reali da Render.\n"
+      "\nERRORE: il DB remoto non è ancora stato configurato.\n" +
+      "Imposta DATABASE_URL_PROD in .env oppure compila .envpublic.\n"
     );
     process.exit(1);
   }
@@ -172,82 +189,39 @@ async function main() {
   }
 
   try {
-    // ── fantapresidenti (self-ref: invitedById) ──
-    logSection("Sync tabella: fantapresidenti (Render → locale)");
+    // ── fantapresidenti ──
+    let syncUsers = forceUsers;
+    if (!forceUsers && !skipUsers && !dryRun) {
+      const { rows: existingUsers } = await localPool.query("SELECT COUNT(*) AS cnt FROM fantapresidenti");
+      const countLocale = parseInt(existingUsers[0].cnt, 10);
+      const hint = countLocale > 0
+        ? `(attenzione: il DB locale contiene già ${countLocale} utenti → verranno sovrascritti)`
+        : "(DB locale vuoto)";
+      const answer = await askQuestion(
+        `\nVuoi sovrascrivere fantapresidenti ${hint}? [s/N] `
+      );
+      syncUsers = answer === "s" || answer === "si" || answer === "y" || answer === "yes";
+    }
 
-    log("Lettura fantapresidenti dal remoto...");
-    const { rows: users } = await remotePool.query(
-      `SELECT id, email, "passwordHash", role, "isActive", "mustChangePassword",
-              nickname, "invitedById", "createdAt", "updatedAt"
-       FROM fantapresidenti ORDER BY id`
-    );
-    log(`  Trovate ${users.length} righe`);
-
-    if (!dryRun && users.length > 0) {
-      const client = await localPool.connect();
-      try {
-        await client.query("BEGIN");
-
-        // Salva i log locali prima del TRUNCATE CASCADE
-        const { rows: savedLogs } = await client.query(
-          `SELECT * FROM log_azioni ORDER BY id`
-        );
-        if (savedLogs.length > 0) {
-          log(`  💾 Salvati ${savedLogs.length} record di log_azioni (verranno ripristinati)`);
-        }
-
-        await client.query(`TRUNCATE TABLE fantapresidenti RESTART IDENTITY CASCADE`);
-
-        // Prima passata: inserisci senza invitedById
-        for (const u of users) {
-          await client.query(
-            `INSERT INTO fantapresidenti
-               (id, email, "passwordHash", role, "isActive", "mustChangePassword",
-                nickname, "invitedById", "createdAt", "updatedAt")
-             VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9)`,
-            [
-              u.id, u.email, u.passwordHash, u.role, u.isActive,
-              u.mustChangePassword, u.nickname,
-              u.createdAt, u.updatedAt,
-            ]
-          );
-        }
-
-        // Seconda passata: aggiorna invitedById
-        for (const u of users) {
-          if (u.invitedById !== null) {
-            await client.query(
-              `UPDATE fantapresidenti SET "invitedById" = $1 WHERE id = $2`,
-              [u.invitedById, u.id]
-            );
-          }
-        }
-
-        // Ripristina i log locali salvati
-        if (savedLogs.length > 0) {
-          for (const l of savedLogs) {
-            await client.query(
-              `INSERT INTO log_azioni (id, azione, entita, "entitaId", dettaglio, "adminId", "createdAt")
-               VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-              [l.id, l.azione, l.entita, l.entitaId, l.dettaglio, l.adminId, l.createdAt]
-            );
-          }
-          log(`  ✅ Ripristinati ${savedLogs.length} record di log_azioni`);
-        }
-
-        await client.query("COMMIT");
-        log(`  OK – ${users.length} righe sincronizzate`);
-      } catch (err) {
-        await client.query("ROLLBACK");
-        throw err;
-      } finally {
-        client.release();
+    if (dryRun || !syncUsers) {
+      if (dryRun) {
+        logSection("Sync tabella: fantapresidenti (Render → locale) [DRY-RUN]");
+        await syncTable({ localPool, remotePool, dryRun, table: "fantapresidenti",
+          columns: ["id", "email", '"passwordHash"', "role", "nickname", '"createdAt"', '"updatedAt"'] });
+      } else {
+        logSection("Tabella fantapresidenti: SALTATA");
       }
-
+    } else {
+      logSection("Sync tabella: fantapresidenti");
+      await syncTable({
+        localPool, remotePool, dryRun,
+        table: "fantapresidenti",
+        columns: [
+          "id", "email", '"passwordHash"', "role", "nickname",
+          '"createdAt"', '"updatedAt"',
+        ],
+      });
       await resetSequence(localPool, "fantapresidenti");
-      await resetSequence(localPool, "log_azioni");
-    } else if (dryRun) {
-      log(`  [DRY-RUN] Scriverei ${users.length} utenti nel locale`);
     }
 
     // ── fanta_teams ──
@@ -279,7 +253,7 @@ async function main() {
       localPool, remotePool, dryRun,
       table: "quotazioni",
       columns: [
-        "id", '"giocatoreId"', "valore", "fonte", "stagione", '"createdAt"',
+        "id", '"giocatoreId"', "valore", "fonte", '"createdAt"',
       ],
     });
     if (!dryRun) await resetSequence(localPool, "quotazioni");
@@ -304,7 +278,7 @@ async function main() {
       localPool, remotePool, dryRun,
       table: "situazione_finanziaria",
       columns: [
-        "id", '"nomePresidente"', "stagione", '"valoreRose"', "crediti",
+        "id", '"nomePresidente"', '"valoreRose"', "crediti",
         "patrimonio", '"giocatoriTesserati"', '"etaMedia"', "stipendi",
         '"montePrestiti"', '"ultimoPlusMinus"', '"fantaTeamId"',
         '"createdAt"', '"updatedAt"',
@@ -318,7 +292,7 @@ async function main() {
       localPool, remotePool, dryRun,
       table: "rosa_giocatori",
       columns: [
-        '"id"', '"fantaTeamId"', '"giocatoreId"', '"stagione"',
+        '"id"', '"fantaTeamId"', '"giocatoreId"',
         '"categoria"', '"createdAt"', '"updatedAt"',
       ],
     });

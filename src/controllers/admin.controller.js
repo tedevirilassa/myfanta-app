@@ -603,7 +603,7 @@ async function importTransfermarkt(req, res) {
         };
         await prisma.giocatore.update({ where: { id: p.dbId }, data: updateData });
         await prisma.quotazione.create({
-          data: { giocatoreId: p.dbId, valore: p.valore, fonte: "transfermarkt", stagione: STAGIONE_CORRENTE },
+          data: { giocatoreId: p.dbId, valore: p.valore, fonte: "transfermarkt" },
         });
         await logAction({ azione: "UPDATE", entita: "giocatore", entitaId: p.dbId, dettaglio: { dopo: updateData }, adminId: req.user.id });
         stats.aggiornati++;
@@ -624,7 +624,7 @@ async function importTransfermarkt(req, res) {
           },
         });
         await prisma.quotazione.create({
-          data: { giocatoreId: g.id, valore: p.valore, fonte: "transfermarkt", stagione: STAGIONE_CORRENTE },
+          data: { giocatoreId: g.id, valore: p.valore, fonte: "transfermarkt" },
         });
         await logAction({ azione: "CREATE", entita: "giocatore", entitaId: g.id, dettaglio: { dopo: { nome: p.nome, ruolo: p.ruolo, squadra: p.squadra, valore: p.valore } }, adminId: req.user.id });
         stats.nuovi++;
@@ -762,7 +762,7 @@ async function showPremiClassifica(req, res) {
   // Tutti i record SF, uno per presidente (il più recente per data di aggiornamento)
   const tuttiSf = await prisma.situazioneFinanziaria.findMany({
     orderBy: [{ nomePresidente: "asc" }, { updatedAt: "desc" }],
-    select: { id: true, nomePresidente: true, fantaTeamId: true, crediti: true, stagione: true, updatedAt: true },
+    select: { id: true, nomePresidente: true, fantaTeamId: true, crediti: true, updatedAt: true },
   });
   // Dedup: tieni solo il più recente per nomePresidente, aggiungi nomeTeam
   const seen = new Set();
@@ -968,7 +968,7 @@ async function _showCalendarioAzioniOld(req, res, next) {
     const results = await Promise.allSettled([
       prisma.premioErogato.findFirst({ where: { tipo: "InizioStagione", stagione } }),
       prisma.premioErogato.findFirst({ where: { tipo: "Gennaio", stagione } }),
-      prisma.propostaRinnovo.count({ where: { status: "PENDING", stagione } }),
+      prisma.propostaRinnovo.count({ where: { status: "PENDING" } }),
       prisma.contratto.count({ where: { valido: true } }),
       prisma.quotazione.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
     ]);
@@ -1282,7 +1282,7 @@ async function listSvincoliInattivi(req, res) {
 
   // Escludi giocatori in slot U21 (regola: U21 congela il contratto)
   const u21Rows = await prisma.rosaGiocatore.findMany({
-    where: { stagione, categoria: "U21" },
+    where: { categoria: "U21" },
     select: { fantaTeamId: true, giocatoreId: true },
   });
   const u21Keys = new Set(u21Rows.map((r) => `${r.fantaTeamId}:${r.giocatoreId}`));
@@ -1298,11 +1298,11 @@ async function listSvincoliInattivi(req, res) {
       : 0;
     const presNome = c.fantaTeam.user ? (c.fantaTeam.user.nickname || c.fantaTeam.user.email) : null;
     let sf = await prisma.situazioneFinanziaria.findFirst({
-      where: { fantaTeamId: c.fantaTeam.id, stagione },
+      where: { fantaTeamId: c.fantaTeam.id },
     });
     if (!sf && presNome) {
       sf = await prisma.situazioneFinanziaria.findFirst({
-        where: { nomePresidente: presNome, stagione },
+        where: { nomePresidente: presNome },
       });
     }
     candidati.push({
@@ -1315,7 +1315,7 @@ async function listSvincoliInattivi(req, res) {
 
   res.render("admin/svincoli-inattivi", {
     currentUser: req.user,
-    candidati, stagione, params,
+    candidati, params,
     message: req.query.applied ? `Applicati ${req.query.applied} svincoli.` : null,
     error:   req.query.error ? decodeURIComponent(req.query.error) : null,
   });
@@ -1360,7 +1360,7 @@ async function approveSvincoliInattivi(req, res) {
 
       // Protezione U21: non svincolabile anche se selezionato manualmente
       const isU21 = await prisma.rosaGiocatore.findFirst({
-        where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId, stagione, categoria: "U21" },
+        where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId, categoria: "U21" },
       });
       if (isU21) { errori.push(`#${cid}: ${c.giocatore.nome} è in slot U21, contratto protetto`); continue; }
 
@@ -1369,15 +1369,15 @@ async function approveSvincoliInattivi(req, res) {
 
       const presNome = c.fantaTeam.user ? (c.fantaTeam.user.nickname || c.fantaTeam.user.email) : null;
       let sf = await prisma.situazioneFinanziaria.findFirst({
-        where: { fantaTeamId: c.fantaTeam.id, stagione },
+        where: { fantaTeamId: c.fantaTeam.id },
       });
       if (!sf && presNome) {
         sf = await prisma.situazioneFinanziaria.findFirst({
-          where: { nomePresidente: presNome, stagione },
+          where: { nomePresidente: presNome },
         });
       }
       if (isAcquisto && rimborso > 0 && !sf) {
-        errori.push(`#${cid}: SF stagione ${stagione} mancante per ${c.fantaTeam.nome}`);
+        errori.push(`#${cid}: SF mancante per ${c.fantaTeam.nome}`);
         continue;
       }
 
@@ -1490,14 +1490,11 @@ async function saveUserFields(req, res) {
 // ── GET /admin/situazione-finanziaria ────────────────────────────────────────
 async function listSituazioneFinanziaria(req, res) {
   const situazioni = await prisma.situazioneFinanziaria.findMany({
-    orderBy: [{ stagione: "desc" }, { nomePresidente: "asc" }],
+    orderBy: [{ nomePresidente: "asc" }],
   });
-
-  const stagioni = [...new Set(situazioni.map((s) => s.stagione))].sort().reverse();
 
   res.render("admin/situazione-finanziaria", {
     situazioni,
-    stagioni,
     currentUser: req.user,
     message: req.query.saved   === "1" ? "Crediti aggiornati."          : null,
     error:   req.query.error   ? decodeURIComponent(req.query.error) : null,
@@ -2982,7 +2979,7 @@ async function listRosa(req, res) {
       orderBy: { giocatore: { nome: "asc" } },
     });
     const rosaRecords = await prisma.rosaGiocatore.findMany({
-      where: { fantaTeamId: ft.id, stagione },
+      where: { fantaTeamId: ft.id },
     });
     const rosaMap = {};
     rosaRecords.forEach((r) => { rosaMap[r.giocatoreId] = r.categoria; });
@@ -3041,9 +3038,9 @@ async function showRosa(req, res) {
     orderBy: { giocatore: { nome: "asc" } },
   });
 
-  // Rosa assignments per questa stagione
+  // Rosa assignments
   const rosaRecords = await prisma.rosaGiocatore.findMany({
-    where: { fantaTeamId, stagione },
+    where: { fantaTeamId },
   });
   const rosaMap = {};
   rosaRecords.forEach((r) => { rosaMap[r.giocatoreId] = r.categoria; });
@@ -3097,7 +3094,7 @@ async function saveRosa(req, res) {
 
   // Carica stato precedente per confronto
   const rosaPrec = await prisma.rosaGiocatore.findMany({
-    where: { fantaTeamId, stagione },
+    where: { fantaTeamId },
   });
   const precMap = {};
   rosaPrec.forEach((r) => { precMap[r.giocatoreId] = r.categoria; });
@@ -3114,9 +3111,9 @@ async function saveRosa(req, res) {
     }
 
     await prisma.rosaGiocatore.upsert({
-      where: { fantaTeamId_giocatoreId_stagione: { fantaTeamId, giocatoreId, stagione } },
+      where: { fantaTeamId_giocatoreId: { fantaTeamId, giocatoreId } },
       update: { categoria: cat },
-      create: { fantaTeamId, giocatoreId, stagione, categoria: cat },
+      create: { fantaTeamId, giocatoreId, categoria: cat },
     });
   }
 

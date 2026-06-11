@@ -112,7 +112,6 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
               giocatoreId: existing.id,
               valore:      g.valore,
               fonte:       'transfermarkt',
-              stagione:    STAGIONE_CORRENTE,
             },
           });
 
@@ -142,7 +141,6 @@ async function syncQuotazioni(onEvent = console.log, squadraFiltro = null, admin
               giocatoreId: nuovo.id,
               valore:      g.valore,
               fonte:       'transfermarkt',
-              stagione:    STAGIONE_CORRENTE,
             },
           });
 

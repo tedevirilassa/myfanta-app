@@ -27,10 +27,10 @@
     .contratti-table-wrap { overflow-x: auto; position: relative; }
     .contratti-table-wrap table { width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; }
     .contratti-table-wrap td, .contratti-table-wrap th {
-      font-size: .82rem; padding: 7px 10px; white-space: nowrap;
+      font-size: .74rem; padding: 5px 8px; white-space: nowrap;
     }
     @media (max-width: 1024px) {
-      .contratti-table-wrap td, .contratti-table-wrap th { font-size: .7rem; padding: 4px 5px; }
+      .contratti-table-wrap td, .contratti-table-wrap th { font-size: .63rem; padding: 3px 4px; }
     }
     /* Colonna azioni sempre visibile (sticky a destra durante lo scroll orizzontale) */
     .contratti-table-wrap th.col-actions,
@@ -41,6 +41,14 @@
       z-index: 2;
     }
     .contratti-table-wrap thead th.col-actions { background: #f8fafb; }
+    /* Colonna Stato sticky (seconda da destra) */
+    .contratti-table-wrap th.col-stato,
+    .contratti-table-wrap td.col-stato {
+      position: sticky; right: 144px; /* larghezza approssimativa colonna azioni */
+      background: #fff;
+      z-index: 2;
+    }
+    .contratti-table-wrap thead th.col-stato { background: #f8fafb; }
     .ruolo-badge {
       display: inline-block; width: 26px; height: 26px;
       line-height: 26px; text-align: center;
@@ -268,7 +276,7 @@
             <th>Età</th>
             <th>Provenienza</th>
             <th>Destinazione</th>
-            <th>Stato</th>
+            <th class="col-stato">Stato</th>
             <th class="col-actions">Azioni</th>
           </tr>
         </thead>
@@ -323,7 +331,7 @@
             <td style="text-align:center;"><%= c.giocatore.eta != null ? c.giocatore.eta : '—' %></td>
             <td style="color:var(--gray-700);"><%= c.provenienza || '—' %></td>
             <td style="color:var(--gray-700);"><%= c.destinazione || '—' %></td>
-            <td>
+            <td class="col-stato">
               <span class="badge <%= c.valido ? 'active-yes' : 'active-no' %>">
                 <%= c.valido ? 'Valido' : 'Scaduto' %>
               </span>

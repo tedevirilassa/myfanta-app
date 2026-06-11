@@ -1,0 +1,14 @@
+BEGIN;
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$vV6pLKp5R646lk9dAVoRCuaB2M9S.CWh594ZOdWTOTyYLR4NQZGGe', "mustChangePassword"=false, "isActive"=true WHERE email='mrdownload@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$suYnZGZztuBj8VZ8Jg9bVuMxtoKXe7IZdb4X8qpmeZZYHOo/8u2l.', "mustChangePassword"=false, "isActive"=true WHERE email='prova@prova.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$eELTdlg3AUbVg2/k3j9ruuyFEUoDqV7UuQts/.37hKh8dlDXfK6p2', "mustChangePassword"=false, "isActive"=true WHERE email='g.delbuo111@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$xeUUkLJInMVvaCfPaYkeuOk4MfQnry1mQDgPYrkn9/fedKtWNUkBu', "mustChangePassword"=false, "isActive"=true WHERE email='giuliosergente@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$jOmtjb2soXSY6C7ErKKAoOTYRFtVUxBY4WGCjrfP7gXoRBPdtSBjG', "mustChangePassword"=false, "isActive"=true WHERE email='paoloshawn9@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$UGQfABtbgEb28p6PZT20o.h2Ur.J9LtiA8Bi.eG4B8BlpglF0RZqu', "mustChangePassword"=false, "isActive"=true WHERE email='adfadf89@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$fUu7M0fBUSyeT6.XpsaWKumt6jcQC.jkUP.kGkwfTD7GgTBQv83VC', "mustChangePassword"=false, "isActive"=true WHERE email='trinchieriv@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$Xtb1cgTXB5Irx.ipFo4wLuFXHWUtXxSgDgKAkDttfBq43sO7FAgGe', "mustChangePassword"=false, "isActive"=true WHERE email='angelo_600@msn.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$nZ.zoAMPjx70kGjRg9EPz.7EUZVvh4yPWrffcXx/Gtwpc5cSBSwo6', "mustChangePassword"=false, "isActive"=true WHERE email='rossini.lorenzo99@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$7Mx0MyD9XjLRFYfPrQQ0eOn7V.FVScQWv.wC/1Ps75cr/N7G3eQVS', "mustChangePassword"=false, "isActive"=true WHERE email='luca.circosta24@gmail.com';
+UPDATE fantapresidenti SET "passwordHash"='$2b$12$wXE6QBZlQHfkjNJDw6croul2Z0BkgpujD51RprKEiggWgSc1Vni1S', "mustChangePassword"=false, "isActive"=true WHERE email='marco.piacitelli83@gmail.com';
+COMMIT;
+SELECT id, email, LEFT("passwordHash",20) AS hash_preview, "mustChangePassword", "isActive" FROM fantapresidenti ORDER BY id;

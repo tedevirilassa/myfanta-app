@@ -31,11 +31,6 @@
     }
     .crediti-form .btn-plus:hover { background: #1e8449; }
 
-    .stagione-filter { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
-    .stagione-filter select {
-      padding: 7px 12px; border: 1.5px solid var(--gray-200);
-      border-radius: 8px; font-size: .85rem; background: #fafdfa;
-    }
   </style>
 </head>
 <body>
@@ -54,20 +49,10 @@
       <div class="alert alert-error"><%= error %></div>
     <% } %>
 
-    <div class="stagione-filter">
-      <label for="filtroStagione" style="font-weight:700;font-size:.85rem;">Stagione:</label>
-      <select id="filtroStagione" onchange="filtraStagione(this.value)">
-        <option value="">— tutte —</option>
-        <% stagioni.forEach(function(s) { %>
-          <option value="<%= s %>"><%= s %></option>
-        <% }) %>
-      </select>
-    </div>
-
     <div class="card" style="padding:0; overflow:hidden;">
       <ul class="sf-list" id="sfList">
         <% situazioni.forEach(function(sf) { %>
-        <li data-stagione="<%= sf.stagione %>">
+        <li>
           <span class="pres-name"><%= sf.nomePresidente %></span>
           <span class="pres-crediti">Crediti: € <%= parseFloat(sf.crediti).toFixed(2) %></span>
           <form action="/admin/situazione-finanziaria/<%= sf.id %>/crediti" method="POST" class="crediti-form">
@@ -81,12 +66,6 @@
     </div>
   </div>
 
-  <script>
-    function filtraStagione(val) {
-      document.querySelectorAll('#sfList li').forEach(function(li) {
-        li.style.display = (!val || li.dataset.stagione === val) ? '' : 'none';
-      });
-    }
-  </script>
+
 </body>
 </html>

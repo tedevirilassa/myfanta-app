@@ -249,9 +249,8 @@ async function creaOfferta(req, res) {
   }
 
   // Verifica slot rosa acquirente per la categoria proposta
-  const stagioneProposta = stagioneCorrente();
   const rosaAcquirente   = await prisma.rosaGiocatore.findMany({
-    where:  { fantaTeamId: myTeam.id, stagione: stagioneProposta },
+    where:  { fantaTeamId: myTeam.id },
     select: { categoria: true },
   });
   const maxTotale    = parseInt(_params.rosa_max_giocatori || "30", 10);
@@ -498,17 +497,16 @@ async function _eseguiTransferimento(trattativa, anniContratto, categoria, userI
 
       // ── E. Rosa: rimuovi dal venditore, aggiungi all'acquirente ───────────────
       await tx.rosaGiocatore.deleteMany({
-        where: { fantaTeamId: trattativa.fantaTeamRiceventeId, giocatoreId: trattativa.giocatoreId, stagione },
+        where: { fantaTeamId: trattativa.fantaTeamRiceventeId, giocatoreId: trattativa.giocatoreId },
       });
       await tx.rosaGiocatore.upsert({
         where: {
-          fantaTeamId_giocatoreId_stagione: {
+          fantaTeamId_giocatoreId: {
             fantaTeamId: trattativa.fantaTeamMittenteId,
             giocatoreId: trattativa.giocatoreId,
-            stagione,
           },
         },
-        create: { fantaTeamId: trattativa.fantaTeamMittenteId, giocatoreId: trattativa.giocatoreId, stagione, categoria },
+        create: { fantaTeamId: trattativa.fantaTeamMittenteId, giocatoreId: trattativa.giocatoreId, categoria },
         update: { categoria },
       });
 
@@ -899,14 +897,12 @@ async function attivaTrattativeDifferite() {
           where: {
             fantaTeamId: t.fantaTeamRiceventeId,
             giocatoreId: t.giocatoreId,
-            stagione,
           },
         });
         await tx.rosaGiocatore.create({
           data: {
             fantaTeamId: t.fantaTeamMittenteId,
             giocatoreId: t.giocatoreId,
-            stagione,
             categoria:   t.categoriaProposta || "InRosa",
           },
         });

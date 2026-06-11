@@ -403,6 +403,7 @@ async function main() {
           table: "fantapresidenti",
           columns: [
             "id", "email", '"passwordHash"', "role", "nickname",
+            '"isActive"', '"mustChangePassword"', '"invitedById"',
             '"createdAt"', '"updatedAt"',
           ],
         });

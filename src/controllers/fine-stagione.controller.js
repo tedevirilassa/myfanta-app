@@ -71,7 +71,7 @@ async function showFineStagione(req, res) {
   // Preview counters senza modificare nulla
   const contrattiValidi = await prisma.contratto.count({ where: { valido: true } });
   const proposteAttese  = await prisma.propostaRinnovo.count({
-    where: { stagione: stagioneNew, status: "PENDING" },
+    where: { status: "PENDING" },
   });
   // "scadenze naturali" = durataContratto<=1 escludendo i contratti con dataFine
   // in anni futuri (protetti dal rollover)
@@ -145,7 +145,7 @@ async function eseguiFineStagione(req, res) {
 
       for (const team of teams) {
         const proposte = await tx.propostaRinnovo.findMany({
-          where:   { fantaTeamId: team.id, stagione: stagioneNew, status: "PENDING" },
+          where:   { fantaTeamId: team.id, status: "PENDING" },
           orderBy: { ordinePriorita: "asc" },
           include: { contratto: true, giocatore: true },
         });
@@ -179,9 +179,9 @@ async function eseguiFineStagione(req, res) {
       //       dataFine, durataContratto o assenza dallo scraping Transfermarkt.
       // NOTA: i contratti con dataFine in anni futuri (idsDataFineFutura) sono SEMPRE esclusi.
 
-      // Raccogli tutti i giocatoreId in slot U21 per la stagione corrente (per team)
+      // Raccogli tutti i giocatoreId in slot U21 per team
       const rosaU21Rows = await tx.rosaGiocatore.findMany({
-        where: { stagione: stagioneOld, categoria: "U21" },
+        where: { categoria: "U21" },
         select: { fantaTeamId: true, giocatoreId: true },
       });
       // Set di chiavi composte "fantaTeamId:giocatoreId" per lookup O(1)
@@ -242,14 +242,14 @@ async function eseguiFineStagione(req, res) {
           data:  { valido: false, destinazione: c.destinazione || "Scaduto" },
         });
 
-        // SF target (stagione vecchia)
+        // SF target
         const presNome = c.fantaTeam.user ? (c.fantaTeam.user.nickname || c.fantaTeam.user.email) : null;
         let sf = await tx.situazioneFinanziaria.findFirst({
-          where: { fantaTeamId: c.fantaTeamId, stagione: stagioneOld },
+          where: { fantaTeamId: c.fantaTeamId },
         });
         if (!sf && presNome) {
           sf = await tx.situazioneFinanziaria.findFirst({
-            where: { nomePresidente: presNome, stagione: stagioneOld },
+            where: { nomePresidente: presNome },
           });
         }
 
@@ -292,9 +292,9 @@ async function eseguiFineStagione(req, res) {
           });
         }
 
-        // Elimina riga RosaGiocatore stagione vecchia
+        // Elimina riga RosaGiocatore
         await tx.rosaGiocatore.deleteMany({
-          where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId, stagione: stagioneOld },
+          where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId },
         });
 
         // Log contratto
@@ -378,10 +378,10 @@ async function eseguiFineStagione(req, res) {
           },
         });
 
-        // Rollover RosaGiocatore → stagione successiva
+        // Rollover RosaGiocatore → nessun cambio stagione necessario
         await tx.rosaGiocatore.updateMany({
-          where: { fantaTeamId: vecchio.fantaTeamId, giocatoreId: vecchio.giocatoreId, stagione: stagioneOld },
-          data:  { stagione: stagioneNew },
+          where: { fantaTeamId: vecchio.fantaTeamId, giocatoreId: vecchio.giocatoreId },
+          data:  {},
         });
 
         await tx.propostaRinnovo.update({
@@ -488,9 +488,9 @@ async function _getDataFineFutura(client, annoFineStagione) {
   );
 }
 
-async function _getU21Keys(client, stagioneOld) {
+async function _getU21Keys(client) {
   const rows = await client.rosaGiocatore.findMany({
-    where: { stagione: stagioneOld, categoria: "U21" },
+    where: { categoria: "U21" },
     select: { fantaTeamId: true, giocatoreId: true },
   });
   return new Set(rows.map((r) => `${r.fantaTeamId}:${r.giocatoreId}`));
@@ -570,7 +570,7 @@ async function _planStep2(client, ctx) {
   const decisioni = [];
   for (const team of teams) {
     const proposte = await client.propostaRinnovo.findMany({
-      where: { fantaTeamId: team.id, stagione: ctx.stagioneNew, status: "PENDING" },
+      where: { fantaTeamId: team.id, status: "PENDING" },
       orderBy: { ordinePriorita: "asc" },
       include: { contratto: true, giocatore: true },
     });
@@ -656,18 +656,18 @@ async function eseguiStep2(req, res) {
 // ── STEP 3 · Svincoli ──────────────────────────────────────────────────────
 async function _planStep3(client, ctx) {
   const idsFutura = await _getDataFineFutura(client, ctx.annoFineStagione);
-  const u21Keys = await _getU21Keys(client, ctx.stagioneOld);
+  const u21Keys = await _getU21Keys(client);
 
   // contratti vecchi rinnovati (saranno chiusi in step 4, NON svincolati)
   const approvedProposte = await client.propostaRinnovo.findMany({
-    where: { stagione: ctx.stagioneNew, status: "APPROVED" },
+    where: { status: "APPROVED" },
     select: { contrattoId: true },
   });
   const idsApproved = new Set(approvedProposte.map((p) => p.contrattoId));
 
   // contratti con proposta REJECTED (vanno svincolati)
   const rejectedProposte = await client.propostaRinnovo.findMany({
-    where: { stagione: ctx.stagioneNew, status: "REJECTED" },
+    where: { status: "REJECTED" },
     select: { contrattoId: true, id: true, motivoStato: true },
   });
   const idsRejected = new Set(rejectedProposte.map((p) => p.contrattoId));
@@ -765,11 +765,11 @@ async function eseguiStep3(req, res) {
         // SF target
         const presNome = c.fantaTeam.user ? (c.fantaTeam.user.nickname || c.fantaTeam.user.email) : null;
         let sf = await tx.situazioneFinanziaria.findFirst({
-          where: { fantaTeamId: c.fantaTeamId, stagione: ctx.stagioneOld },
+          where: { fantaTeamId: c.fantaTeamId },
         });
         if (!sf && presNome) {
           sf = await tx.situazioneFinanziaria.findFirst({
-            where: { nomePresidente: presNome, stagione: ctx.stagioneOld },
+            where: { nomePresidente: presNome },
           });
         }
 
@@ -804,7 +804,7 @@ async function eseguiStep3(req, res) {
         }
 
         await tx.rosaGiocatore.deleteMany({
-          where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId, stagione: ctx.stagioneOld },
+          where: { fantaTeamId: c.fantaTeamId, giocatoreId: c.giocatoreId },
         });
 
         await tx.log.create({
@@ -841,7 +841,7 @@ async function eseguiStep3(req, res) {
 // ── STEP 4 · Rinnovi APPROVED → crea nuovi contratti ───────────────────────
 async function _planStep4(client, ctx) {
   const proposte = await client.propostaRinnovo.findMany({
-    where: { stagione: ctx.stagioneNew, status: "APPROVED" },
+    where: { status: "APPROVED" },
     include: { contratto: { include: { giocatore: true, fantaTeam: true } }, giocatore: true },
   });
   // Solo proposte con contratto vecchio ancora valido (non già processate)
@@ -922,8 +922,8 @@ async function eseguiStep4(req, res) {
         });
 
         await tx.rosaGiocatore.updateMany({
-          where: { fantaTeamId: vecchio.fantaTeamId, giocatoreId: vecchio.giocatoreId, stagione: ctx.stagioneOld },
-          data: { stagione: ctx.stagioneNew },
+          where: { fantaTeamId: vecchio.fantaTeamId, giocatoreId: vecchio.giocatoreId },
+          data: {},
         });
 
         await tx.propostaRinnovo.update({
@@ -985,7 +985,7 @@ async function eseguiStep4(req, res) {
 // warning del report.
 async function _planStep2B(client, ctx) {
   const approvedProposte = await client.propostaRinnovo.findMany({
-    where: { stagione: ctx.stagioneNew, status: "APPROVED" },
+    where: { status: "APPROVED" },
     select: { contrattoId: true },
   });
   const idsApproved = new Set(approvedProposte.map((p) => p.contrattoId));
@@ -1053,11 +1053,11 @@ async function previewStep2B(req, res) {
     const warnings = [];
     for (const t of perTeam) {
       let sf = await prisma.situazioneFinanziaria.findFirst({
-        where: { fantaTeamId: t.fantaTeamId, stagione: ctx.stagioneOld },
+        where: { fantaTeamId: t.fantaTeamId },
       });
       if (!sf && t.presNome) {
         sf = await prisma.situazioneFinanziaria.findFirst({
-          where: { nomePresidente: t.presNome, stagione: ctx.stagioneOld },
+          where: { nomePresidente: t.presNome },
         });
       }
       const creditiPre = sf ? Number(sf.crediti) : null;
@@ -1101,15 +1101,15 @@ async function eseguiStep2B(req, res) {
       for (const cand of candidati) {
         // Trova SF target
         let sf = await tx.situazioneFinanziaria.findFirst({
-          where: { fantaTeamId: cand.fantaTeamId, stagione: ctx.stagioneOld },
+          where: { fantaTeamId: cand.fantaTeamId },
         });
         if (!sf && cand.presNome) {
           sf = await tx.situazioneFinanziaria.findFirst({
-            where: { nomePresidente: cand.presNome, stagione: ctx.stagioneOld },
+            where: { nomePresidente: cand.presNome },
           });
         }
         if (!sf) {
-          throw new Error(`SF non trovata per fantaTeamId=${cand.fantaTeamId} stagione=${ctx.stagioneOld} (contratto #${cand.contrattoId}).`);
+          throw new Error(`SF non trovata per fantaTeamId=${cand.fantaTeamId} (contratto #${cand.contrattoId}).`);
         }
 
         // 1) Riallineamento contratto invernale (con log dedicato per rollback)
@@ -1140,7 +1140,6 @@ async function eseguiStep2B(req, res) {
         const mov = await modificaCreditiTeam(tx, {
           sfId: sf.id,
           fantaTeamId: cand.fantaTeamId,
-          stagione: ctx.stagioneOld,
           deltaCrediti:  -cand.stipendioAddebito,
           deltaStipendi: 0,   // gli stipendi annuali della rosa restano come somma dei contratti
           causale: CAUSALI.PAGAMENTO_STIPENDIO_PLURIENNALE,

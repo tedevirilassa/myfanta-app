@@ -16,17 +16,36 @@
  *   - Il DB remoto deve essere raggiungibile dalla tua macchina
  *
  * Uso:
- *   node scripts/sync-to-render.js            → solo dati
+ *   node scripts/sync-to-render.js            → solo dati (chiede se sovrascrivere fantapresidenti)
  *   node scripts/sync-to-render.js --migrate  → migrate + dati
  *   node scripts/sync-to-render.js --migrate-only → solo migrate
+ *   node scripts/sync-to-render.js --force-users → sovrascrive fantapresidenti senza chiedere
+ *   node scripts/sync-to-render.js --skip-users  → salta fantapresidenti senza chiedere
  */
 
 "use strict";
 
 const fs = require("fs");
 const path = require("path");
+const readline = require("readline");
 const { execSync } = require("child_process");
+const dns = require("dns");
 const { Pool } = require("pg");
+
+// Forza IPv4 (evita che pg tenti IPv6 quando il server ascolta solo su IPv4)
+dns.setDefaultResultOrder("ipv4first");
+
+// ─── Prompt interattivo ─────────────────────────────────────────────────────
+
+function askQuestion(question) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
 
 // ─── Parsing env file ────────────────────────────────────────────────────────
 
@@ -70,11 +89,19 @@ function logSection(title) {
 
 async function resetSequence(pool, table, idColumn = "id") {
   await pool.query(`
-    SELECT setval(
-      pg_get_serial_sequence('${table}', '${idColumn}'),
-      COALESCE((SELECT MAX(${idColumn}) FROM ${table}), 0) + 1,
-      false
-    )
+    DO $$
+    DECLARE seq text;
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = '${table}'
+      ) THEN
+        seq := pg_get_serial_sequence('${table}', '${idColumn}');
+        IF seq IS NOT NULL THEN
+          PERFORM setval(seq, COALESCE((SELECT MAX(${idColumn}) FROM ${table}), 0) + 1, false);
+        END IF;
+      END IF;
+    END $$
   `);
 }
 
@@ -170,6 +197,8 @@ async function main() {
   const args = process.argv.slice(2);
   const doMigrate = args.includes("--migrate") || args.includes("--migrate-only");
   const onlyMigrate = args.includes("--migrate-only");
+  const forceUsers = args.includes("--force-users");
+  const skipUsers  = args.includes("--skip-users");
 
   // Leggi le due configurazioni
   const localEnv  = parseEnvFile(path.join(__dirname, "../.env"));
@@ -205,11 +234,7 @@ async function main() {
 
   const localPool = new Pool({ connectionString: localUrl });
   // SSL solo se richiesto dall'URL (es. Render); per server LAN locali si disabilita
-  const remoteNeedsSsl = remoteUrl.includes("sslmode=require") || remoteUrl.includes("render.com");
-  const remotePool = new Pool({
-    connectionString: remoteUrl,
-    ...(remoteNeedsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
-  });
+  const remotePool = new Pool({ connectionString: remoteUrl });
 
   // Verifica connessioni
   try {
@@ -230,13 +255,23 @@ async function main() {
 
   try {
     // ── fantapresidenti ──
-    // Se il DB remoto ha già utenti, li preserviamo (comportamento Render legacy).
-    // Su un DB nuovo/vuoto copiamo tutto.
-    const { rows: existingUsers } = await remotePool.query("SELECT COUNT(*) AS cnt FROM fantapresidenti");
-    if (parseInt(existingUsers[0].cnt, 10) > 0) {
-      logSection("Tabella fantapresidenti: SALTATA (utenti già presenti nel DB remoto)");
+    let syncUsers = forceUsers;
+    if (!forceUsers && !skipUsers) {
+      const { rows: existingUsers } = await remotePool.query("SELECT COUNT(*) AS cnt FROM fantapresidenti");
+      const countRemote = parseInt(existingUsers[0].cnt, 10);
+      const hint = countRemote > 0
+        ? `(attenzione: il DB remoto contiene già ${countRemote} utenti → verranno sovrascritti)`
+        : "(DB remoto vuoto)";
+      const answer = await askQuestion(
+        `\nVuoi sovrascrivere fantapresidenti ${hint}? [s/N] `
+      );
+      syncUsers = answer === "s" || answer === "si" || answer === "y" || answer === "yes";
+    }
+
+    if (!syncUsers) {
+      logSection("Tabella fantapresidenti: SALTATA");
     } else {
-      logSection("Sync tabella: fantapresidenti (DB remoto vuoto → copia completa)");
+      logSection("Sync tabella: fantapresidenti");
       await syncTable({
         localPool,
         remotePool,
@@ -247,6 +282,9 @@ async function main() {
         ],
       });
       await resetSequence(remotePool, "fantapresidenti");
+      // Assicura che nessun utente venga forzato al cambio password dopo la sync
+      await remotePool.query('UPDATE fantapresidenti SET "mustChangePassword" = false');
+      log('  mustChangePassword azzerato su tutti gli utenti remoti');
     }
 
     // ── fanta_teams ──
@@ -296,7 +334,7 @@ async function main() {
       remotePool,
       table: "situazione_finanziaria",
       columns: [
-        "id", '"nomePresidente"', "stagione", '"valoreRose"', "crediti",
+        "id", '"nomePresidente"', '"valoreRose"', "crediti",
         "patrimonio", '"giocatoriTesserati"', '"etaMedia"', "stipendi",
         '"montePrestiti"', '"ultimoPlusMinus"', '"fantaTeamId"',
         '"createdAt"', '"updatedAt"',
@@ -310,7 +348,7 @@ async function main() {
       localPool, remotePool,
       table: "rosa_giocatori",
       columns: [
-        '"id"', '"fantaTeamId"', '"giocatoreId"', '"stagione"',
+        '"id"', '"fantaTeamId"', '"giocatoreId"',
         '"categoria"', '"createdAt"', '"updatedAt"',
       ],
     });
@@ -363,7 +401,7 @@ async function main() {
       localPool, remotePool,
       table: "movimenti_finanziari",
       columns: [
-        '"id"', '"fantaTeamId"', '"sfId"', '"stagione"',
+        '"id"', '"fantaTeamId"', '"sfId"',
         '"importo"', '"causale"', '"contesto"', '"logId"', '"createdAt"',
       ],
     });
